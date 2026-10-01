@@ -12,6 +12,12 @@ function participantAvatar(name) { const first = Array.from(name.trim())[0]; if 
 function render() {
   root.innerHTML = state.screen === 'participants' ? participantsView() : state.screen === 'decks' ? decksView() : playView();
   root.dataset.screen = state.screen;
+  if (state.screen === 'participants') {
+    const badge = document.createElement('p');
+    badge.className = 'alpha-badge';
+    badge.textContent = 'α版';
+    root.querySelector('.masthead-slot')?.after(badge);
+  }
   trackPage(state.screen);
   root.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', handleAction));
   root.querySelector('form[data-form="participants"]')?.addEventListener('submit', (event) => { event.preventDefault(); submitParticipants(); });
