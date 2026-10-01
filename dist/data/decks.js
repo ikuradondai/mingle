@@ -4,6 +4,7 @@ const makeQuestions = (deckId, texts, r18 = false) => texts.map((text, index) =>
   order: index + 1,
   r18,
 }));
+import { newDecks } from './new-decks.js';
 
 export const decks = [
   {
@@ -408,6 +409,8 @@ export const decks = [
     ]),
   },
 ];
+
+decks.push(...newDecks);
 
 const dateDeck = decks.find((deck) => deck.id === 'date');
 const intimacyDeck = decks.find((deck) => deck.id === 'intimacy');

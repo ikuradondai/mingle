@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ROUND_SIZE, createSession, currentAnswerLikes, currentParticipantIndex, currentSpeaker,
+  ROUND_SIZE, createSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker,
   continueRound, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer,
   previousAnswer, revealCard, remaining,
 } from '../dist/engine.js';
 import { decks } from '../dist/data/decks.js';
+import { challenges } from '../dist/data/challenges.js';
 
 const deck = { id: 'test', adultOnly: false, questions: Array.from({ length: 40 }, (_, index) => ({ id: `q-${index}`, text: `質問${index}` })) };
 const names = ['A', 'B', 'C'];
@@ -17,11 +18,39 @@ function answerCurrent(value, step = nextAnswer) {
   return value;
 }
 
-test('contains eight complete, non-repeating decks', () => {
-  assert.equal(decks.length, 8);
+test('contains eighteen complete decks with unique question ids', () => {
+  assert.equal(decks.length, 18);
+  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 720);
   for (const item of decks) {
     assert.equal(item.questions.length, 40, item.id);
     assert.equal(new Set(item.questions.map((card) => card.id)).size, 40, item.id);
+  }
+  for (const item of decks.filter((deck) => deck.adultOnly)) {
+    assert.equal(item.questions.every((question) => question.r18 === true), true, item.id);
+  }
+  assert.equal(new Set(challenges.map((card) => card.id)).size, 29);
+  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 749);
+});
+
+test('touch challenges are restricted to eligible two-person partner decks', () => {
+  const eligible = new Set(['couples', 'new-couple', 'moving-in', 'first-intimacy', 'intimacy-refresh', 'intimacy-distance']);
+  const touch = challenges.filter((card) => card.touch === true);
+  assert.equal(touch.length, 9);
+  for (const item of decks) {
+    const pair = createSession({ participants: ['A', 'B'], deck: item, adultConfirmed: item.adultOnly, includeChallenges: true, random: () => 0.5 });
+    const group = createSession({ participants: ['A', 'B', 'C'], deck: item, adultConfirmed: item.adultOnly, includeChallenges: true, random: () => 0.5 });
+    assert.equal(group.questions.some((card) => card.touch), false, item.id);
+    if (!eligible.has(item.id)) assert.equal(pair.questions.some((card) => card.touch), false, item.id);
+  }
+  const pairTouchDecks = decks.filter((item) => eligible.has(item.id));
+  assert.equal(pairTouchDecks.length, 6);
+  for (const item of pairTouchDecks) {
+    const seen = new Set();
+    for (let seed = 0; seed < 32; seed += 1) {
+      const value = createSession({ participants: ['A', 'B'], deck: item, adultConfirmed: item.adultOnly, includeChallenges: true, random: () => (seed + 0.25) / 32 });
+      value.questions.filter((card) => card.touch).forEach((card) => seen.add(card.id));
+    }
+    assert.equal(seen.size > 0, true, item.id);
   }
 });
 
@@ -99,6 +128,52 @@ test('participant names and adult confirmation are strictly validated', () => {
   assert.throws(() => createSession({ participants: names, deck: adult, adultConfirmed: false }), /成人向け/);
   assert.throws(() => createSession({ participants: names, deck: adult, adultConfirmed: 'true' }), /成人向け/);
   assert.doesNotThrow(() => createSession({ participants: names, deck: adult, adultConfirmed: true }));
+});
+
+test('new adult decks require explicit confirmation', () => {
+  for (const deck of decks.filter((item) => item.adultOnly)) {
+    assert.throws(() => createSession({ participants: names, deck, adultConfirmed: false }), /成人向け/, deck.id);
+    assert.doesNotThrow(() => createSession({ participants: names, deck, adultConfirmed: true }), deck.id);
+  }
+});
+
+test('challenge mode keeps forty cards with six unique actions and no final-round action', () => {
+  for (const deck of decks) {
+    const value = createSession({ participants: names, deck, adultConfirmed: deck.adultOnly, includeChallenges: true, random: () => 0.5 });
+    assert.equal(value.questions.length, 40, deck.id);
+    assert.equal(new Set(value.questions.map((card) => card.id)).size, 40, deck.id);
+    assert.equal(value.questions.filter((card) => card.kind === 'challenge').length, 6, deck.id);
+    assert.equal(new Set(value.questions.filter((card) => card.kind === 'challenge').map((card) => card.id)).size, 6, deck.id);
+    for (let round = 0; round < 6; round += 1) assert.equal(value.questions.slice(round * 6, round * 6 + 6).filter((card) => card.kind === 'challenge').length, 1, `${deck.id}-round-${round}`);
+    assert.equal(value.questions.slice(36).some((card) => card.kind === 'challenge'), false, deck.id);
+  }
+});
+
+test('date R18 and challenges share each six-card round without displacing R18', () => {
+  const date = decks.find((item) => item.id === 'date');
+  for (const random of [0, 0.5, 0.999999]) {
+    const value = createSession({ participants: names, deck: date, adultConfirmed: true, includeR18: true, includeChallenges: true, random: () => random });
+    for (let round = 0; round < 6; round += 1) {
+      const cards = value.questions.slice(round * 6, round * 6 + 6);
+      assert.equal(cards.filter((card) => card.r18).length, 1);
+      assert.equal(cards.filter((card) => card.r18)[0] && cards.findIndex((card) => card.r18) >= 3, true);
+      assert.equal(cards.filter((card) => card.kind === 'challenge').length, 1);
+    }
+    assert.equal(new Set(value.questions.map((card) => card.id)).size, 40);
+    assert.equal(value.questions.slice(36).some((card) => card.r18 || card.kind === 'challenge'), false);
+  }
+});
+
+test('challenge card follows the normal answer, like, and pass flow', () => {
+  const value = createSession({ participants: names, deck, includeChallenges: true, random: () => 0.5 });
+  const actionIndex = value.questions.findIndex((card) => card.kind === 'challenge');
+  let actionSession = { ...value, cursor: actionIndex, revealed: false, answerIndex: 0 };
+  actionSession = revealCard(actionSession);
+  assert.equal(currentCard(actionSession).kind, 'challenge');
+  actionSession = likeCurrentAnswer(actionSession);
+  assert.equal(currentAnswerLikes(actionSession), 1);
+  actionSession = passAnswer(actionSession);
+  assert.equal(actionSession.answerIndex, 1);
 });
 
 test('date can stay regular or add exactly one R18 card per six-card set', () => {

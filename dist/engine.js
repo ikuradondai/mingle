@@ -1,6 +1,7 @@
 export const ROUND_SIZE = 6;
 export const MAX_PARTICIPANTS = 8;
 export const MAX_NAME_LENGTH = 24;
+import { challenges } from './data/challenges.js';
 
 export function normalizeParticipants(participants) {
   if (!Array.isArray(participants) || participants.length < 2 || participants.length > MAX_PARTICIPANTS) throw new Error('参加者は2〜8人で入力してください');
@@ -11,14 +12,28 @@ export function normalizeParticipants(participants) {
   return names;
 }
 
-export function createSession({ participants, deck, adultConfirmed = false, includeR18 = false, random = Math.random }) {
+export function createSession({ participants, deck, adultConfirmed = false, includeR18 = false, includeChallenges = false, random = Math.random }) {
   const names = normalizeParticipants(participants);
   if (!deck || !Array.isArray(deck.questions) || deck.questions.length !== 40) throw new Error('デッキが不正です');
   if (deck.adultOnly && adultConfirmed !== true) throw new Error('成人向け確認が必要です');
   if (includeR18 && adultConfirmed !== true) throw new Error('R18の話題には成人確認が必要です');
   if (includeR18 && (!Array.isArray(deck.r18Questions) || deck.r18Questions.length < 6)) throw new Error('R18質問が不正です');
-  const questions = includeR18 ? composeR18Questions(deck, random) : shuffle(deck.questions, random);
-  return { participants: names, deckId: deck.id, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, revealed: false, answerIndex: 0, likes: {} };
+  const baseQuestions = includeR18 ? composeR18Questions(deck, random) : shuffle(deck.questions, random);
+  const questions = includeChallenges ? composeChallenges(baseQuestions, random, includeR18 && !deck.adultOnly, deck.id, names.length) : baseQuestions;
+  return { participants: names, deckId: deck.id, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {} };
+}
+
+function composeChallenges(cards, random, preserveR18 = false, deckId, participantCount) {
+  const pool = challenges.filter((card) => !card.touch || (participantCount === 2 && card.eligibleDeckIds?.includes(deckId)));
+  const selected = shuffle(pool, random).slice(0, 6);
+  const composed = [...cards];
+  for (let round = 0; round < 6; round += 1) {
+    const start = round * ROUND_SIZE;
+    const eligible = composed.slice(start, start + ROUND_SIZE).map((card, index) => ({ card, index })).filter(({ card }) => !preserveR18 || card.r18 !== true);
+    const slot = eligible[Math.floor(random() * eligible.length)].index;
+    composed[start + slot] = selected[round];
+  }
+  return composed;
 }
 
 function composeR18Questions(deck, random) {
