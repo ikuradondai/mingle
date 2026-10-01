@@ -28,3 +28,13 @@ npm start
 ```powershell
 npm run check
 ```
+
+## 管理画面と利用統計
+
+`/admin` は `ADMIN_PASSWORD` でログインする管理画面です。パスワードと `ADMIN_SESSION_SECRET` はサーバー環境変数だけで設定し、ブラウザや静的ファイルには埋め込みません。管理セッションは短期の署名済みHttpOnly cookieで、統計APIは認証済みセッションだけが利用できます。
+
+統計は個人情報を保存せず、許可済みの画面ID・テーマID・JST日付だけを共有Redisへ保存します。PVは画面遷移につき1回、テーマ開始数は正常にセッションを作成できた回数です。再描画、テーマのradio選び直し、同じeventの通信retryは増分しません。管理画面の操作と無効イベントは集計対象外です。表示期間は今日、過去7日、過去30日、累計で、累計は計測開始時点からの値です。
+
+本番の永続化には `UPSTASH_REDIS_REST_URL` と `UPSTASH_REDIS_REST_TOKEN` を設定します。Vercel KV接続で提供される `KV_REST_API_URL` / `KV_REST_API_TOKEN` も互換fallbackとして利用できます。`ADMIN_PASSWORD` と `ADMIN_SESSION_SECRET` は必須で、代替値やfallbackはありません。永続storeまたは認証秘密がない本番環境は503で停止します。
+
+開発環境は `ANALYTICS_NAMESPACE=development` など、productionと異なるnamespaceを必ず使ってください。明示的に `ANALYTICS_LOCAL_STORE=1` を設定した場合だけ `.data/analytics.json` をローカル保存先にします。テストは一時ディレクトリを使い、実Redisや開発集計へ書き込みません。`.env.local` はGit管理外です。

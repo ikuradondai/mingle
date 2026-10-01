@@ -2,6 +2,8 @@ import { createServer } from 'node:http';
 import { createReadStream, statSync } from 'node:fs';
 import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sessionHandler, statsHandler } from './server-side/admin-api.mjs';
+import trackHandler from './api/track.js';
 
 const root = normalize(fileURLToPath(new URL('./dist/', import.meta.url))).replace(/[\\/]+$/, '');
 const port = Number(process.env.PORT || 5180);
@@ -19,6 +21,11 @@ function safePath(urlPath) {
 }
 
 const server = createServer((request, response) => {
+  const pathname = new URL(request.url || '/', 'http://localhost').pathname;
+  if (pathname === '/api/admin/session') return sessionHandler(request, response);
+  if (pathname === '/api/admin/stats') return statsHandler(request, response);
+  if (pathname === '/api/track') return trackHandler(request, response);
+  if (pathname === '/admin' || pathname === '/admin/') request.url = '/admin.html';
   const target = safePath(request.url || '/');
   if (!target) { response.writeHead(400); response.end('Bad Request'); return; }
   try {
