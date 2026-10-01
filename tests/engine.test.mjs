@@ -17,8 +17,8 @@ function answerCurrent(value, step = nextAnswer) {
   return value;
 }
 
-test('contains seven complete, non-repeating decks', () => {
-  assert.equal(decks.length, 7);
+test('contains eight complete, non-repeating decks', () => {
+  assert.equal(decks.length, 8);
   for (const item of decks) {
     assert.equal(item.questions.length, 40, item.id);
     assert.equal(new Set(item.questions.map((card) => card.id)).size, 40, item.id);
@@ -99,4 +99,30 @@ test('participant names and adult confirmation are strictly validated', () => {
   assert.throws(() => createSession({ participants: names, deck: adult, adultConfirmed: false }), /成人向け/);
   assert.throws(() => createSession({ participants: names, deck: adult, adultConfirmed: 'true' }), /成人向け/);
   assert.doesNotThrow(() => createSession({ participants: names, deck: adult, adultConfirmed: true }));
+});
+
+test('date can stay regular or add exactly one R18 card per six-card set', () => {
+  const date = decks.find((item) => item.id === 'date');
+  const intimacy = decks.find((item) => item.id === 'intimacy');
+  assert.equal(date.questions.length, 40);
+  assert.equal(date.questions.every((question) => question.r18 === false), true);
+  assert.equal(date.r18Questions.length >= 6, true);
+  assert.equal(intimacy.questions.every((question) => question.r18 === true), true);
+  assert.throws(() => createSession({ participants: names, deck: date, includeR18: true }), /成人確認/);
+
+  const regular = createSession({ participants: names, deck: date, random: () => 0.5 });
+  assert.equal(regular.questions.length, 40);
+  assert.equal(regular.questions.some((question) => question.r18), false);
+
+  for (const value of [0, 0.5, 0.999999]) {
+    const mixed = createSession({ participants: names, deck: date, adultConfirmed: true, includeR18: true, random: () => value });
+    assert.equal(mixed.questions.length, 40);
+    assert.equal(new Set(mixed.questions.map((question) => question.id)).size, 40);
+    for (let round = 0; round < 6; round += 1) {
+      const cards = mixed.questions.slice(round * 6, round * 6 + 6);
+      assert.equal(cards.filter((question) => question.r18).length, 1);
+      assert.equal(cards.findIndex((question) => question.r18) >= 3, true);
+    }
+    assert.equal(mixed.questions.slice(36).some((question) => question.r18), false);
+  }
 });

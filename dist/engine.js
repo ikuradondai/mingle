@@ -11,12 +11,28 @@ export function normalizeParticipants(participants) {
   return names;
 }
 
-export function createSession({ participants, deck, adultConfirmed = false, random = Math.random }) {
+export function createSession({ participants, deck, adultConfirmed = false, includeR18 = false, random = Math.random }) {
   const names = normalizeParticipants(participants);
   if (!deck || !Array.isArray(deck.questions) || deck.questions.length !== 40) throw new Error('デッキが不正です');
   if (deck.adultOnly && adultConfirmed !== true) throw new Error('成人向け確認が必要です');
-  const questions = shuffle(deck.questions, random);
-  return { participants: names, deckId: deck.id, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, revealed: false, answerIndex: 0, likes: {} };
+  if (includeR18 && adultConfirmed !== true) throw new Error('R18の話題には成人確認が必要です');
+  if (includeR18 && (!Array.isArray(deck.r18Questions) || deck.r18Questions.length < 6)) throw new Error('R18質問が不正です');
+  const questions = includeR18 ? composeR18Questions(deck, random) : shuffle(deck.questions, random);
+  return { participants: names, deckId: deck.id, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, revealed: false, answerIndex: 0, likes: {} };
+}
+
+function composeR18Questions(deck, random) {
+  const regular = shuffle(deck.questions, random);
+  const r18 = shuffle(deck.r18Questions, random).slice(0, 6);
+  const composed = [];
+  for (let round = 0; round < 6; round += 1) {
+    const cards = regular.slice(round * 5, round * 5 + 5);
+    const insertAt = 3 + Math.floor(random() * 3);
+    cards.splice(insertAt, 0, r18[round]);
+    composed.push(...cards);
+  }
+  composed.push(...regular.slice(30, 34));
+  return composed;
 }
 
 export function currentCard(session) {
