@@ -1,4 +1,4 @@
-# MingleCard 会話カード試作
+# Mingle.Cards 会話カード試作
 
 ## 起動
 
