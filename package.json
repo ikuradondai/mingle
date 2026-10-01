@@ -1,0 +1,9 @@
+{
+  "name": "tonari-card-playground",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --test tests/*.test.mjs"
+  }
+}
