@@ -32,6 +32,33 @@ export async function recordEvent({ type, pageId, themeId, eventId, date }) {
   if (PROGRESS_TYPES[type]) { const metric = PROGRESS_TYPES[type]; d.progress[metric] = (d.progress[metric] || 0) + 1; db.totals.progress[metric] = (db.totals.progress[metric] || 0) + 1; const key = `${themeId}:${metric}`; d.progressThemes[key] = (d.progressThemes[key] || 0) + 1; db.totals.progressThemes[key] = (db.totals.progressThemes[key] || 0) + 1; }
   db.startedAt ||= new Date().toISOString(); db.updatedAt = new Date().toISOString(); saveLocal(); return 1;
 }
+export async function recordFeedback({ sessionId, cursor, themeId, themeIds, rating, text, createdAt, date }) {
+  const id = `${sessionId}:${cursor}`;
+  const item = { id, createdAt, date, themeId, themeIds: [...themeIds], cursor, rating, text };
+  if (hasRedis()) {
+    const script = "if redis.call('SET', KEYS[1] .. ARGV[1], '1', 'NX') == false then return 0 end; redis.call('ZADD', KEYS[2], ARGV[2], ARGV[3]); redis.call('SADD', KEYS[3], ARGV[4]); return 1";
+    return Number(await redisCommand(['EVAL', script, 3, `${REDIS_PREFIX}:feedbackDedup:`, `${REDIS_PREFIX}:feedback`, `${REDIS_PREFIX}:dates`, id, String(Date.parse(createdAt)), JSON.stringify(item), date]));
+  }
+  if (!localEnabled) throw new Error('store unavailable');
+  const db = readLocal(); db.feedback ||= []; db.feedbackDedup ||= {};
+  if (db.feedbackDedup[id]) return 0;
+  db.feedbackDedup[id] = true; db.feedback.push(item); db.dates ||= {}; db.dates[date] = true;
+  db.startedAt ||= createdAt; db.updatedAt = createdAt; saveLocal(); return 1;
+}
+export async function fetchFeedback(dates, limit = 100) {
+  dates = await dates;
+  const allowed = new Set(dates);
+  if (!dates.length || limit <= 0) return [];
+  if (hasRedis()) {
+    const starts = dates.map((date) => Date.parse(`${date}T00:00:00+09:00`)).filter(Number.isFinite);
+    if (!starts.length) return [];
+    const min = Math.min(...starts), max = Math.max(...starts) + 24 * 60 * 60 * 1000 - 1;
+    const values = await redisCommand(['ZREVRANGEBYSCORE', `${REDIS_PREFIX}:feedback`, String(max), String(min), 'LIMIT', '0', String(limit)]);
+    return (values || []).map((value) => { try { return JSON.parse(value); } catch { return null; } }).filter((item) => item && allowed.has(item.date)).slice(0, limit);
+  }
+  if (!localEnabled) throw new Error('store unavailable');
+  return (readLocal().feedback || []).filter((item) => allowed.has(item.date)).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, limit);
+}
 export async function fetchStats(dates) {
   dates = await dates;
   if (hasRedis()) {

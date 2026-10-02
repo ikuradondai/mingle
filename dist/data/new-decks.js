@@ -5,6 +5,15 @@ const makeQuestions = (deckId, texts, r18 = false) => texts.map((text, index) =>
   r18,
 }));
 
+import { partyFirstMeeting } from './party-first-meeting.js';
+import { businessMeetup } from './business-meetup.js';
+import { barFirstMeeting } from './bar-first-meeting.js';
+import { promotionRivals } from './promotion-rivals.js';
+import { loveRivals } from './love-rivals.js';
+import { archEnemies } from './arch-enemies.js';
+import { heroAndDemonKing } from './hero-and-demon-king.js';
+import { assassinAndTarget } from './assassin-and-target.js';
+
 export const newDecks = [
   {
     "id": "reunion",
@@ -560,3 +569,14 @@ export const newDecks = [
   ...deck,
   questions: makeQuestions(deck.id, deck.questions, deck.adultOnly),
 }));
+
+newDecks.push(
+  partyFirstMeeting,
+  businessMeetup,
+  barFirstMeeting,
+  promotionRivals,
+  loveRivals,
+  archEnemies,
+  heroAndDemonKing,
+  assassinAndTarget,
+);

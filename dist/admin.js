@@ -15,6 +15,8 @@ const sessionCompletesTotal = document.querySelector('#session-completes-total')
 const pagesList = document.querySelector('#pages-list');
 const themesList = document.querySelector('#themes-list');
 const dailyList = document.querySelector('#daily-list');
+const feedbackList = document.querySelector('#feedback-list');
+const feedbackCount = document.querySelector('#feedback-count');
 const rangeButtons = [...document.querySelectorAll('.range-button')];
 let selectedRange = 'today';
 let busy = false;
@@ -97,6 +99,45 @@ function renderDaily(values) {
   dailyList.append(table);
 }
 
+function formatFeedbackDate(value) {
+  if (!value) return '日時不明';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '日時不明';
+  return new Intl.DateTimeFormat('ja-JP', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Tokyo' }).format(date);
+}
+
+function feedbackThemeLabel(id, labels) {
+  if (id === 'mix') return 'ミックス';
+  return labels.get(String(id)) || String(id || 'テーマ不明');
+}
+
+function renderFeedback(values, stats) {
+  feedbackList.replaceChildren();
+  const feedback = Array.isArray(values) ? values : [];
+  const limit = Number(stats?.feedbackLimit) > 0 ? Number(stats.feedbackLimit) : 100;
+  feedbackCount.textContent = `${formatNumber(feedback.length)}件`;
+  if (feedback.length === 0) { setEmpty(feedbackList, 'この期間のフィードバックはありません'); return; }
+  const themeLabels = new Map((Array.isArray(stats?.themes) ? stats.themes : []).map((theme) => [String(theme?.id), String(theme?.label ?? theme?.id ?? '')]));
+  feedback.slice(0, limit).forEach((item) => {
+    const card = document.createElement('article'); card.className = 'feedback-card';
+    const top = document.createElement('div'); top.className = 'feedback-card-top';
+    const date = document.createElement('time'); date.className = 'feedback-date'; date.dateTime = String(item?.createdAt || ''); date.textContent = formatFeedbackDate(item?.createdAt);
+    const rating = document.createElement('span'); rating.className = `feedback-rating ${item?.rating === 'positive' ? 'positive' : item?.rating === 'needs_improvement' ? 'needs-improvement' : 'unrated'}`;
+    rating.textContent = item?.rating === 'positive' ? 'いいね！' : item?.rating === 'needs_improvement' ? '改善余地大きい！' : '評価なし';
+    top.append(date, rating); card.append(top);
+    const ids = Array.isArray(item?.themeIds) && item.themeIds.length ? item.themeIds : [item?.themeId];
+    const themeLine = document.createElement('p'); themeLine.className = 'feedback-themes';
+    const themeNames = ids.filter(Boolean).map((id) => feedbackThemeLabel(id, themeLabels));
+    const themePrefix = item?.themeId === 'mix' || ids.length > 1 ? 'テーマミックス: ' : 'テーマ: ';
+    themeLine.textContent = `${themePrefix}${themeNames.join(' / ') || 'テーマ不明'}`; card.append(themeLine);
+    if (item?.cursor !== undefined && item?.cursor !== null && String(item.cursor) !== '') {
+      const cursor = document.createElement('span'); cursor.className = 'feedback-cursor'; cursor.textContent = `${String(item.cursor)}枚終了時`; card.append(cursor);
+    }
+    const text = document.createElement('p'); text.className = 'feedback-text'; text.textContent = item?.text ? String(item.text) : '（本文なし）'; card.append(text);
+    feedbackList.append(card);
+  });
+}
+
 function renderStats(stats) {
   const totals = stats?.totals || {};
   pageTotal.textContent = formatNumber(Number(totals.pageViews));
@@ -108,6 +149,7 @@ function renderStats(stats) {
   renderMetrics(pagesList, stats?.pages, 'PV');
   renderThemes(stats?.themes);
   renderDaily(stats?.daily);
+  renderFeedback(stats?.feedback, stats);
   trackingStarted.textContent = stats?.trackingStartedAt ? `計測開始: ${formatDateTime(stats.trackingStartedAt).replace('更新日時: ', '')}` : '計測開始: まだありません';
 }
 

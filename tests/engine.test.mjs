@@ -18,9 +18,9 @@ function answerCurrent(value, step = nextAnswer) {
   return value;
 }
 
-test('contains nineteen complete decks with unique question ids', () => {
-  assert.equal(decks.length, 19);
-  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 760);
+test('contains twenty-seven complete decks with unique question ids', () => {
+  assert.equal(decks.length, 27);
+  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 1080);
   for (const item of decks) {
     assert.equal(item.questions.length, 40, item.id);
     assert.equal(new Set(item.questions.map((card) => card.id)).size, 40, item.id);
@@ -29,7 +29,7 @@ test('contains nineteen complete decks with unique question ids', () => {
     assert.equal(item.questions.every((question) => question.r18 === true), true, item.id);
   }
   assert.equal(new Set(challenges.map((card) => card.id)).size, 29);
-  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 789);
+  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 1109);
 });
 
 test('omiai is a regular non-touch theme and keeps concrete R18 refinements out of date', () => {

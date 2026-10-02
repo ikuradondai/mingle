@@ -106,6 +106,31 @@ export function currentAnswerLikes(session) {
   return session.likes?.[`${card.id}:${currentParticipantIndex(session)}`] ?? 0;
 }
 
+// Aggregate stored answer likes by participant for a question range. Question
+// ids and participant indexes are resolved from the session, so stray storage
+// keys cannot leak into the result.
+export function sessionLikeTotals(session, start = 0, end = session?.cursor ?? 0) {
+  const participants = Array.isArray(session?.participants) ? session.participants : [];
+  const questions = Array.isArray(session?.questions) ? session.questions : [];
+  const likes = session?.likes && typeof session.likes === 'object' ? session.likes : {};
+  const from = Math.max(0, Math.min(questions.length, Number.isFinite(start) ? Math.floor(start) : 0));
+  const to = Math.max(from, Math.min(questions.length, Number.isFinite(end) ? Math.floor(end) : from));
+  const totals = participants.map(() => 0);
+  for (const question of questions.slice(from, to)) {
+    if (!question || typeof question.id !== 'string') continue;
+    participants.forEach((_, participantIndex) => {
+      const value = likes[`${question.id}:${participantIndex}`];
+      if (Number.isSafeInteger(value) && value >= 0) totals[participantIndex] += value;
+    });
+  }
+  return totals;
+}
+
+export function summarizeLikes(session, start = 0, end = session?.cursor ?? 0) {
+  const participants = Array.isArray(session?.participants) ? session.participants : [];
+  return sessionLikeTotals(session, start, end).map((likes, index) => ({ index, name: participants[index] ?? '', likes }));
+}
+
 export function revealCard(session) {
   if (session.revealed || isFinished(session) || isRoundComplete(session) || !currentCard(session)) return session;
   return { ...session, revealed: true };
