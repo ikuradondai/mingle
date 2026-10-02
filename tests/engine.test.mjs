@@ -18,9 +18,9 @@ function answerCurrent(value, step = nextAnswer) {
   return value;
 }
 
-test('contains eighteen complete decks with unique question ids', () => {
-  assert.equal(decks.length, 18);
-  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 720);
+test('contains nineteen complete decks with unique question ids', () => {
+  assert.equal(decks.length, 19);
+  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 760);
   for (const item of decks) {
     assert.equal(item.questions.length, 40, item.id);
     assert.equal(new Set(item.questions.map((card) => card.id)).size, 40, item.id);
@@ -29,7 +29,21 @@ test('contains eighteen complete decks with unique question ids', () => {
     assert.equal(item.questions.every((question) => question.r18 === true), true, item.id);
   }
   assert.equal(new Set(challenges.map((card) => card.id)).size, 29);
-  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 749);
+  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 789);
+});
+
+test('omiai is a regular non-touch theme and keeps concrete R18 refinements out of date', () => {
+  const omiai = decks.find((item) => item.id === 'omiai');
+  const date = decks.find((item) => item.id === 'date');
+  assert.ok(omiai);
+  assert.equal(omiai.adultOnly, false);
+  assert.equal(omiai.r18Available, undefined);
+  assert.equal(omiai.questions.every((question) => question.r18 === false), true);
+  assert.equal(omiai.questions.some((question) => question.touch), false);
+  assert.deepEqual(date.r18Questions.map((question) => question.id), ['intimacy-04', 'intimacy-07', 'intimacy-11', 'intimacy-17', 'intimacy-24', 'intimacy-27', 'intimacy-29', 'intimacy-37']);
+  assert.equal(date.r18Questions.some((question) => ['intimacy-02', 'intimacy-06', 'intimacy-18', 'intimacy-20', 'intimacy-30', 'intimacy-31'].includes(question.id)), false);
+  const intimacy = decks.find((item) => item.id === 'intimacy');
+  assert.equal(new Set(intimacy.questions.map((question) => question.text)).size, 40);
 });
 
 test('touch challenges are restricted to eligible two-person partner decks', () => {
