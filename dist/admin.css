@@ -4,3 +4,17 @@
 .metric-fill{display:block;min-width:0}
 .daily-bar{height:auto;display:grid;grid-template-rows:repeat(2,5px);gap:3px;overflow:visible;background:transparent}
 .daily-bar span{display:block;height:5px;min-width:0;border-radius:99px}
+/* Explicit progress metrics stay scannable on desktop and narrow screens. */
+.summary-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+.summary-card{min-width:0}
+.metric-table,.daily-table{overflow-x:auto}
+.theme-metric-table,.daily-metric-table{min-width:0;width:100%;display:grid;gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.theme-metric-row{display:grid;grid-template-columns:minmax(0,1fr) repeat(4,minmax(42px,.35fr));align-items:center;gap:8px;padding:11px 12px;border-top:1px solid var(--line);font-size:13px}
+.theme-metric-row:first-child,.daily-metric-row:first-child{border-top:0}
+.theme-metric-header,.daily-metric-header{color:var(--muted);background:#f8f5f0;font-size:11px;font-weight:900;letter-spacing:.04em}
+.theme-metric-header span:not(:first-child),.daily-metric-header span:not(:first-child){text-align:right}
+.theme-name{overflow-wrap:anywhere}
+.theme-metric-value,.daily-value{text-align:right;font-variant-numeric:tabular-nums;font-weight:800}
+.daily-metric-row{display:grid;grid-template-columns:minmax(105px,1.2fr) repeat(5,minmax(42px,.7fr));align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line);font-size:12px}
+.daily-date{color:var(--muted);font-variant-numeric:tabular-nums}
+@media(max-width:680px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.summary-card:last-child{grid-column:1/-1}.theme-metric-table,.daily-metric-table{min-width:0;width:100%}.theme-metric-row{grid-template-columns:minmax(0,1fr) repeat(4,34px);gap:3px;padding:9px 7px;font-size:11px}.theme-metric-header{font-size:10px}.theme-metric-header span:not(:first-child),.daily-metric-header span:not(:first-child),.theme-metric-value,.daily-value{text-align:center}.daily-metric-row{grid-template-columns:minmax(0,1fr) repeat(5,36px);gap:3px;padding:9px 6px;font-size:10px}.daily-metric-header{font-size:9px}}

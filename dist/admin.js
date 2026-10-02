@@ -9,6 +9,9 @@ const updatedAt = document.querySelector('#updated-at');
 const trackingStarted = document.querySelector('#tracking-started');
 const pageTotal = document.querySelector('#page-views-total');
 const themeTotal = document.querySelector('#theme-starts-total');
+const roundCompletesTotal = document.querySelector('#round-completes-total');
+const roundContinuesTotal = document.querySelector('#round-continues-total');
+const sessionCompletesTotal = document.querySelector('#session-completes-total');
 const pagesList = document.querySelector('#pages-list');
 const themesList = document.querySelector('#themes-list');
 const dailyList = document.querySelector('#daily-list');
@@ -64,30 +67,46 @@ function renderMetrics(element, values, suffix) {
   });
 }
 
+function renderThemes(values) {
+  themesList.replaceChildren();
+  if (!Array.isArray(values) || values.length === 0) { setEmpty(themesList, 'データがありません'); return; }
+  const table = document.createElement('div'); table.className = 'theme-metric-table';
+  const header = document.createElement('div'); header.className = 'theme-metric-row theme-metric-header';
+  ['テーマ', '開始', '6枚', '続行', '全40枚'].forEach((label) => { const cell = document.createElement('span'); cell.textContent = label; header.append(cell); }); table.append(header);
+  values.forEach((item) => {
+    const row = document.createElement('div'); row.className = 'theme-metric-row';
+    const label = document.createElement('span'); label.className = 'theme-name'; label.textContent = String(item?.label ?? item?.id ?? '名称未設定'); row.append(label);
+    for (const key of ['count', 'roundCompletes', 'roundContinues', 'sessionCompletes']) { const cell = document.createElement('span'); cell.className = 'theme-metric-value'; cell.textContent = formatNumber(Number(item?.[key]) || 0); row.append(cell); }
+    table.append(row);
+  });
+  themesList.append(table);
+}
+
 function renderDaily(values) {
   dailyList.replaceChildren();
   if (!Array.isArray(values) || values.length === 0) { setEmpty(dailyList, 'データがありません'); return; }
-  const max = Math.max(1, ...values.flatMap((item) => [Number(item?.pageViews) || 0, Number(item?.themeStarts) || 0]));
+  const table = document.createElement('div'); table.className = 'daily-metric-table';
+  const header = document.createElement('div'); header.className = 'daily-metric-row daily-metric-header';
+  ['日付', 'PV', '開始', '6枚', '続行', '全40枚'].forEach((label) => { const cell = document.createElement('span'); cell.textContent = label; header.append(cell); }); table.append(header);
   values.forEach((item) => {
-    const pageViews = Number(item?.pageViews) || 0; const themeStarts = Number(item?.themeStarts) || 0;
-    const row = document.createElement('div'); row.className = 'daily-row';
-    const date = document.createElement('span'); date.className = 'daily-date'; date.textContent = String(item?.date ?? '—');
-    const bar = document.createElement('span'); bar.className = 'daily-bar';
-    const pv = document.createElement('span'); pv.className = 'daily-pv'; pv.style.width = `${pageViews / max * 100}%`;
-    const theme = document.createElement('span'); theme.className = 'daily-theme'; theme.style.width = `${themeStarts / max * 100}%`; bar.append(pv, theme);
-    const pvValue = document.createElement('span'); pvValue.className = 'daily-value'; pvValue.textContent = `PV ${formatNumber(pageViews)}`;
-    const themeValue = document.createElement('span'); themeValue.className = 'daily-value'; themeValue.textContent = `開始 ${formatNumber(themeStarts)}`;
-    row.append(date, bar, pvValue, themeValue); dailyList.append(row);
+    const row = document.createElement('div'); row.className = 'daily-metric-row';
+    const valuesForRow = [item?.date, item?.pageViews, item?.themeStarts, item?.roundCompletes, item?.roundContinues, item?.sessionCompletes];
+    valuesForRow.forEach((value, index) => { const cell = document.createElement('span'); cell.className = index === 0 ? 'daily-date' : 'daily-value'; cell.textContent = index === 0 ? String(value ?? '—') : formatNumber(Number(value) || 0); row.append(cell); });
+    table.append(row);
   });
+  dailyList.append(table);
 }
 
 function renderStats(stats) {
   const totals = stats?.totals || {};
   pageTotal.textContent = formatNumber(Number(totals.pageViews));
   themeTotal.textContent = formatNumber(Number(totals.themeStarts));
+  roundCompletesTotal.textContent = formatNumber(Number(totals.roundCompletes));
+  roundContinuesTotal.textContent = formatNumber(Number(totals.roundContinues));
+  sessionCompletesTotal.textContent = formatNumber(Number(totals.sessionCompletes));
   updatedAt.textContent = formatDateTime(stats?.updatedAt);
   renderMetrics(pagesList, stats?.pages, 'PV');
-  renderMetrics(themesList, stats?.themes, '回');
+  renderThemes(stats?.themes);
   renderDaily(stats?.daily);
   trackingStarted.textContent = stats?.trackingStartedAt ? `計測開始: ${formatDateTime(stats.trackingStartedAt).replace('更新日時: ', '')}` : '計測開始: まだありません';
 }

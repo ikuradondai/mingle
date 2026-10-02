@@ -1,7 +1,8 @@
 export const PAGE_IDS = ['participants', 'decks', 'play'];
 export const PAGE_LABELS = { participants: 'トップ（参加者入力）', decks: '質問テーマ選択', play: 'カード' };
 import { decks } from '../dist/data/decks.js';
-export const ALLOWED_THEME_IDS = decks.map((deck) => deck.id);
+export const ALLOWED_THEME_IDS = [...decks.map((deck) => deck.id), 'mix'];
+export const THEME_LABELS = Object.fromEntries([...decks.map((deck) => [deck.id, deck.title]), ['mix', 'テーマミックス']]);
 export const SESSION_COOKIE = 'mingle_admin';
 export const SESSION_TTL_SECONDS = 60 * 60 * 4;
 export const MAX_BODY_BYTES = 2048;

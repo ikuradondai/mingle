@@ -1,6 +1,11 @@
 export const ROUND_SIZE = 6;
 export const MAX_PARTICIPANTS = 8;
 export const MAX_NAME_LENGTH = 24;
+
+function createSessionId() {
+  try { if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID(); } catch {}
+  return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
 import { challenges } from './data/challenges.js';
 
 export function normalizeParticipants(participants) {
@@ -20,20 +25,52 @@ export function createSession({ participants, deck, adultConfirmed = false, incl
   if (includeR18 && (!Array.isArray(deck.r18Questions) || deck.r18Questions.length < 6)) throw new Error('R18質問が不正です');
   const baseQuestions = includeR18 ? composeR18Questions(deck, random) : shuffle(deck.questions, random);
   const questions = includeChallenges ? composeChallenges(baseQuestions, random, includeR18 && !deck.adultOnly, deck.id, names.length) : baseQuestions;
-  return { participants: names, deckId: deck.id, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {} };
+  return { sessionId: createSessionId(), participants: names, deckId: deck.id, deckIds: [deck.id], mixed: false, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {} };
 }
 
 function composeChallenges(cards, random, preserveR18 = false, deckId, participantCount) {
-  const pool = challenges.filter((card) => !card.touch || (participantCount === 2 && card.eligibleDeckIds?.includes(deckId)));
+  const eligibleDeckIds = Array.isArray(deckId) ? deckId : [deckId];
+  const pool = challenges.filter((card) => !card.touch || (participantCount === 2 && eligibleDeckIds.every((id) => card.eligibleDeckIds?.includes(id))));
   const selected = shuffle(pool, random).slice(0, 6);
   const composed = [...cards];
   for (let round = 0; round < 6; round += 1) {
     const start = round * ROUND_SIZE;
     const eligible = composed.slice(start, start + ROUND_SIZE).map((card, index) => ({ card, index })).filter(({ card }) => !preserveR18 || card.r18 !== true);
     const slot = eligible[Math.floor(random() * eligible.length)].index;
-    composed[start + slot] = selected[round];
+    composed[start + slot] = { ...selected[round], sourceDeckId: composed[start + slot].sourceDeckId };
   }
   return composed;
+}
+
+export function createMixedSession({ participants, decks, includeChallenges = false, includeR18 = false, random = Math.random }) {
+  const names = normalizeParticipants(participants);
+  if (includeR18) throw new Error('ミックスではR18を選べません');
+  if (!Array.isArray(decks) || (decks.length !== 2 && decks.length !== 3)) throw new Error('ミックスは2〜3テーマで選んでください');
+  const ids = decks.map((deck) => deck?.id);
+  if (new Set(ids).size !== ids.length || decks.some((deck) => !deck || deck.adultOnly || !Array.isArray(deck.questions) || deck.questions.length !== 40 || deck.questions.some((question) => question.r18 === true))) throw new Error('ミックスできないテーマです');
+  const pools = decks.map((deck) => shuffle(deck.questions, random).map((question) => ({ ...question, sourceDeckId: deck.id })));
+  const questions = [];
+  for (let round = 0; round < 6; round += 1) {
+    const roundCards = [];
+    const count = decks.length === 2 ? 3 : 2;
+    pools.forEach((pool) => roundCards.push(...pool.splice(0, count)));
+    questions.push(...shuffle(roundCards, random));
+  }
+  const tail = [];
+  const tailTaken = pools.map(() => 0);
+  while (questions.length + tail.length < 40) {
+    const available = pools.map((pool, index) => ({ pool, index })).filter(({ pool }) => pool.length);
+    if (!available.length) break;
+    const minimum = Math.min(...available.map(({ index }) => tailTaken[index]));
+    const candidates = available.filter(({ index }) => tailTaken[index] === minimum);
+    const selected = candidates[Math.floor(random() * candidates.length)];
+    tail.push(selected.pool.shift());
+    tailTaken[selected.index] += 1;
+  }
+  questions.push(...shuffle(tail, random));
+  if (questions.length !== 40 || new Set(questions.map((question) => question.id)).size !== 40) throw new Error('ミックス質問が不正です');
+  const finalQuestions = includeChallenges ? composeChallenges(questions, random, false, ids, names.length) : questions;
+  return { sessionId: createSessionId(), participants: names, deckId: 'mix', deckIds: ids, mixed: true, questions: finalQuestions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: false, includeR18: false, includeChallenges, revealed: false, answerIndex: 0, likes: {} };
 }
 
 function composeR18Questions(deck, random) {

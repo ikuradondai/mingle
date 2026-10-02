@@ -6,9 +6,10 @@ export default async function track(req, res) {
   if (req.method !== 'POST' || !sameOrigin(req) || cookie(req, SESSION_COOKIE)) return json(res, req.method !== 'POST' ? 405 : 403, { error: 'forbidden' });
   if (!persistentStoreAvailable()) return json(res, 503, { error: 'analytics_unavailable' });
   let input; try { input = await body(req); } catch (e) { return json(res, e.status || 400, { error: 'invalid_request' }); }
-  const keys = input.type === 'page_view' ? ['type', 'pageId', 'eventId'] : input.type === 'theme_start' ? ['type', 'themeId', 'eventId'] : [];
-  if (!keys.length || !exactKeys(input, keys) || typeof input.eventId !== 'string' || input.eventId.length < 8 || input.eventId.length > 100 || !/^[A-Za-z0-9._:-]+$/.test(input.eventId)) return json(res, 400, { error: 'invalid_event' });
+  const progressTypes = ['round_complete', 'round_continue', 'session_complete'];
+  const keys = input.type === 'page_view' ? ['type', 'pageId', 'eventId'] : ['theme_start', ...progressTypes].includes(input.type) ? ['type', 'themeId', 'eventId'] : [];
+  if (!keys.length || !exactKeys(input, keys) || typeof input.eventId !== 'string' || input.eventId.length < 8 || input.eventId.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(input.eventId)) return json(res, 400, { error: 'invalid_event' });
   if (input.type === 'page_view' && (!PAGE_IDS.includes(input.pageId))) return json(res, 400, { error: 'invalid_event' });
-  if (input.type === 'theme_start' && (!ALLOWED_THEME_IDS.includes(input.themeId))) return json(res, 400, { error: 'invalid_event' });
+  if (input.type !== 'page_view' && (!ALLOWED_THEME_IDS.includes(input.themeId))) return json(res, 400, { error: 'invalid_event' });
   try { await recordEvent({ ...input, date: todayJst() }); return json(res, 202, { ok: true }); } catch { return json(res, 503, { error: 'analytics_unavailable' }); }
 }
