@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#10152b" />
+  <meta name="description" content="Mingle.Cards。話すと、もっと近くなる。" />
+  <link rel="icon" href="/favicon.svg" />
+  <link rel="stylesheet" href="/about/about.css" />
+  <link rel="stylesheet" href="/about/brand-overrides.css" />
+  <title>Mingle.Cards — 話すと、もっと近くなる。</title>
+</head>
+<body>
+  <header class="site-header"><a class="logo" href="https://mingle.cards/" aria-label="Mingle.Cardsへ"><img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" /></a><a class="header-cta" href="https://mingle.cards/">遊んでみる ↗</a></header>
+  <main>
+    <section class="hero" data-carousel tabindex="0" aria-label="Mingleのシーン紹介">
+      <div class="slides">
+        <figure class="slide is-active" data-slide><img src="/assets/lp-home-party.webp" alt="夜に集まった大人の友人たちがスマートフォンを見る" fetchpriority="high" /><figcaption><small>FRIENDS / 友人と</small><h1>話すと、<em>もっと</em><br />近くなる。</h1><p>同じ質問に、みんなで答える。<br />スマホひとつで、今夜の会話を。</p></figcaption></figure>
+        <figure class="slide" data-slide><img src="/assets/lp-city-date.webp" alt="夜のバーでスマートフォンを見ながら話す大人のふたり" loading="lazy" /><figcaption><small>DATE / はじめての夜</small><p class="slide-title">はじめましてに、<br /><em>きっかけ</em>を。</p><p>沈黙さえ、ちょっと楽しみになる。</p></figcaption></figure>
+        <figure class="slide" data-slide><img src="/assets/lp-intimate-livingroom.webp" alt="夜の部屋でスマートフォンを使い会話する大人たち" loading="lazy" /><figcaption><small>18+ / 大人の会話</small><p class="slide-title">ふたりだけの、<br /><em>もう一歩。</em></p><p>18歳以上のテーマも、同意があるときだけ。</p></figcaption></figure>
+        <figure class="slide" data-slide><img src="/assets/lp-outdoor-camp.webp" alt="昼の屋外でスマートフォンを囲み会話する大人たち" loading="lazy" /><figcaption><small>TRIP / 旅の途中</small><p class="slide-title">その場でしか、<br /><em>聞けない話。</em></p><p>旅の途中に、次の質問を。</p></figcaption></figure>
+        <figure class="slide" data-slide><img src="/assets/lp-bar-first-meet.webp" alt="初対面の大人たちがバーでスマートフォンを使って話す" loading="lazy" /><figcaption><small>CONNECT / もっと話す</small><p class="slide-title">言葉が、<br /><em>続いていく。</em></p><p>無料で、登録なしではじめられる。</p></figcaption></figure>
+      </div>
+      <a class="hero-cta" href="https://mingle.cards/">無料で、今すぐ遊ぶ ↗</a>
+      <div class="controls"><button data-prev aria-label="前のシーン">←</button><div class="dots"> <button data-dot="0" class="active" aria-label="1番目" aria-current="true"></button><button data-dot="1" aria-label="2番目"></button><button data-dot="2" aria-label="3番目"></button><button data-dot="3" aria-label="4番目"></button><button data-dot="4" aria-label="5番目"></button></div><button data-next aria-label="次のシーン">→</button><button data-pause aria-label="カルーセルを停止">Ⅱ</button></div>
+    </section>
+    <section class="intro"><p class="eyebrow">MINGLE.CARDS</p><h2>今夜の距離を、<br /><span>カードで近づける。</span></h2><p>恋人、友人、家族。<br />2〜8人、登録なし。無料ではじめられる会話ゲーム。</p><a class="cta" href="https://mingle.cards/">無料で、今すぐ遊ぶ ↗</a></section>
+    <section class="people"><img src="/assets/friends-conversation.png" alt="会話を楽しむ4人のイラスト" loading="lazy" /><div><p class="eyebrow">THE NIGHT IS YOURS</p><h2>笑って、驚いて、<br />もう一歩だけ聞いてみる。</h2><a class="text-cta" href="https://mingle.cards/">質問を選んで遊ぶ ↗</a></div></section>
+    <section class="final"><p class="eyebrow">LET'S MINGLE</p><h2>まずは、<br /><em>呼び名</em>から。</h2><p>答えたくない質問は、いつでもパス。</p><a class="cta" href="https://mingle.cards/">今すぐ遊ぶ ↗</a><small>18歳以上の話題は、参加者全員の同意を確認してから。</small></section>
+  </main>
+  <footer><span>Mingle.Cards</span><span>やっぱり人って面白い。</span><span><a href="https://mingle.cards/terms.html">利用規約</a> · <a href="https://mingle.cards/privacy.html">プライバシー</a></span></footer>
+  <script>
+    const root=document.querySelector('[data-carousel]'), slides=[...document.querySelectorAll('[data-slide]')], dots=[...document.querySelectorAll('[data-dot]')], pause=document.querySelector('[data-pause]'), reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');
+    const state={index:0,userPaused:false,hovered:false,focusWithin:false,hidden:document.hidden,touchStart:null}; let timer;
+    const autoAllowed=()=>!state.userPaused&&!state.hovered&&!state.focusWithin&&!state.hidden&&!reduceMotion.matches;
+    function syncTimer(){clearInterval(timer);timer=autoAllowed()?setInterval(()=>show(state.index+1),6500):undefined}
+    function syncPause(){pause.textContent=state.userPaused?'▶':'Ⅱ';pause.setAttribute('aria-label',state.userPaused?'カルーセルを再生':'カルーセルを停止')}
+    function show(n){state.index=(n+slides.length)%slides.length;slides.forEach((s,k)=>{const active=k===state.index;s.classList.toggle('is-active',active);s.setAttribute('aria-hidden',String(!active));s.inert=!active});dots.forEach((d,k)=>{const active=k===state.index;d.classList.toggle('active',active);d.setAttribute('aria-current',active?'true':'false')})}
+    function move(delta){show(state.index+delta);syncTimer()}
+    show(0);syncPause();syncTimer();
+    pause.onclick=()=>{state.userPaused=!state.userPaused;syncPause();syncTimer()}; document.querySelector('[data-prev]').onclick=()=>move(-1); document.querySelector('[data-next]').onclick=()=>move(1); dots.forEach(d=>d.onclick=()=>{show(+d.dataset.dot);syncTimer()});
+    root.onkeydown=e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();move(e.key==='ArrowRight'?1:-1)}}; root.onfocusin=()=>{state.focusWithin=true;syncTimer()}; root.onfocusout=()=>requestAnimationFrame(()=>{state.focusWithin=root.matches(':focus-within');syncTimer()}); root.onmouseenter=()=>{state.hovered=true;syncTimer()}; root.onmouseleave=()=>{state.hovered=false;syncTimer()};
+    root.ontouchstart=e=>{state.touchStart=e.changedTouches[0].clientX}; root.ontouchend=e=>{if(state.touchStart!==null&&Math.abs(e.changedTouches[0].clientX-state.touchStart)>40)move(e.changedTouches[0].clientX<state.touchStart?1:-1);state.touchStart=null}; document.addEventListener('visibilitychange',()=>{state.hidden=document.hidden;syncTimer()}); reduceMotion.addEventListener?.('change',syncTimer);
+  </script>
+</body>
+</html>

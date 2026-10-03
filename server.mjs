@@ -15,7 +15,8 @@ function safePath(urlPath) {
   try {
     const decoded = decodeURIComponent(urlPath.split('?')[0]);
     const relative = decoded === '/' ? 'index.html' : decoded.replace(/^[/\\]+/, '');
-    const target = normalize(join(root, relative));
+    let target = normalize(join(root, relative));
+    if (relative.endsWith('/') || relative.endsWith('\\')) target = normalize(join(target, 'index.html'));
     return target === root || target.startsWith(root + sep) ? target : null;
   } catch {
     return null;
