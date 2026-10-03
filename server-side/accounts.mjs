@@ -27,6 +27,9 @@ export function accountConfig(env = process.env) {
 
 export function validCardId(id) { return typeof id === 'string' && CARD_IDS.has(id); }
 export function validCards(value) { return Array.isArray(value) && value.length >= MIN_CARDS && value.length <= MAX_CARDS && new Set(value).size === value.length && value.every(validCardId); }
+const DISPLAY_NAME_MAX = 40;
+function displayName(value) { return typeof value === 'string' ? value.trim() : ''; }
+function userDisplayName(user) { return displayName(user?.user_metadata?.display_name) || null; }
 
 function fail(status, code, message) { const error = new Error(message || code); error.status = status; error.code = code; return error; }
 function authHeader(req) { const raw = req.headers?.authorization || ''; return /^Bearer\s+\S+$/i.test(raw) ? raw : ''; }
@@ -53,7 +56,16 @@ export function createAccountService({ env = process.env, fetchImpl = fetch } = 
   async function account(req) {
     const { user, authorization } = await requireUser(req);
     const [favorites, sets] = await Promise.all([rows('favorites', user.id, authorization, '&select=card_id,created_at&order=created_at.desc'), rows('my_sets', user.id, authorization, '&select=id,name,card_ids,created_at,updated_at&order=created_at.asc')]);
-    return { user: { id: user.id, email: user.email || null }, favorites, sets };
+    return { user: { id: user.id, email: user.email || null, displayName: userDisplayName(user) }, account: { deletionAvailable: Boolean(config.serviceKey) }, favorites, sets };
+  }
+  async function profile(req) {
+    const { user, authorization } = await requireUser(req);
+    const input = req.body || {};
+    if (Object.keys(input).length !== 1 || !Object.prototype.hasOwnProperty.call(input, 'displayName') || typeof input.displayName !== 'string' || /[\u0000-\u001f\u007f]/u.test(input.displayName)) throw fail(400, ACCOUNT_ERRORS.invalid);
+    const value = displayName(input.displayName);
+    if (Array.from(value).length > DISPLAY_NAME_MAX) throw fail(400, ACCOUNT_ERRORS.invalid);
+    const updated = await supabaseFetch(config, '/auth/v1/user', { method: 'PUT', body: JSON.stringify({ data: { display_name: value } }), headers: { Authorization: authorization } }, fetchImpl);
+    return { user: { id: updated?.id || user.id, email: updated?.email || user.email || null, displayName: userDisplayName(updated) ?? (value || null) } };
   }
   async function favorite(req, cardId) {
     const { user, authorization } = await requireUser(req);
@@ -90,11 +102,12 @@ export function createAccountService({ env = process.env, fetchImpl = fetch } = 
   }
   async function removeAccount(req) {
     const { user, authorization } = await requireUser(req);
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length !== 1 || req.body.confirmation !== 'DELETE') throw fail(400, 'CONFIRMATION_REQUIRED');
     if (!config.serviceKey) throw fail(503, 'ACCOUNT_DELETION_UNAVAILABLE');
-    await supabaseFetch({ ...config, key: config.serviceKey }, `/auth/v1/admin/users/${encodeURIComponent(user.id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${config.serviceKey}` } }, fetchImpl);
+    await supabaseFetch({ ...config, key: config.serviceKey }, `/auth/v1/admin/users/${encodeURIComponent(user.id)}`, { method: 'DELETE', body: JSON.stringify({ should_soft_delete: false }), headers: { Authorization: `Bearer ${config.serviceKey}` } }, fetchImpl);
     return { deleted: true };
   }
-  return { account, favorite, set, removeAccount, available: Boolean(config), config: config && { url: config.url, key: config.key, googleEnabled: config.googleEnabled } };
+  return { account, profile, favorite, set, removeAccount, available: Boolean(config), config: config && { url: config.url, key: config.key, googleEnabled: config.googleEnabled } };
 }
 
-export { MAX_NAME, MAX_CARDS, MIN_CARDS, CARD_IDS };
+export { MAX_NAME, MAX_CARDS, MIN_CARDS, DISPLAY_NAME_MAX, CARD_IDS };

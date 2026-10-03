@@ -40,6 +40,8 @@
 
 8. リポジトリで `npm ci`、続けて `npm run build:account-sdk` を実行し、固定バージョン `@supabase/supabase-js@2.117.2` のブラウザ用 `dist/vendor/supabase.js` を再生成します。未設定時は `GET /api/account/config` が `enabled:false` を返し、ゲストプレイを継続します。
 
+表示名と退会：表示名はSupabase Authの`user_metadata.display_name`に保存します。`PATCH /api/account/profile` は`{ "displayName": "..." }`だけを受け付け、trim後40 Unicode code points以内（空文字で解除）です。`GET /api/account/me` の`account.deletionAvailable`が`true`のときだけ退会を有効にします。退会APIは`DELETE /api/account`に`{ "confirmation": "DELETE" }`を要求し、サーバーのservice roleで本人のAuth userを削除してから、外部キーのcascadeでfavoritesとmy_setsを削除します。service roleがない環境では503となり、成功扱いにしません。UIで利用できない場合は `inquiry@erudaite.ai` へご連絡ください。対応に必要な範囲で本人確認を行います。
+
 ## 検証
 
 RLSの実行検証は外部プロジェクトを使わず、`tests/rls` で `npm ci` → `npm run test:rls` を実行します。PGlite上で所有者分離、別ユーザーの読取・更新・削除・所有権移転拒否、匿名拒否、制約、auth.users削除時のカスケードを検証します。通常の `npm run check` にはこのSQL-WASM検証を含めていません。

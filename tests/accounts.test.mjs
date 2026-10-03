@@ -31,12 +31,12 @@ test('account service validates user through auth endpoint and scopes REST reque
   const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
   const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url, options) => {
     calls.push({ url, options });
-    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'user-1', email: 'a@example.test' });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'user-1', email: 'a@example.test', user_metadata: { display_name: '  A  ' } });
     if (url.includes('/favorites')) return response(200, []);
     return response(200, []);
   } });
   const result = await service.account(request('/api/account'));
-  assert.equal(result.user.id, 'user-1'); assert.deepEqual(result.favorites, []); assert.deepEqual(result.sets, []);
+  assert.equal(result.user.id, 'user-1'); assert.equal(result.user.displayName, 'A'); assert.equal(result.account.deletionAvailable, false); assert.deepEqual(result.favorites, []); assert.deepEqual(result.sets, []);
   assert.ok(calls.every((call) => call.options.headers.Authorization === 'Bearer user-token'));
   await assert.rejects(() => service.favorite(request('/api/account/favorites/not-a-card'), 'not-a-card'), (error) => error.status === 400);
 });
@@ -71,11 +71,68 @@ test('favorite upsert is idempotent and set payload always uses verified user id
   await assert.rejects(() => service.set({ ...request('/api/account/sets', { method: 'POST', body: { name: 'bad', cardIds: [] } }), body: { name: 'bad', cardIds: [] } }), (error) => error.status === 400);
 });
 
+test('profile accepts only a trimmed unicode display name and updates auth metadata', async () => {
+  const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url, options) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/v1/user') && options.method === 'PUT') return response(200, { id: 'verified-user', user_metadata: { display_name: JSON.parse(options.body).data.display_name } });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user', email: 'x@y.test', user_metadata: { display_name: 'Old' } });
+    return response(200, []);
+  } });
+  const result = await service.profile({ ...request('/api/account/profile', { method: 'PATCH', body: { displayName: '  太郎  ' } }), body: { displayName: '  太郎  ' } });
+  assert.equal(result.user.displayName, '太郎');
+  assert.deepEqual(JSON.parse(calls.at(-1).options.body), { data: { display_name: '太郎' } });
+  const fortyEmoji = '😀'.repeat(40);
+  const cleared = await service.profile({ ...request('/api/account/profile', { method: 'PATCH', body: { displayName: '   ' } }), body: { displayName: '   ' } });
+  assert.equal(cleared.user.displayName, null);
+  assert.deepEqual(JSON.parse(calls.at(-1).options.body), { data: { display_name: '' } });
+  await service.profile({ ...request('/api/account/profile', { method: 'PATCH', body: { displayName: fortyEmoji } }), body: { displayName: fortyEmoji } });
+  await assert.rejects(() => service.profile({ ...request('/api/account/profile', { method: 'PATCH', body: { displayName: `${fortyEmoji}😀` } }), body: { displayName: `${fortyEmoji}😀` } }), (error) => error.status === 400);
+  await assert.rejects(() => service.profile({ ...request('/api/account/profile', { method: 'PATCH', body: { displayName: 'a'.repeat(41) } }), body: { displayName: 'a'.repeat(41) } }), (error) => error.status === 400);
+  await assert.rejects(() => service.profile({ ...request('/api/account/profile', { method: 'PATCH', body: { displayName: 'x', extra: true } }), body: { displayName: 'x', extra: true } }), (error) => error.status === 400);
+  await assert.rejects(() => service.profile({ ...request('/api/account/profile', { method: 'PATCH', body: { displayName: 'x\n' } }), body: { displayName: 'x\n' } }), (error) => error.status === 400);
+  const failedService = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url, options) => url.endsWith('/auth/v1/user') && options.method !== 'PUT' ? response(200, { id: 'verified-user' }) : response(500, {}) });
+  await assert.rejects(() => failedService.profile({ ...request('/api/account/profile', { method: 'PATCH', body: { displayName: 'new' } }), body: { displayName: 'new' } }), (error) => error.status === 502);
+});
+
 test('account deletion does not mutate rows when admin deletion fails', async () => {
   const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
   const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, SUPABASE_SERVICE_ROLE_KEY: 'service-role-secret' }, fetchImpl: async (url) => { calls.push(url); if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user' }); return response(500, {}); } });
-  await assert.rejects(() => service.removeAccount(request('/api/account', { method: 'DELETE' })), (error) => error.status === 502);
+  await assert.rejects(() => service.removeAccount({ ...request('/api/account', { method: 'DELETE', body: { confirmation: 'DELETE' } }), body: { confirmation: 'DELETE' } }), (error) => error.status === 502);
   assert.deepEqual(calls, ['https://project.supabase.co/auth/v1/user', 'https://project.supabase.co/auth/v1/admin/users/verified-user']);
+});
+
+test('account deletion requires explicit confirmation before admin deletion', async () => {
+  const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, SUPABASE_SERVICE_ROLE_KEY: 'service-role-secret' }, fetchImpl: async (url) => { calls.push(url); return response(200, { id: 'verified-user' }); } });
+  await assert.rejects(() => service.removeAccount({ ...request('/api/account', { method: 'DELETE', body: { confirmation: 'wrong' } }), body: { confirmation: 'wrong' } }), (error) => error.status === 400 && error.code === 'CONFIRMATION_REQUIRED');
+  await assert.rejects(() => service.removeAccount({ ...request('/api/account', { method: 'DELETE', body: { confirmation: 'DELETE', userId: 'other-user' } }), body: { confirmation: 'DELETE', userId: 'other-user' } }), (error) => error.status === 400 && error.code === 'CONFIRMATION_REQUIRED');
+  await assert.rejects(() => service.removeAccount({ ...request('/api/account', { method: 'DELETE' }), body: undefined }), (error) => error.status === 400 && error.code === 'CONFIRMATION_REQUIRED');
+  await assert.rejects(() => service.removeAccount({ ...request('/api/account', { method: 'DELETE' }), body: null }), (error) => error.status === 400 && error.code === 'CONFIRMATION_REQUIRED');
+  await assert.rejects(() => service.removeAccount({ ...request('/api/account', { method: 'DELETE' }), body: [] }), (error) => error.status === 400 && error.code === 'CONFIRMATION_REQUIRED');
+  assert.equal(calls.length, 5);
+  assert.ok(calls.every((url) => url.endsWith('/auth/v1/user')));
+});
+
+test('account deletion reports unavailable without service role after authenticating owner', async () => {
+  const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url) => { calls.push(url); return response(200, { id: 'verified-user' }); } });
+  await assert.rejects(() => service.removeAccount({ ...request('/api/account', { method: 'DELETE', body: { confirmation: 'DELETE' } }), body: { confirmation: 'DELETE' } }), (error) => error.status === 503 && error.code === 'ACCOUNT_DELETION_UNAVAILABLE');
+  assert.deepEqual(calls, ['https://project.supabase.co/auth/v1/user']);
+});
+
+test('account deletion removes only the verified auth user and reports success', async () => {
+  const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, SUPABASE_SERVICE_ROLE_KEY: 'service-role-secret' }, fetchImpl: async (url, options) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user' });
+    return response(204, null);
+  } });
+  const result = await service.removeAccount({ ...request('/api/account', { method: 'DELETE', body: { confirmation: 'DELETE' } }), body: { confirmation: 'DELETE' } });
+  assert.deepEqual(result, { deleted: true });
+  assert.equal(calls.at(-1).url, 'https://project.supabase.co/auth/v1/admin/users/verified-user');
+  assert.equal(calls.at(-1).options.headers.Authorization, 'Bearer service-role-secret');
+  assert.deepEqual(JSON.parse(calls.at(-1).options.body), { should_soft_delete: false });
 });
 
 test('public config is safe and returns disabled state without config', async () => {

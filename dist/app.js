@@ -9,7 +9,7 @@ import { accountConfig, accountApi, cardPayload, discoverAccountConfig } from '.
 import { renderLibrary, canonicalCard } from './account-library.js';
 
 const root = document.querySelector('#app');
-const state = { screen: 'participants', participants: ['', ''], session: null, error: '', busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, lastAdvanceAt: 0, focusAction: null, focusSelector: null, selectedDeckId: 'friends', selectedDeckIds: ['friends'], themeMode: 'single', filter: 'all', adultConfirmed: false, includeChallenges: false, resume: null, account: { enabled: accountConfig.enabled, google: accountConfig.google, user: null, favorites: new Set(), sets: [], open: false, libraryOpen: false, email: '', otp: '', otpSent: false, pendingSet: null, selectedCards: new Set(), editingSetId: null, setName: undefined, revealAdult: false, status: '', error: '', busy: false, generation: 0 } };
+const state = { screen: 'participants', participants: ['', ''], session: null, error: '', busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, lastAdvanceAt: 0, focusAction: null, focusSelector: null, selectedDeckId: 'friends', selectedDeckIds: ['friends'], themeMode: 'single', filter: 'all', adultConfirmed: false, includeChallenges: false, resume: null, account: { enabled: accountConfig.enabled, google: accountConfig.google, user: null, favorites: new Set(), sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false, profileDraft: '', deletionAvailable: false, email: '', otp: '', otpSent: false, pendingSet: null, selectedCards: new Set(), editingSetId: null, setName: undefined, revealAdult: false, status: '', error: '', busy: false, generation: 0, profileRevision: 0 } };
 
 function esc(value) { return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char])); }
 function participantAvatar(name) { const first = Array.from(name.trim())[0]; if (first) return esc(first); return `<svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="21" fill="var(--participant-bg)"/><circle cx="16" cy="19" r="2" fill="var(--participant-fg)"/><circle cx="28" cy="19" r="2" fill="var(--participant-fg)"/><path d="M15 27c2.2 3.4 11.8 3.4 14 0" fill="none" stroke="var(--participant-fg)" stroke-width="2" stroke-linecap="round"/></svg>`; }
@@ -18,7 +18,7 @@ function accountSurface(rootNode) {
   const overlay = rootNode?.querySelector?.('[data-account-overlay]');
   if (!overlay) return null;
   const dialog = overlay.querySelector('.account-dialog');
-  const kind = dialog?.classList.contains('account-dialog-library') ? 'library' : dialog?.classList.contains('account-dialog-menu') ? 'menu' : 'login';
+  const kind = dialog?.classList.contains('account-dialog-library') ? 'library' : dialog?.classList.contains('account-dialog-settings') ? 'settings' : dialog?.classList.contains('account-dialog-delete') ? 'delete' : dialog?.classList.contains('account-dialog-menu') ? 'menu' : 'login';
   return `${kind}:${Boolean(dialog?.querySelector('.library-editor'))}`;
 }
 function accountScrollSnapshot() {
@@ -79,12 +79,14 @@ function render() {
   root.querySelector('[data-action="resume"]')?.addEventListener('click', resumeSaved);
   root.querySelector('[data-action="discard-resume"]')?.addEventListener('click', () => { clearSession(); state.resume = null; render(); });
   root.querySelector('[data-account-email]')?.addEventListener('input', (event) => { state.account.email = event.target.value; });
+  root.querySelector('[data-profile-name]')?.addEventListener('input', (event) => { state.account.profileDraft = event.target.value; const button = root.querySelector('form[data-form="profile"] button[type="submit"]'); if (button) button.disabled = state.account.busy || !validDisplayName(state.account.profileDraft); });
   root.querySelector('[data-account-otp]')?.addEventListener('input', (event) => { state.account.otp = event.target.value; });
   root.querySelector('form[data-form="account"]')?.addEventListener('submit', (event) => { event.preventDefault(); loginWithOtp(); });
+  root.querySelector('form[data-form="profile"]')?.addEventListener('submit', (event) => { event.preventDefault(); saveProfile(); });
   const accountOverlay = root.querySelector('[data-account-overlay]');
-  accountOverlay?.addEventListener('click', (event) => { if (event.target === event.currentTarget) { state.account.open = false; state.account.libraryOpen = false; state.focusAction = 'account'; render(); } });
+  accountOverlay?.addEventListener('click', (event) => { if (event.target === event.currentTarget && !state.account.busy) { state.account.open = false; state.account.libraryOpen = false; state.focusAction = 'account'; render(); } });
   accountOverlay?.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && state.account.open) { event.preventDefault(); state.account.open = false; state.account.libraryOpen = false; state.focusAction = 'account'; render(); return; }
+    if (event.key === 'Escape' && state.account.open && !state.account.busy) { event.preventDefault(); state.account.open = false; state.account.libraryOpen = false; state.focusAction = 'account'; render(); return; }
     if (event.key !== 'Tab') return;
     const focusable = [...accountOverlay.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [href]')].filter((element) => element.offsetParent !== null);
     if (!focusable.length) return;
@@ -94,6 +96,7 @@ function render() {
   });
   root.querySelectorAll('[data-select-card]').forEach((input) => input.addEventListener('change', (event) => { const id = event.currentTarget.dataset.cardId; if (event.currentTarget.checked) state.account.selectedCards.add(id); else state.account.selectedCards.delete(id); state.focusSelector = `[data-select-card][data-card-id=\"${id}\"]`; render(); }));
   root.querySelector('[data-library-adult]')?.addEventListener('change', (event) => { state.account.revealAdult = event.currentTarget.checked; state.focusSelector = '[data-library-adult]'; render(); });
+  root.querySelector('[data-delete-confirm]')?.addEventListener('change', (event) => { state.account.deleteConfirmed = event.currentTarget.checked; const button = root.querySelector('[data-action="account-delete-confirm"]'); if (button) button.disabled = state.account.busy || !state.account.deletionAvailable || !state.account.deleteConfirmed; });
   const setNameInput = root.querySelector('[data-set-name]'); const updateSetValidity = () => { const form = setNameInput?.closest('form'); const button = form?.querySelector('button[type=\"submit\"]'); if (!button || !setNameInput) return; const count = state.account.selectedCards.size; button.disabled = state.account.busy || !setNameInput.value.trim() || count < 6 || count > 40; }; setNameInput?.addEventListener('input', (event) => { state.account.setName = event.currentTarget.value; if (!event.isComposing) updateSetValidity(); }); setNameInput?.addEventListener('compositionend', updateSetValidity);
   root.querySelector('form[data-form="set"]')?.addEventListener('submit', async (event) => { event.preventDefault(); if (state.account.busy) return; const name = new FormData(event.currentTarget).get('set-name')?.toString().trim(); const cardIds = [...state.account.selectedCards]; if (!name || cardIds.length < 6 || cardIds.length > 40) { state.account.error = '名前とカード数（6〜40枚）を確認してください。'; render(); return; } const generation = state.account.generation; const editingId = state.account.editingSetId; state.account.busy = true; render(); try { const payload = { name, cardIds }; const result = editingId ? await accountApi.updateSet(editingId, payload) : await accountApi.createSet(name, cardIds); if (generation !== state.account.generation) return; const row = result.set || result; state.account.sets = editingId ? state.account.sets.map((set) => set.id === row.id ? row : set) : [...state.account.sets, row]; state.account.editingSetId = null; state.account.setName = undefined; state.account.selectedCards = new Set(); state.account.status = '保存しました。'; } catch { if (generation !== state.account.generation) return; state.account.error = 'セットを保存できませんでした。'; } finally { if (generation === state.account.generation) { state.account.busy = false; render(); } } });
   root.querySelector('.card-back')?.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); const previous = ensureSession(); state.session = revealCard(previous); persist(previous); render(); } });
@@ -131,13 +134,22 @@ function accountButton(a) {
 function libraryAccountView(a) {
   return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button account-back" data-action="account-menu">戻る</button><strong id="account-dialog-title">保存したカード</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.pendingSet ? '<p class="account-status">このセットにはR18カードが含まれます。参加者全員の同意が必要です。</p><button type="button" class="primary-button" data-action="confirm-set-play">同意して遊ぶ</button>' : ''}${renderLibrary({ ...a, hideTitle: true })}`, 'account-dialog-library');
 }
+function validDisplayName(value) {
+  return typeof value === 'string' && !/[\u0000-\u001f\u007f]/u.test(value) && Array.from(value.trim()).length <= 40;
+}
+function accountSettingsView(a) {
+  if (a.deleteOpen) return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-settings">戻る</button><strong id="account-dialog-title">退会の確認</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-delete-warning"><p>退会すると、このアカウントの表示名・お気に入り・非公開マイセットを削除します。</p><p>この端末の呼び名と途中データも削除されます。</p><p>削除後は取り消せません。</p><label class="account-delete-confirm-label"><input type="checkbox" data-delete-confirm ${a.deleteConfirmed ? 'checked' : ''} ${a.busy ? 'disabled' : ''}/> 内容を確認しました</label></div>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ''}<div class="account-delete-actions"><button type="button" class="text-button" data-action="account-delete-cancel" ${a.busy ? 'disabled' : ''}>キャンセル</button><button type="button" class="danger-button" data-action="account-delete-confirm" ${a.busy || !a.deletionAvailable || !a.deleteConfirmed ? 'disabled' : ''}>${a.busy ? '削除中…' : '退会して削除'}</button></div>`, 'account-dialog-delete');
+  const valid = validDisplayName(a.profileDraft);
+  return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-menu">戻る</button><strong id="account-dialog-title">アカウント設定</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><form class="account-settings-form" data-form="profile"><label>表示名<input type="text" data-profile-name value="${esc(a.profileDraft)}" maxlength="80" autocomplete="nickname" ${a.busy ? 'disabled' : ''}/></label><p class="account-hint">参加者の呼び名とは別に保存されます。</p><p class="account-email">${esc(a.user?.email || '')}</p><button type="submit" class="primary-button" ${a.busy || !valid ? 'disabled' : ''}>${a.busy ? '保存中…' : '表示名を保存'}</button></form>${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ''}${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ''}<section class="account-delete-section"><h2>退会</h2>${a.deletionAvailable ? '<button type="button" class="danger-button" data-action="account-delete-open">アカウントを削除</button>' : '<p class="account-hint">退会手続きは現在利用できません。</p><a class="account-support" href="mailto:inquiry@erudaite.ai">問い合わせる</a>'}</section>`, 'account-dialog-settings');
+}
 function accountView() {
   if (!state.account.enabled) return '';
   const a = state.account;
   const bar = accountButton(a);
   if (!a.open) return bar;
+  if (a.user && a.settingsOpen) return `${bar}${accountSettingsView(a)}`;
   if (a.user && a.libraryOpen) return `${bar}${libraryAccountView(a)}`;
-  if (a.user) return `${bar}${accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">アカウント</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><p class="account-email">${esc(a.user.email || a.user.name || 'ログイン中')}</p><button type="button" class="secondary-button account-menu-action" data-action="account-library-open">保存したカード・マイセット</button><button type="button" class="text-button account-menu-action" data-action="logout">ログアウト</button>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ''}`, 'account-dialog-menu')}`;
+  if (a.user) return `${bar}${accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">アカウント</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.user.displayName ? `<p class="account-display-name">${esc(a.user.displayName)}</p>` : ''}<p class="account-email">${esc(a.user.email || a.user.name || 'ログイン中')}</p><button type="button" class="secondary-button account-menu-action" data-action="account-settings-open">アカウント設定</button><button type="button" class="secondary-button account-menu-action" data-action="account-library-open">保存したカード・マイセット</button><button type="button" class="text-button account-menu-action" data-action="logout">ログアウト</button>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ''}`, 'account-dialog-menu')}`;
   return `${bar}${accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">保存する</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.google ? '<button type="button" class="secondary-button account-provider" data-action="google-login">Googleで続ける</button>' : ''}<form class="account-otp" data-form="account"><label>メールアドレス<input type="email" data-account-email value="${esc(a.email)}" required autocomplete="email" /></label>${a.otpSent ? '<label>確認コード<input inputmode="numeric" data-account-otp value="' + esc(a.otp) + '" required autocomplete="one-time-code" /></label><button type="button" class="text-button muted" data-action="reset-otp"' + (a.busy ? ' disabled' : '') + '>メールアドレスを変更／コードを再送</button>' : ''}<button type="submit" class="primary-button">${a.busy ? '処理中…' : (a.otpSent ? 'ログインする' : '確認コードを送る')}</button></form><p class="account-status" role="status">${esc(a.status || 'ログインすると質問を保存できます')}</p><p class="form-error" role="alert">${esc(a.error)}</p>`, 'account-dialog-login')}`;
 }
 
@@ -220,20 +232,23 @@ function roundView() {
 function finishView() { return roundView(); }
 
 
+function normalizeAccountUser(user, previous = null) { if (!user) return null; const sameUser = previous?.id && user.id && previous.id === user.id; const hasDisplayName = Object.prototype.hasOwnProperty.call(user, 'displayName'); const displayName = hasDisplayName ? user.displayName : (sameUser ? previous.displayName : user.user_metadata?.display_name ?? null); return { ...user, displayName }; }
 async function loadAccount() {
   if (!state.account.enabled) return;
-  const generation = state.account.generation;
+  const generation = state.account.generation; const profileRevision = state.account.profileRevision;
   try {
     const me = await accountApi.me();
-    if (generation !== state.account.generation) return;
-    state.account.user = me.user || null;
+    if (generation !== state.account.generation || profileRevision !== state.account.profileRevision) return;
+    state.account.user = normalizeAccountUser(me.user || null, state.account.user);
+    state.account.deletionAvailable = me.account?.deletionAvailable === true;
+    state.account.profileDraft = state.account.user?.displayName || '';
     if (state.account.user) {
-      if (generation !== state.account.generation) return;
+      if (generation !== state.account.generation || profileRevision !== state.account.profileRevision) return;
       state.account.favorites = new Set((me.favorites || []).map((item) => item.cardId || item.card_id || item.id || item));
       state.account.sets = (me.sets || []).map((set) => ({ ...set, cards: set.cards || (set.card_ids || []).map((cardId) => ({ cardId })) }));
     }
-  } catch { if (generation !== state.account.generation) return; state.account.user = null; }
-  if (generation !== state.account.generation) return;
+  } catch { if (generation !== state.account.generation || profileRevision !== state.account.profileRevision) return; state.account.user = null; }
+  if (generation !== state.account.generation || profileRevision !== state.account.profileRevision) return;
   render();
 }
 async function loginWithOtp() {
@@ -243,6 +258,28 @@ async function loginWithOtp() {
   try { if (state.account.otpSent) { await accountApi.verifyOtp(email, state.account.otp.trim()); state.account.status = 'ログインしました。'; } else { await accountApi.sendOtp(email); state.account.otpSent = true; state.account.status = '確認コードをメールに送りました。'; state.focusSelector = '[data-account-otp]'; } }
   catch { state.account.error = state.account.otpSent ? '確認コードが正しくないか、有効期限が切れています。' : '確認コードを送れませんでした。'; }
   finally { state.account.busy = false; render(); }
+}
+async function saveProfile() {
+  if (state.account.busy || !state.account.user || !validDisplayName(state.account.profileDraft)) return;
+  const generation = state.account.generation; const revision = ++state.account.profileRevision; const value = state.account.profileDraft.trim();
+  state.account.busy = true; state.account.error = ''; state.account.status = ''; render();
+  try { const result = await accountApi.updateProfile(value); if (generation !== state.account.generation || revision !== state.account.profileRevision) return; const user = result.user || {}; state.account.user = normalizeAccountUser({ ...state.account.user, ...user }, state.account.user); state.account.profileDraft = state.account.user.displayName || ''; state.account.status = '表示名を保存しました。'; }
+  catch { if (generation === state.account.generation && revision === state.account.profileRevision) state.account.error = '表示名を保存できませんでした。'; }
+  finally { if (generation === state.account.generation) { state.account.busy = false; render(); } }
+}
+async function deleteAccount() {
+  if (state.account.busy || !state.account.deletionAvailable || !state.account.deleteConfirmed) return;
+  const requestUserId = state.account.user?.id || null; const generation = ++state.account.generation; state.account.busy = true; state.account.error = ''; render();
+  try {
+    await accountApi.deleteAccount();
+    if (generation !== state.account.generation && state.account.user?.id && state.account.user.id !== requestUserId) return;
+    // The account is already deleted server-side. Local SDK cleanup may emit SIGNED_OUT
+    // and advance generation, so it must never prevent clearing this device's game state.
+    try { await accountApi.logout({ scope: 'local' }); } catch { /* server deletion succeeded; local SDK cleanup is best effort */ }
+    if (state.account.user?.id && state.account.user.id !== requestUserId) return;
+    clearSession(); state.session = null; state.resume = null; state.feedback = null; state.feedbackBusy = false;
+    state.account.user = null; state.account.favorites = new Set(); state.account.sets = []; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.pendingSet = null; state.account.profileDraft = ''; state.account.deletionAvailable = false; state.account.status = ''; state.account.error = ''; state.account.otpSent = false; state.account.otp = ''; state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.deleteConfirmed = false; state.account.busy = false; state.account.profileRevision += 1; state.account.email = ''; state.account.revealAdult = false; state.participants = ['', '']; state.screen = 'participants'; state.error = ''; render();
+  } catch { if (generation === state.account.generation) { state.account.busy = false; state.account.error = '退会処理の結果を確認できませんでした。しばらくしてからアカウントの状態を確認してください。'; render(); } }
 }
 function playSavedSet(set) {
   const ids = (Array.isArray(set?.card_ids) ? set.card_ids : Array.isArray(set?.cards) ? set.cards.map((entry) => entry.cardId || entry.card_id || entry) : []).filter((id) => typeof id === 'string');
@@ -268,11 +305,16 @@ async function handleAction(event) {
   if (action === 'account') { state.account.open = true; state.account.libraryOpen = false; state.focusAction = state.account.user ? 'account-library-open' : 'account-close'; render(); return; }
   if (action === 'reset-otp') { if (state.account.busy) return; state.account.otpSent = false; state.account.otp = ''; state.account.status = ''; state.account.error = ''; render(); return; }
   if (action === 'google-login') { try { await accountApi.google(); } catch { state.account.error = 'Googleログインを開始できませんでした。'; render(); } return; }
-  if (action === 'account-close') { state.account.open = false; state.account.libraryOpen = false; state.focusAction = 'account'; render(); return; }
-  if (action === 'account-menu') { state.account.libraryOpen = false; state.focusAction = 'account-library-open'; render(); return; }
+  if (action === 'account-close') { if (state.account.busy) return; state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.focusAction = 'account'; render(); return; }
+  if (action === 'account-settings-open') { state.account.error = ''; state.account.status = ''; state.account.settingsOpen = true; state.account.libraryOpen = false; state.account.deleteOpen = false; state.account.profileDraft = state.account.user?.displayName || ''; state.focusSelector = '[data-profile-name]'; render(); return; }
+  if (action === 'account-settings') { if (state.account.busy) return; state.account.settingsOpen = true; state.account.deleteOpen = false; state.focusSelector = '[data-profile-name]'; render(); return; }
+  if (action === 'account-delete-open') { if (!state.account.deletionAvailable || state.account.busy) return; state.account.error = ''; state.account.status = ''; state.account.deleteOpen = true; state.account.deleteConfirmed = false; state.focusAction = 'account-delete-cancel'; render(); return; }
+  if (action === 'account-delete-cancel') { if (state.account.busy) return; state.account.deleteOpen = false; state.account.deleteConfirmed = false; state.account.error = ''; state.focusAction = 'account-delete-open'; render(); return; }
+  if (action === 'account-delete-confirm') { deleteAccount(); return; }
+  if (action === 'account-menu') { if (state.account.busy) return; state.account.error = ''; state.account.status = ''; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.focusAction = 'account-settings-open'; render(); return; }
   if (action === 'account-library-open') { state.account.libraryOpen = true; state.focusAction = 'account-menu'; render(); return; }
   if (action === 'account-overlay-close') { state.account.open = false; state.account.libraryOpen = false; state.focusAction = 'account'; render(); return; }
-  if (action === 'logout') { const generation = ++state.account.generation; try { await accountApi.logout(); if (generation !== state.account.generation) return; state.account.user = null; state.account.favorites = new Set(); state.account.sets = []; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.pendingSet = null; state.account.revealAdult = false; state.account.status = ''; state.account.error = ''; state.account.otpSent = false; state.account.otp = ''; state.account.open = false; state.account.libraryOpen = false; state.feedback = null; state.resume = null; render(); } catch { if (generation === state.account.generation) { state.account.error = 'ログアウトできませんでした。もう一度お試しください。'; render(); } } return; }
+  if (action === 'logout') { const generation = ++state.account.generation; try { await accountApi.logout(); if (generation !== state.account.generation) return; state.account.user = null; state.account.favorites = new Set(); state.account.sets = []; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.pendingSet = null; state.account.revealAdult = false; state.account.status = ''; state.account.error = ''; state.account.otpSent = false; state.account.otp = ''; state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.deleteConfirmed = false; state.account.profileRevision += 1; state.account.profileDraft = ''; state.account.deletionAvailable = false; state.feedback = null; state.resume = null; render(); } catch { if (generation === state.account.generation) { state.account.error = 'ログアウトできませんでした。もう一度お試しください。'; render(); } } return; }
   if (action === 'set-new') { if (state.account.busy || ![...state.account.favorites].some((id) => canonicalCard(id))) return; state.account.editingSetId = null; state.account.setName = ''; state.account.selectedCards = new Set(); state.account.error = ''; state.focusSelector = '[data-set-name]'; render(); return; }
   if (action === 'set-cancel') { state.account.editingSetId = null; state.account.setName = undefined; state.account.selectedCards = new Set(); render(); return; }
   if (action === 'set-edit') { if (state.account.busy) return; const set = state.account.sets.find((item) => item.id === event.currentTarget.dataset.setId); state.account.editingSetId = set?.id || null; state.account.setName = set?.name || ''; state.account.selectedCards = new Set(set?.card_ids || []); render(); return; }
@@ -342,4 +384,4 @@ function registerWebMcp() {
 
 try { state.resume = loadSession(); } catch { state.resume = null; }
 render();
-discoverAccountConfig().then(() => { state.account.enabled = accountConfig.enabled; state.account.google = accountConfig.google; if (state.account.enabled) { loadAccount(); accountApi.onAuthStateChange?.((_event, session) => { setTimeout(() => { const nextUser = session?.user || null; const previousId = state.account.user?.id || null; const nextId = nextUser?.id || null; if (previousId === nextId) { if (nextId) state.account.user = nextUser; return; } state.account.generation += 1; state.account.user = nextUser; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.pendingSet = null; state.account.revealAdult = false; state.account.status = ''; state.account.error = ''; state.feedback = null; state.resume = null; if (state.account.user) loadAccount(); else { state.account.favorites = new Set(); state.account.sets = []; render(); } }, 0); }); } }).catch(() => {});
+discoverAccountConfig().then(() => { state.account.enabled = accountConfig.enabled; state.account.google = accountConfig.google; if (state.account.enabled) { loadAccount(); accountApi.onAuthStateChange?.((_event, session) => { setTimeout(() => { const nextUser = session?.user || null; const previousId = state.account.user?.id || null; const nextId = nextUser?.id || null; if (previousId === nextId) { if (nextId) state.account.user = normalizeAccountUser(nextUser, state.account.user); return; } state.account.generation += 1; state.account.profileRevision += 1; state.account.busy = false; state.account.user = normalizeAccountUser(nextUser); state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.pendingSet = null; state.account.revealAdult = false; state.account.status = ''; state.account.error = ''; state.feedback = null; state.resume = null; if (state.account.user) loadAccount(); else { state.account.favorites = new Set(); state.account.sets = []; render(); } }, 0); }); } }).catch(() => {});

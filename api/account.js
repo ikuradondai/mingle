@@ -18,9 +18,10 @@ export default async function account(req, res) {
     }
     if (pathname === '/api/account' || pathname === '/api/account/me') {
       if (req.method === 'GET') return json(res, 200, await service.account(req));
-      if (req.method === 'DELETE') return json(res, 200, await service.removeAccount(req));
+      if (req.method === 'DELETE') { req.body = await body(req); return json(res, 200, await service.removeAccount(req)); }
       return json(res, 405, { error: 'METHOD_NOT_ALLOWED' });
     }
+    if (pathname === '/api/account/profile' && req.method === 'PATCH') { req.body = await body(req); return json(res, 200, await service.profile(req)); }
     const favoriteMatch = pathname.match(/^\/api\/account\/favorites\/([^/]+)$/);
     if (favoriteMatch) return json(res, 200, await service.favorite(req, decodeURIComponent(favoriteMatch[1])));
     if (pathname === '/api/account/favorites' && (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE')) {
