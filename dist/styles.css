@@ -189,3 +189,51 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
   .round-hero { height:105px; margin-bottom:6px; border-radius:20px; }
   .question-card { margin-left:6px; margin-right:6px; }
 }
+
+
+/* Compact mobile density: preserve touch targets while removing excess vertical air. */
+.home-screen .home-illustration { height:clamp(150px,26vw,200px); }
+.theme-screen .deck-option { min-height:96px; grid-template-rows:36px 1fr auto; padding:10px; }
+.theme-screen .topic-icon { width:36px; height:36px; border-radius:12px; }
+.theme-screen .topic-icon svg { width:21px; height:21px; }
+.theme-screen .deck-option-copy { padding-top:4px; }
+.theme-screen .deck-option-copy strong { font-size:14px; line-height:1.18; }
+.theme-screen .deck-option:not(.is-selected) .deck-option-copy small { display:none; }
+.theme-screen .deck-option .deck-count { font-size:10px; }
+.theme-screen .deck-option.is-selected::after { top:10px; right:9px; }
+.round-section-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.round-section-head h2 { margin:0; }
+.round-section-count { flex:0 0 auto; color:var(--muted); font-size:12px; font-weight:900; }
+.round-section-toggle { min-height:44px; margin-top:8px; padding:0 13px; border:1px solid var(--line); border-radius:12px; color:var(--blue); background:#fff; font-weight:900; }
+.round-collapsed-copy { margin:5px 0 0; color:var(--muted); font-size:12px; }
+.round-favorites .round-section-toggle { background:#fffaf0; }
+@media(max-width:680px){
+  .home-screen .home-illustration { height:clamp(145px,38vw,180px); }
+  .theme-screen .deck-option { min-height:92px; }
+  .theme-screen .deck-option-copy strong { font-size:14px; }
+  .question-card { min-height:clamp(250px,40dvh,340px); padding:24px 20px; }
+  .question-card p { font-size:clamp(25px,7vw,32px); }
+  .speaker-pill { margin-top:8px; padding:9px 13px; }
+  .participant-strip { padding:5px 0 1px; }
+  .answer-actions { margin-top:8px; }
+  .answer-actions button { min-height:46px; }
+  .round-break { padding-top:0; }
+  .round-hero { height:82px; }
+  .round-break h1 { margin-top:8px; font-size:clamp(28px,7vw,36px); }
+  .round-break .like-totals,.round-break .round-favorites,.round-break .feedback-box { margin-top:12px; padding:12px; }
+  .round-break .feedback-box { margin-top:12px; }
+}
+
+/* Short mobile screens: keep the first action reachable without shrinking controls below 44px. */
+.home-screen { position:relative; }
+.home-screen > .account-bar { position:absolute; top:0; right:0; z-index:5; margin:0; }
+@media(max-width:680px) and (max-height:740px){
+  .content { padding-top:4px; }
+  .home-screen .masthead-slot { width:min(100%,290px); }
+  .home-screen .home-illustration { height:108px; }
+  .home-screen .name-field { min-height:56px; }
+  .home-screen .inline-actions { margin-top:6px; margin-bottom:8px; }
+  .home-screen .primary-button { min-height:50px; }
+  .question-card { min-height:210px; }
+  .question-card p { font-size:clamp(25px,7vw,30px); }
+}

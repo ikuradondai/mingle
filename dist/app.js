@@ -9,7 +9,7 @@ import { accountConfig, accountApi, cardPayload, discoverAccountConfig } from '.
 import { renderLibrary, canonicalCard } from './account-library.js';
 
 const root = document.querySelector('#app');
-const state = { participantNameOrigin: null, participantNameAutoValue: '', participantNameUserEdited: false, screen: 'participants', participants: ['', ''], session: null, pendingCustomResume: null, error: '', busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFavorite: null, lastAdvanceAt: 0, focusAction: null, focusSelector: null, selectedDeckId: 'friends', selectedDeckIds: ['friends'], themeMode: 'single', filter: 'all', adultConfirmed: false, includeChallenges: false, resume: null, account: { enabled: accountConfig.enabled, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false, profileDraft: '', deletionAvailable: false, email: '', otp: '', otpSent: false, pendingSet: null, selectedCards: new Set(), editingSetId: null, setName: undefined, customEditorOpen: false, editingCardId: null, customDraft: '', customDraftR18: false, revealAdult: false, status: '', error: '', busy: false, generation: 0, profileRevision: 0 } };
+const state = { participantNameOrigin: null, participantNameAutoValue: '', participantNameUserEdited: false, screen: 'participants', participants: ['', ''], session: null, pendingCustomResume: null, error: '', busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, lastAdvanceAt: 0, focusAction: null, focusSelector: null, selectedDeckId: 'friends', selectedDeckIds: ['friends'], themeMode: 'single', filter: 'all', adultConfirmed: false, includeChallenges: false, resume: null, account: { enabled: accountConfig.enabled, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false, profileDraft: '', deletionAvailable: false, email: '', otp: '', otpSent: false, pendingSet: null, selectedCards: new Set(), editingSetId: null, setName: undefined, customEditorOpen: false, editingCardId: null, customDraft: '', customDraftR18: false, revealAdult: false, status: '', error: '', busy: false, generation: 0, profileRevision: 0 } };
 
 function esc(value) { return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char])); }
 function accountParticipantName(value) {
@@ -262,7 +262,13 @@ function likeTotalsView(session) {
   const body = isFinal
     ? `<p class="like-total-label">今回の全${total}枚</p><ul>${rows(all)}</ul>${currentStart < session.cursor ? `<p class="like-total-label">最後の${session.cursor - currentStart}枚</p><ul>${rows(current)}</ul>` : ''}`
     : `<p class="like-total-label">今回の${session.cursor - currentStart}枚</p><ul>${rows(current)}</ul>${currentStart > 0 ? `<p class="like-total-label">これまでの合計（${session.cursor}枚）</p><ul>${rows(all)}</ul>` : ''}`;
-  return `<section class="like-totals" aria-labelledby="like-totals-title"><h2 id="like-totals-title">いいね！の集計</h2>${body}</section>`;
+  const key = `${session.sessionId}:${session.cursor}`;
+  if (state.roundLikeKey !== key) { state.roundLikeKey = key; state.roundLikeExpanded = false; }
+  const displayCount = isFinal ? total : session.cursor - currentStart;
+  const compact = session.participants.length <= 2 ? `<ul>${rows(isFinal ? all : current)}</ul>` : `<p class="round-collapsed-copy">${session.participants.length}人分の集計</p>`;
+  const hasDetails = session.participants.length > 2 || currentStart > 0;
+  const detailsAction = hasDetails ? `<button type="button" class="round-section-toggle" data-action="round-like-toggle" aria-expanded="${state.roundLikeExpanded}">${state.roundLikeExpanded ? '閉じる' : '詳しく見る'}</button>` : '';
+  return `<section class="like-totals" aria-labelledby="like-totals-title"><div class="round-section-head"><h2 id="like-totals-title">いいね！の集計</h2><span class="round-section-count">${displayCount}枚</span></div>${state.roundLikeExpanded && hasDetails ? body : compact}${detailsAction}</section>`;
 }
 function roundFavoriteContext(session) {
   const cards = completedRoundFavoriteCards(session);
@@ -271,7 +277,7 @@ function roundFavoriteContext(session) {
     return null;
   }
   const key = `${session.sessionId}:${session.roundStart}:${session.cursor}`;
-  if (!state.roundFavorite || state.roundFavorite.key !== key) state.roundFavorite = { key, sessionId: session.sessionId, roundStart: session.roundStart, cursor: session.cursor, cards, selected: new Set(), saving: false, error: '', loginPending: false };
+  if (!state.roundFavorite || state.roundFavorite.key !== key) state.roundFavorite = { key, sessionId: session.sessionId, roundStart: session.roundStart, cursor: session.cursor, cards, selected: new Set(), saving: false, error: '', loginPending: false, expanded: false };
   else state.roundFavorite.cards = cards;
   return state.roundFavorite;
 }
@@ -289,7 +295,9 @@ function roundFavoriteView(session) {
   const action = state.account.user
     ? `<button type="button" class="secondary-button" data-action="round-favorite-save" ${context.saving || !selectedCount ? 'disabled' : ''}>${context.saving ? '保存中…' : '選択した質問を保存'}</button>`
     : state.account.enabled ? `<button type="button" class="secondary-button" data-action="round-favorite-login" ${context.saving || !selectedCount ? 'disabled' : ''}>ログインして保存</button>` : '<p class="account-muted">現在、質問を保存できません。</p>';
-  return `<section class="round-favorites" aria-labelledby="round-favorites-title"><h2 id="round-favorites-title">気に入った質問を保存</h2><div class="round-favorite-list">${rows}</div>${action}<p class="form-error" role="alert">${esc(context.error || '')}</p></section>`;
+  const savedCount = context.cards.length - selectable.length;
+  const list = context.expanded ? `<div class="round-favorite-list">${rows}</div>${action}` : `<p class="round-collapsed-copy">${selectedCount}件選択中 · ${savedCount}件保存済み</p>`;
+  return `<section class="round-favorites" aria-labelledby="round-favorites-title"><div class="round-section-head"><h2 id="round-favorites-title">気に入った質問を保存</h2><span class="round-section-count">${context.cards.length}件</span></div><button type="button" class="round-section-toggle" data-action="round-favorite-toggle" aria-expanded="${context.expanded}">${context.expanded ? '閉じる' : '質問を選ぶ'}</button>${list}<p class="form-error" role="alert">${esc(context.error || '')}</p></section>`;
 }
 function roundView() {
   const session = state.session;
@@ -441,7 +449,7 @@ async function handleAction(event) {
   if (state.busy && action !== 'continue') return;
   state.focusAction = action;
   if (action === 'reveal') { const previous = ensureSession(); state.session = revealCard(previous); persist(previous); render(); return; }
-  if (action === 'home') { state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null; if (state.session && !isFinished(state.session)) saveSession(state.session); state.resume = loadResumeForCurrentUser(); state.screen = 'participants'; state.session = null; state.error = ''; state.includeChallenges = false; state.adultConfirmed = false; render(); return; }
+  if (action === 'home') { state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; if (state.session && !isFinished(state.session)) saveSession(state.session); state.resume = loadResumeForCurrentUser(); state.screen = 'participants'; state.session = null; state.error = ''; state.includeChallenges = false; state.adultConfirmed = false; render(); return; }
   if (action === 'account') { state.account.open = true; state.account.libraryOpen = false; state.focusAction = state.account.user ? 'account-library-open' : 'account-close'; render(); return; }
   if (action === 'reset-otp') { if (state.account.busy) return; state.account.otpSent = false; state.account.otp = ''; state.account.status = ''; state.account.error = ''; render(); return; }
   if (action === 'google-login') { try { await accountApi.google(); } catch { state.account.error = 'Googleログインを開始できませんでした。'; render(); } return; }
@@ -475,6 +483,8 @@ async function handleAction(event) {
     finally { if (generation === state.account.generation) { state.account.busy = false; render(); } }
     return;
   }
+  if (action === 'round-like-toggle') { state.roundLikeExpanded = !state.roundLikeExpanded; render(); return; }
+  if (action === 'round-favorite-toggle') { const context = state.roundFavorite; if (!context || context.saving) return; context.expanded = !context.expanded; render(); return; }
   if (action === 'round-favorite-login') {
     const context = state.roundFavorite;
     if (!context || context.saving || ![...context.selected].some((id) => !state.account.favorites.has(id)) || !state.account.enabled) return;
@@ -484,7 +494,7 @@ async function handleAction(event) {
   if (action === 'round-favorite-save') { saveRoundFavorites(); return; }
   if (action === 'add-person') { if (state.participants.length < MAX_PARTICIPANTS) { state.participants.push(''); state.focusSelector = `input[data-index="${state.participants.length - 1}"]`; } render(); return; }
   if (action === 'remove-person') { if (state.participants.length > 2) { state.participants.pop(); state.focusSelector = `input[data-index="${state.participants.length - 1}"]`; } render(); return; }
-  if (action === 'decks') { state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null; state.screen = 'decks'; state.error = ''; state.busy = false; render(); return; }
+  if (action === 'decks') { state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.screen = 'decks'; state.error = ''; state.busy = false; render(); return; }
   if (action === 'choose-deck') { const deck = decks.find((item) => item.id === event.currentTarget.dataset.deck); const adultConfirmed = state.adultConfirmed; const includeR18 = Boolean(state.themeMode !== 'mixed' && deck?.r18Available && adultConfirmed); try { state.session = state.themeMode === 'mixed' ? createMixedSession({ participants: state.participants, decks: state.selectedDeckIds.map((id) => decks.find((item) => item.id === id)), includeChallenges: state.includeChallenges }) : createSession({ participants: state.participants, deck, adultConfirmed, includeR18, includeChallenges: state.includeChallenges }); state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null; trackThemeStart(state.session.deckId); saveSession(state.session); state.screen = 'play'; state.error = ''; render(); } catch (error) { state.error = error.message; render(); } return; }
   if (action === 'feedback-rating') { const feedback = feedbackState(ensureSession()); feedback.rating = feedback.rating === event.currentTarget.dataset.rating ? null : event.currentTarget.dataset.rating; feedback.error = ''; state.focusSelector = `[data-rating="${event.currentTarget.dataset.rating}"]`; render(); return; }
   if (action === 'feedback-submit') {
@@ -509,8 +519,8 @@ async function handleAction(event) {
   if (action === 'next-answer') { try { advanceGuarded(nextAnswer); } catch (error) { state.error = error.message; render(); } return; }
   if (action === 'previous-answer') { const previous = ensureSession(); state.session = previousAnswer(previous); persist(previous); render(); return; }
   if (action === 'pass') { try { advanceGuarded(passAnswer); } catch (error) { state.error = error.message; render(); } return; }
-  if (action === 'continue') { state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null; state.busy = true; state.error = ''; render(); try { const previous = ensureSession(); if (await canContinue(state.session)) { state.session = continueRound(state.session); persist(previous); } else state.error = '続きを始められませんでした。'; } catch (error) { state.error = error.message || '続きを始められませんでした。'; } finally { state.busy = false; render(); } return; }
-  if (action === 'finish') { state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null; state.resume = loadResumeForCurrentUser(); state.screen = 'participants'; state.session = null; state.error = ''; state.includeChallenges = false; state.adultConfirmed = false; render(); }
+  if (action === 'continue') { state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.busy = true; state.error = ''; render(); try { const previous = ensureSession(); if (await canContinue(state.session)) { state.session = continueRound(state.session); persist(previous); } else state.error = '続きを始められませんでした。'; } catch (error) { state.error = error.message || '続きを始められませんでした。'; } finally { state.busy = false; render(); } return; }
+  if (action === 'finish') { state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.resume = loadResumeForCurrentUser(); state.screen = 'participants'; state.session = null; state.error = ''; state.includeChallenges = false; state.adultConfirmed = false; render(); }
 }
 
 let webMcpRegistered = false;
