@@ -32,6 +32,9 @@ export const accountApi = {
   createSet: (name, cardIds) => request('/sets', { method: 'POST', body: { name, cardIds } }),
   updateSet: (id, payload) => request(`/sets/${encodeURIComponent(id)}`, { method: 'PATCH', body: payload }),
   deleteSet: (id) => request(`/sets/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  createCard: (text, r18) => request('/cards', { method: 'POST', body: { text, r18: r18 === true } }),
+  updateCard: (id, text, r18) => request(`/cards/${encodeURIComponent(id)}`, { method: 'PATCH', body: { text, r18: r18 === true } }),
+  deleteCard: (id) => request(`/cards/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 export function cardPayload(card, deckId) { return { id: card.id, deckId: deckId || card.sourceDeckId || null }; }
 export function createAccountClientForTest({ fetchImpl, sdk, locationRef = { origin: 'http://localhost:5180', pathname: '/' } }) { sdkLoader = async () => sdk; fetcher = fetchImpl; globalThis.location ||= locationRef; return { config: accountConfig, discover: () => discoverAccountConfig({ fetchImpl }), api: accountApi }; }

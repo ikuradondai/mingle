@@ -76,3 +76,21 @@ test('custom R18 persisted flags cannot be downgraded during hydration', () => {
   saveSession(session, { storage: target, now: 1000 }); const raw = JSON.parse(target.getItem(SESSION_STORAGE_KEY)); raw.includeR18 = false; raw.adultConfirmed = false; target.setItem(SESSION_STORAGE_KEY, JSON.stringify(raw));
   assert.equal(loadSession({ storage: target, now: 1001 }), null);
 });
+
+
+test('custom cards mix with favorites, preserve owner snapshot, and keep text out of analytics-shaped records', () => {
+  const customId = 'custom:11111111-1111-4111-8111-111111111111';
+  const customCards = [{ id: customId, text: '<b>自作</b>😀', r18: false }];
+  const session = createSavedSession({ participants: ['A', 'B'], cardIds: [customId, ...ids.slice(0, 5)], customCards, ownerUserId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', random: () => 0 });
+  assert.equal(session.ownerUserId, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  assert.throws(() => createSavedSession({ participants: ['A', 'B'], cardIds: [customId, ...ids.slice(0, 5)], customCards, random: () => 0 }), /所有者/);
+  assert.equal(session.questions.find((card) => card.id === customId).text, '<b>自作</b>😀');
+  assert.equal(session.questions.find((card) => card.id === customId).sourceDeckId, 'custom');
+  const target = storage(); assert.equal(saveSession(session, { storage: target, now: 1000 }), true);
+  const raw = JSON.parse(target.getItem(SESSION_STORAGE_KEY));
+  assert.equal(raw.customQuestions[0].text, '<b>自作</b>😀'); assert.equal(raw.questions, undefined); assert.equal(raw.ownerUserId, session.ownerUserId);
+  const restored = loadSession({ storage: target, now: 1001 });
+  assert.equal(restored.questions.find((card) => card.id === customId).text, '<b>自作</b>😀');
+  assert.throws(() => createSavedSession({ participants: ['A', 'B'], cardIds: [customId, ...ids.slice(0, 5)], customCards: [{ id: customId, text: 'x'.repeat(301), r18: false }], ownerUserId: session.ownerUserId }), /不正/);
+  const tampered = JSON.parse(target.getItem(SESSION_STORAGE_KEY)); tampered.customQuestions[0].r18 = true; tampered.adultConfirmed = false; target.setItem(SESSION_STORAGE_KEY, JSON.stringify(tampered)); assert.equal(loadSession({ storage: target, now: 1002 }), null);
+});

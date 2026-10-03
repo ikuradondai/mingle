@@ -23,7 +23,7 @@
 
 2. PreviewまたはProductionへデプロイ後、`GET /api/account/config` が `enabled:true`、正しいSupabase URL、公開キーの存在、`googleEnabled:false` を返すことを確認します。公開キーの値やSecretはログに出しません。短命なPreview URLはドキュメントへ固定記録せず、実際のデプロイURLをSupabase URL Configurationへ登録します。
 
-3. Supabase SQLエディタまたはCLIで `supabase/migrations/202610020001_accounts.sql` を適用します。お気に入りとマイセットは `auth.uid() = user_id` のRLSで所有者だけが読み書きできます。カードIDの存在・利用可否はサーバーで検証し、セット名と6〜40枚・重複なしの制約はサーバーとDBで検証します。
+3. Supabase SQLエディタまたはCLIで `supabase/migrations/202610020001_accounts.sql` と `supabase/migrations/202610030001_custom_cards.sql` を順に適用します。お気に入りとマイセットは `auth.uid() = user_id` のRLSで所有者だけが読み書きできます。カードIDの存在・利用可否はサーバーで検証し、セット名と6〜40枚・重複なしの制約はサーバーとDBで検証します。自作カードは本人だけが読み書きでき、本文はtrim後1〜300 Unicode code points、改行・制御文字なし、R18指定必須です。自作カードを含むセットも6〜40枚・重複なしで、別ユーザーのカードは参照できません。
 
 4. Supabase Authentication → URL Configurationで、Site URLを本番の `https://mingle.cards/` に設定します。Redirect URLsには開発の `http://127.0.0.1:5180/` と、実際に使用するPreviewデプロイURL（例：`https://<preview-deployment>.vercel.app/`）を個別に登録します。Preview URLは実際に使用するものだけを追加します。Supabaseのredirect URL仕様は[公式資料](https://supabase.com/docs/guides/auth/redirect-urls)を確認してください。
 
@@ -40,10 +40,10 @@
 
 8. リポジトリで `npm ci`、続けて `npm run build:account-sdk` を実行し、固定バージョン `@supabase/supabase-js@2.117.2` のブラウザ用 `dist/vendor/supabase.js` を再生成します。未設定時は `GET /api/account/config` が `enabled:false` を返し、ゲストプレイを継続します。
 
-表示名と退会：表示名はSupabase Authの`user_metadata.display_name`に保存します。`PATCH /api/account/profile` は`{ "displayName": "..." }`だけを受け付け、trim後40 Unicode code points以内（空文字で解除）です。`GET /api/account/me` の`account.deletionAvailable`が`true`のときだけ退会を有効にします。退会APIは`DELETE /api/account`に`{ "confirmation": "DELETE" }`を要求し、サーバーのservice roleで本人のAuth userを削除してから、外部キーのcascadeでfavoritesとmy_setsを削除します。service roleがない環境では503となり、成功扱いにしません。UIで利用できない場合は `inquiry@erudaite.ai` へご連絡ください。対応に必要な範囲で本人確認を行います。
+表示名と退会：表示名はSupabase Authの`user_metadata.display_name`に保存します。`PATCH /api/account/profile` は`{ "displayName": "..." }`だけを受け付け、trim後40 Unicode code points以内（空文字で解除）です。`GET /api/account/me` の`account.deletionAvailable`が`true`のときだけ退会を有効にします。退会APIは`DELETE /api/account`に`{ "confirmation": "DELETE" }`を要求し、サーバーのservice roleで本人のAuth userを削除してから、外部キーのcascadeでfavorites、my_sets、自作カードを削除します。service roleがない環境では503となり、成功扱いにしません。UIで利用できない場合は `inquiry@erudaite.ai` へご連絡ください。対応に必要な範囲で本人確認を行います。
 
 ## 検証
 
 RLSの実行検証は外部プロジェクトを使わず、`tests/rls` で `npm ci` → `npm run test:rls` を実行します。PGlite上で所有者分離、別ユーザーの読取・更新・削除・所有権移転拒否、匿名拒否、制約、auth.users削除時のカスケードを検証します。通常の `npm run check` にはこのSQL-WASM検証を含めていません。
 
-保存するデータはユーザーID、質問ID、セット名、作成・更新日時です。質問本文や回答、参加者名はアカウントAPIへ送信しません。ゲーム中の回答者別いいねは従来どおり端末内の進行データです。
+保存するデータはユーザーID、質問ID、自作カードの本文・R18指定・作成更新日時、セット名、作成・更新日時です。静的カードの本文や回答、参加者名はアカウントAPIへ送信しません。自作カード本文は匿名集計・フィードバックへ送信しません。ゲーム中の回答者別いいねは従来どおり端末内の進行データです。

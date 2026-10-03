@@ -32,6 +32,9 @@ export default async function account(req, res) {
     if (pathname === '/api/account/sets' && req.method === 'POST') { req.body = await body(req); return json(res, 201, await service.set(req)); }
     const setMatch = pathname.match(/^\/api\/account\/sets\/([^/]+)$/);
     if (setMatch) { if (req.method === 'PATCH' || req.method === 'POST') req.body = await body(req); return json(res, 200, await service.set(req, decodeURIComponent(setMatch[1]))); }
+    if (pathname === '/api/account/cards' && req.method === 'POST') { req.body = await body(req); return json(res, 201, await service.customCard(req)); }
+    const cardMatch = pathname.match(/^\/api\/account\/cards\/([^/]+)$/);
+    if (cardMatch) { if (req.method === 'PATCH') req.body = await body(req); return json(res, 200, await service.customCard(req, decodeURIComponent(cardMatch[1]))); }
     return json(res, 404, { error: 'NOT_FOUND' });
   } catch (error) {
     if (error.status === 413 || error.status === 415 || error.status === 400) return respondError(res, error);

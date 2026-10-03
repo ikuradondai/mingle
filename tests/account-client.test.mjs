@@ -44,6 +44,9 @@ test('profile, deletion, and local signout use the fixed account contract', asyn
   assert.deepEqual(JSON.parse(calls.at(-1).options.body), { confirmation: 'DELETE' });
   await client.api.logout();
   assert.deepEqual(signOutOptions, { scope: 'local' });
+  await client.api.createCard('自作質問', true); assert.equal(calls.at(-1).url, '/api/account/cards'); assert.equal(calls.at(-1).options.method, 'POST'); assert.deepEqual(JSON.parse(calls.at(-1).options.body), { text: '自作質問', r18: true });
+  await client.api.updateCard('custom:11111111-1111-4111-8111-111111111111', '更新質問', false); assert.equal(calls.at(-1).url, '/api/account/cards/custom%3A11111111-1111-4111-8111-111111111111'); assert.equal(calls.at(-1).options.method, 'PATCH');
+  await client.api.deleteCard('custom:11111111-1111-4111-8111-111111111111'); assert.equal(calls.at(-1).url, '/api/account/cards/custom%3A11111111-1111-4111-8111-111111111111'); assert.equal(calls.at(-1).options.method, 'DELETE');
 });
 
 test('auth provider errors are returned and SDK initialization failure disables account', async () => {

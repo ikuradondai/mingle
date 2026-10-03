@@ -29,9 +29,17 @@ export function createSession({ participants, deck, adultConfirmed = false, incl
   return { sessionId: createSessionId(), participants: names, deckId: deck.id, deckIds: [deck.id], mixed: false, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {} };
 }
 
-// Build a session from a saved account set. Only the canonical shipped catalog
-// is used; callers cannot supply question text or source metadata.
-export function createSavedSession({ participants, cardIds, adultConfirmed = false, random = Math.random }) {
+// Build a session from a saved account set. Static IDs use the shipped catalog; custom IDs use validated owner snapshots.
+function normalizeCustomCards(customCards) {
+  const values = Array.isArray(customCards) ? customCards : [];
+  return new Map(values.map((card) => {
+    const id = typeof card?.id === 'string' ? (card.id.startsWith('custom:') ? card.id : `custom:${card.id}`) : '';
+    if (!/^custom:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) || typeof card?.text !== 'string' || typeof card?.r18 !== 'boolean' || !card.text.trim() || Array.from(card.text.trim()).length > 300 || /[\u0000-\u001f\u007f\u2028\u2029]/u.test(card.text)) throw new Error('マイセットの質問が不正です');
+    return [id, { id, text: card.text.trim(), r18: card.r18, sourceDeckId: 'custom', custom: true }];
+  }));
+}
+
+export function createSavedSession({ participants, cardIds, customCards = [], ownerUserId = null, adultConfirmed = false, random = Math.random }) {
   const names = normalizeParticipants(participants);
   if (!Array.isArray(cardIds) || cardIds.length < ROUND_SIZE || cardIds.length > 40 || new Set(cardIds).size !== cardIds.length || cardIds.some((id) => typeof id !== 'string')) throw new Error('マイセットの質問が不正です');
   const catalog = new Map();
@@ -39,10 +47,13 @@ export function createSavedSession({ participants, cardIds, adultConfirmed = fal
     deck.questions.forEach((card) => catalog.set(card.id, { ...card, sourceDeckId: deck.id, r18: card.r18 === true }));
     (deck.r18Questions || []).forEach((card) => catalog.set(card.id, { ...card, sourceDeckId: deck.id, r18: true }));
   });
-  const questions = shuffle(cardIds.map((id) => catalog.get(id) || (() => { throw new Error('マイセットの質問が不正です'); })()), random);
+  const customCatalog = normalizeCustomCards(customCards);
+  const questions = shuffle(cardIds.map((id) => catalog.get(id) || customCatalog.get(id) || (() => { throw new Error('マイセットの質問が不正です'); })()), random);
   const includeR18 = questions.some((card) => card.r18 === true);
   if (includeR18 && adultConfirmed !== true) throw new Error('成人向け確認が必要です');
-  return { sessionId: createSessionId(), participants: names, deckId: 'my-set', deckIds: ['my-set'], customSet: true, mixed: false, questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {} };
+  const hasCustom = questions.some((card) => card.sourceDeckId === 'custom');
+  if (hasCustom && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerUserId || '')) throw new Error('マイセットの所有者が不正です');
+  return { sessionId: createSessionId(), participants: names, deckId: 'my-set', deckIds: ['my-set'], customSet: true, ownerUserId: hasCustom && typeof ownerUserId === 'string' ? ownerUserId : null, customQuestions: hasCustom ? questions.filter((card) => card.sourceDeckId === 'custom').map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true })) : [], mixed: false, questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {} };
 }
 
 function composeChallenges(cards, random, preserveR18 = false, deckId, participantCount) {

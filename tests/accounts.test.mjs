@@ -141,3 +141,47 @@ test('public config is safe and returns disabled state without config', async ()
   try { const out = sink(); await accountHandler(request('/api/account/config'), out.res); assert.deepEqual(out.result, { status: 200, result: { enabled: false, url: null, publishableKey: null, googleEnabled: false } }); }
   finally { if (previous.url === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = previous.url; if (previous.key === undefined) delete process.env.SUPABASE_ANON_KEY; else process.env.SUPABASE_ANON_KEY = previous.key; }
 });
+
+test('custom cards enforce exact payload, owner identity, and set references', async () => {
+  const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const uuid = '11111111-1111-4111-8111-111111111111';
+  let referenced = false;
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'owner-1', email: 'x@y.test' });
+    if (url.includes('/custom_cards?user_id=')) return response(200, [{ id: uuid, text: 'Saved', r18: false, created_at: '2026-01-01', updated_at: '2026-01-01' }]);
+    if (url.endsWith('/custom_cards') && options.method === 'POST') return response(201, [{ id: uuid, text: '  New  ', r18: true, created_at: '2026-01-01', updated_at: '2026-01-01' }]);
+    if (url.includes('/custom_cards?id=') && options.method === 'PATCH') return response(200, [{ id: uuid, text: 'Edited', r18: true, created_at: '2026-01-01', updated_at: '2026-01-01' }]);
+    if (url.includes('/my_sets?user_id=') && options.method !== 'POST') return response(200, referenced ? [{ card_ids: [`custom:${uuid}`] }] : []);
+    if (url.includes('/my_sets') && options.method === 'POST') return response(201, [{ id: 'set-1', user_id: 'owner-1', card_ids: JSON.parse(options.body).card_ids }]);
+    if (url.includes('/custom_cards?id=') && options.method === 'DELETE') return response(200, [{ id: uuid }]);
+    return response(200, []);
+  } });
+  const created = await service.customCard({ ...request('/api/account/cards', { method: 'POST', body: { text: ' New ', r18: true } }), body: { text: ' New ', r18: true } });
+  assert.equal(created.card.id, `custom:${uuid}`); assert.equal(created.card.r18, true);
+  await assert.rejects(() => service.customCard({ ...request('/api/account/cards', { method: 'POST', body: { text: 'x', r18: true, extra: 1 } }), body: { text: 'x', r18: true, extra: 1 } }), (error) => error.status === 400);
+  await assert.rejects(() => service.customCard({ ...request('/api/account/cards', { method: 'POST', body: { text: 'x', r18: 'true' } }), body: { text: 'x', r18: 'true' } }), (error) => error.status === 400);
+  await assert.rejects(() => service.customCard({ ...request('/api/account/cards', { method: 'POST', body: { text: '😀'.repeat(301), r18: false } }), body: { text: '😀'.repeat(301), r18: false } }), (error) => error.status === 400);
+  await assert.rejects(() => service.customCard({ ...request('/api/account/cards', { method: 'POST', body: { text: 'line\nbreak', r18: false } }), body: { text: 'line\nbreak', r18: false } }), (error) => error.status === 400);
+  const edited = await service.customCard({ ...request(`/api/account/cards/custom:${uuid}`, { method: 'PATCH', body: { text: 'Edited', r18: true } }), body: { text: 'Edited', r18: true } }, `custom:${uuid}`);
+  assert.equal(edited.card.text, 'Edited');
+  const set = await service.set({ ...request('/api/account/sets', { method: 'POST', body: { name: 'Mixed', cardIds: ['date-01','date-02','date-03','date-04','date-05',`custom:${uuid}`] } }), body: { name: 'Mixed', cardIds: ['date-01','date-02','date-03','date-04','date-05',`custom:${uuid}`] } });
+  assert.deepEqual(set.card_ids.at(-1), `custom:${uuid}`);
+  referenced = true;
+  await assert.rejects(() => service.customCard({ ...request(`/api/account/cards/custom:${uuid}`, { method: 'DELETE' }) }, `custom:${uuid}`), (error) => error.status === 409 && error.code === 'CARD_IN_USE');
+  assert.ok(calls.some(({ options }) => options.body?.includes('owner-1')));
+});
+
+test('custom card account read degrades only when its table is missing', async () => {
+  const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const base = { env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey } };
+  const missing = createAccountService({ ...base, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'owner-1' });
+    if (url.includes('/custom_cards')) return response(404, { code: 'PGRST205', message: 'custom_cards missing' });
+    return response(200, []);
+  } });
+  const result = await missing.account(request('/api/account'));
+  assert.equal(result.customCardsAvailable, false); assert.deepEqual(result.customCards, []);
+  const broken = createAccountService({ ...base, fetchImpl: async (url) => url.endsWith('/auth/v1/user') ? response(200, { id: 'owner-1' }) : response(500, { message: 'database down' }) });
+  await assert.rejects(() => broken.account(request('/api/account')), (error) => error.status === 502);
+});
