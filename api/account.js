@@ -1,4 +1,4 @@
-import { body, json, sameOrigin } from '../server-side/http.mjs';
+import { body, bodyWithLimit, json, sameOrigin } from '../server-side/http.mjs';
 import { createAccountService } from '../server-side/accounts.mjs';
 
 const service = createAccountService();
@@ -22,6 +22,11 @@ export default async function account(req, res) {
       return json(res, 405, { error: 'METHOD_NOT_ALLOWED' });
     }
     if (pathname === '/api/account/profile' && req.method === 'PATCH') { req.body = await body(req); return json(res, 200, await service.profile(req)); }
+    if (pathname === '/api/account/avatar') {
+      if (req.method === 'PUT') req.body = await bodyWithLimit(req, 400 * 1024);
+      if (req.method === 'GET' || req.method === 'PUT' || req.method === 'DELETE') return json(res, 200, await service.avatar(req));
+      return json(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+    }
     const favoriteMatch = pathname.match(/^\/api\/account\/favorites\/([^/]+)$/);
     if (favoriteMatch) return json(res, 200, await service.favorite(req, decodeURIComponent(favoriteMatch[1])));
     if (pathname === '/api/account/favorites' && (req.method === 'POST' || req.method === 'PUT' || req.method === 'DELETE')) {
@@ -32,6 +37,17 @@ export default async function account(req, res) {
     if (pathname === '/api/account/sets' && req.method === 'POST') { req.body = await body(req); return json(res, 201, await service.set(req)); }
     const setMatch = pathname.match(/^\/api\/account\/sets\/([^/]+)$/);
     if (setMatch) { if (req.method === 'PATCH' || req.method === 'POST') req.body = await body(req); return json(res, 200, await service.set(req, decodeURIComponent(setMatch[1]))); }
+    const shareMatch = pathname.match(/^\/api\/account\/sets\/([^/]+)\/share$/);
+    if (shareMatch) {
+      const setId = decodeURIComponent(shareMatch[1]);
+      if (req.method === 'POST' || req.method === 'PUT') {
+        req.body = await body(req);
+        if (req.body != null && (typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length)) return json(res, 400, { error: 'INVALID_REQUEST' });
+      }
+      if (req.method === 'GET' || req.method === 'POST' || req.method === 'PUT') return json(res, req.method === 'PUT' ? 201 : 200, await service.shareSet(req, setId));
+      if (req.method === 'DELETE') return json(res, 200, await service.stopShare(req, setId));
+      return json(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+    }
     if (pathname === '/api/account/cards' && req.method === 'POST') { req.body = await body(req); return json(res, 201, await service.customCard(req)); }
     const cardMatch = pathname.match(/^\/api\/account\/cards\/([^/]+)$/);
     if (cardMatch) { if (req.method === 'PATCH') req.body = await body(req); return json(res, 200, await service.customCard(req, decodeURIComponent(cardMatch[1]))); }

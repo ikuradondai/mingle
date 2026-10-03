@@ -31,6 +31,7 @@ export function saveSession(session, options = {}) {
       sessionId: session.sessionId, participants: [...session.participants], deckId: session.deckId,
       deckIds: [...(session.deckIds || [session.deckId])], mixed: session.mixed === true,
       customSet: session.customSet === true,
+      setName: session.customSet === true && typeof session.setName === 'string' ? session.setName.trim().slice(0, 80) : null,
       ownerUserId: session.customSet === true && typeof session.ownerUserId === 'string' ? session.ownerUserId : null,
       customQuestions: session.customSet === true && Array.isArray(session.customQuestions) ? session.customQuestions.filter(validCustomQuestion).map((card) => ({ id: card.id, text: card.text, r18: card.r18 })) : [],
       adultConfirmed: session.adultConfirmed === true, includeR18: session.includeR18 === true,
@@ -115,7 +116,7 @@ function hydrate(record, now) {
   }
   const feedbackSubmitted = Array.isArray(record.feedbackSubmitted) ? [...new Set(record.feedbackSubmitted.filter((cursor) => Number.isInteger(cursor) && cursor >= 6 && cursor <= finalLength && cursor <= record.cursor))] : [];
   if (record.cursor >= finalLength) return null;
-  return { sessionId: record.sessionId, participants: [...record.participants], deckId: record.deckId, deckIds, customSet, ownerUserId: hasCustom ? record.ownerUserId : null, customQuestions: hasCustom ? record.customQuestions.map((card) => ({ ...card })) : [], mixed: record.mixed === true, questions, cursor: record.cursor, unlockedUntil: record.unlockedUntil, roundStart: Number.isInteger(record.roundStart) ? record.roundStart : Math.max(0, record.unlockedUntil - 6), roundCount: Number.isInteger(record.roundCount) ? record.roundCount : record.cursor % 6, roundNumber: Number.isInteger(record.roundNumber) ? record.roundNumber : Math.floor(record.cursor / 6) + 1, adultConfirmed: record.adultConfirmed === true, includeR18: record.includeR18 === true, includeChallenges: record.includeChallenges === true, revealed: record.revealed === true, answerIndex: record.answerIndex, likes: { ...likes }, feedbackSubmitted, revealedQuestionIds };
+  return { sessionId: record.sessionId, setName: customSet && typeof record.setName === 'string' ? record.setName : null, participants: [...record.participants], deckId: record.deckId, deckIds, customSet, ownerUserId: hasCustom ? record.ownerUserId : null, customQuestions: hasCustom ? record.customQuestions.map((card) => ({ ...card })) : [], mixed: record.mixed === true, questions, cursor: record.cursor, unlockedUntil: record.unlockedUntil, roundStart: Number.isInteger(record.roundStart) ? record.roundStart : Math.max(0, record.unlockedUntil - 6), roundCount: Number.isInteger(record.roundCount) ? record.roundCount : record.cursor % 6, roundNumber: Number.isInteger(record.roundNumber) ? record.roundNumber : Math.floor(record.cursor / 6) + 1, adultConfirmed: record.adultConfirmed === true, includeR18: record.includeR18 === true, includeChallenges: record.includeChallenges === true, revealed: record.revealed === true, answerIndex: record.answerIndex, likes: { ...likes }, feedbackSubmitted, revealedQuestionIds };
 }
 
 export function loadSession(options = {}) {

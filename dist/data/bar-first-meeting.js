@@ -7,7 +7,7 @@ export const barFirstMeeting = {
   description: "バーでたまたま隣り合った人同士が、その場の雰囲気や今の気分から無理なく話し始められる質問です。",
   adultOnly: false,
   questions: makeQuestions('bar-first-meeting', [
-  "今日はどんな気分で、この場所に来た？",
+  "これから、なんて呼んで欲しい？",
   "この店の雰囲気で、最初に気づいたことは？",
   "もしこの店が映画の舞台なら、どんな物語が始まりそう？",
   "バーを選ぶなら、静かな店とにぎやかな店のどっち派？",

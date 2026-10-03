@@ -56,6 +56,20 @@ export function createSavedSession({ participants, cardIds, customCards = [], ow
   return { sessionId: createSessionId(), participants: names, deckId: 'my-set', deckIds: ['my-set'], customSet: true, ownerUserId: hasCustom && typeof ownerUserId === 'string' ? ownerUserId : null, customQuestions: hasCustom ? questions.filter((card) => card.sourceDeckId === 'custom').map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true })) : [], mixed: false, questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
+export function createSharedSession({ participants, cards, adultConfirmed = false, random = Math.random }) {
+  const names = normalizeParticipants(participants);
+  if (!Array.isArray(cards) || cards.length < ROUND_SIZE || cards.length > 40 || new Set(cards.map((card) => card?.id)).size !== cards.length) throw new Error('共有セットの質問が不正です');
+  const questions = cards.map((card) => {
+    if (!card || typeof card.id !== 'string' || typeof card.text !== 'string' || typeof card.r18 !== 'boolean' || card.kind === 'challenge' || !card.text.trim() || Array.from(card.text.trim()).length > 300 || /[\u0000-\u001f\u007f\u2028\u2029]/u.test(card.text)) throw new Error('共有セットの質問が不正です');
+    const custom = card.id.startsWith('custom:');
+    if (custom && !/^custom:[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(card.id)) throw new Error('共有セットの質問が不正です');
+    return { id: card.id, text: card.text.trim(), r18: card.r18, sourceDeckId: custom ? 'custom' : 'shared', custom };
+  });
+  const includeR18 = questions.some((card) => card.r18 === true);
+  if (includeR18 && adultConfirmed !== true) throw new Error('成人向け確認が必要です');
+  return { sessionId: createSessionId(), participants: names, deckId: 'shared-set', deckIds: ['shared-set'], mixed: false, customSet: false, sharedGuest: true, ownerUserId: null, customQuestions: [], questions: shuffle(questions, random), cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+}
+
 function composeChallenges(cards, random, preserveR18 = false, deckId, participantCount) {
   const eligibleDeckIds = Array.isArray(deckId) ? deckId : [deckId];
   const pool = challenges.filter((card) => !card.touch || (participantCount === 2 && eligibleDeckIds.every((id) => card.eligibleDeckIds?.includes(id))));

@@ -43,6 +43,16 @@ test('acquaintance date keeps independent 40-card and R18 sources', () => {
   assert.equal(acquaintance.questions.some((question) => question.touch), false);
 });
 
+test('first-meeting themes include the shared name preference question once', () => {
+  const ids = ['date', 'omiai', 'party-first-meeting', 'business-meetup', 'bar-first-meeting'];
+  for (const id of ids) {
+    const deck = decks.find((item) => item.id === id);
+    assert.ok(deck, id);
+    assert.equal(deck.questions.length, 40, id);
+    assert.equal(deck.questions.filter((question) => question.text === 'これから、なんて呼んで欲しい？').length, 1, id);
+  }
+});
+
 test('omiai is a regular non-touch theme and keeps concrete R18 refinements out of date', () => {
   const omiai = decks.find((item) => item.id === 'omiai');
   const date = decks.find((item) => item.id === 'date');

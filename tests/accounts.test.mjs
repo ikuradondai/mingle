@@ -41,6 +41,50 @@ test('account service validates user through auth endpoint and scopes REST reque
   await assert.rejects(() => service.favorite(request('/api/account/favorites/not-a-card'), 'not-a-card'), (error) => error.status === 400);
 });
 
+test('avatar upload validates JPEG bytes, uses owner storage path, and returns signed URL', async () => {
+  const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url, options) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user', email: 'x@y.test' });
+    if (url.includes('/storage/v1/object/sign/')) return response(200, { signedURL: '/object/sign/profile-avatars/verified-user/avatar.jpg?token=test' });
+    if (url.includes('/storage/v1/object/profile-avatars')) return response(200, {});
+    return response(200, []);
+  } });
+  const imageData = `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]).toString('base64')}`;
+  const result = await service.avatar({ ...request('/api/account/avatar', { method: 'PUT', body: { imageData } }), body: { imageData } });
+  assert.match(result.avatarUrl, /profile-avatars/); assert.match(result.avatarUrl, /[?&]v=[a-z0-9]+$/);
+  const upload = calls.find((call) => call.url.includes('/storage/v1/object/profile-avatars/'));
+  assert.equal(upload.options.method, 'POST'); assert.equal(upload.options.headers['Content-Type'], 'image/jpeg'); assert.equal(upload.options.headers['x-upsert'], 'true'); assert.ok(Buffer.isBuffer(upload.options.body));
+  const oversized = Buffer.alloc(256 * 1024 + 1); oversized[0] = 0xff; oversized[1] = 0xd8; oversized[2] = 0xff; oversized[oversized.length - 2] = 0xff; oversized[oversized.length - 1] = 0xd9;
+  const oversizedData = `data:image/jpeg;base64,${oversized.toString('base64')}`;
+  await assert.rejects(() => service.avatar({ ...request('/api/account/avatar', { method: 'PUT', body: { imageData: oversizedData } }), body: { imageData: oversizedData } }), (error) => error.status === 400);
+  await assert.rejects(() => service.avatar({ ...request('/api/account/avatar', { method: 'PUT', body: { imageData: 'data:image/jpeg;base64,Zm9vA' } }), body: { imageData: 'data:image/jpeg;base64,Zm9vA' } }), (error) => error.status === 400);
+  await assert.rejects(() => service.avatar({ ...request('/api/account/avatar', { method: 'PUT', body: { imageData: 'data:image/jpeg;base64,Zm9v' } }), body: { imageData: 'data:image/jpeg;base64,Zm9v' } }), (error) => error.status === 400);
+});
+
+test('avatar deletion tolerates Storage not-found envelopes but surfaces real failures', async () => {
+  const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const missingService = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user' });
+    return response(400, { statusCode: 404 });
+  } });
+  assert.deepEqual(await missingService.avatar({ ...request('/api/account/avatar', { method: 'DELETE' }), body: undefined }), { deleted: true, avatarUrl: null });
+  const failedService = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user' });
+    return response(500, { error: 'storage-down' });
+  } });
+  await assert.rejects(() => failedService.avatar({ ...request('/api/account/avatar', { method: 'DELETE' }), body: undefined }), (error) => error.status === 502);
+});
+
+test('avatar auth and body guards do not perform unauthenticated network calls', async () => {
+  let calls = 0; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async () => { calls += 1; return response(500, {}); } });
+  for (const method of ['GET', 'PUT', 'DELETE']) await assert.rejects(() => service.avatar({ ...request('/api/account/avatar', { method, authorization: '' }), body: method === 'PUT' ? {} : undefined }), (error) => error.status === 401);
+  assert.equal(calls, 0);
+  const authenticated = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url) => url.endsWith('/auth/v1/user') ? response(200, { id: 'verified-user' }) : response(400, { statusCode: 404 }) });
+  await assert.rejects(() => authenticated.avatar({ ...request('/api/account/avatar', { method: 'PUT', body: { imageData: 'data:image/jpeg;base64,/wAA/w==' , extra: true } }), body: { imageData: 'data:image/jpeg;base64,/wAA/w==', extra: true } }), (error) => error.status === 400);
+});
+
 test('account writes reject missing or invalid auth before any data request', async () => {
   let calls = 0;
   const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
@@ -113,9 +157,30 @@ test('profile accepts only a trimmed unicode display name and updates auth metad
 
 test('account deletion does not mutate rows when admin deletion fails', async () => {
   const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
-  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, SUPABASE_SERVICE_ROLE_KEY: 'service-role-secret' }, fetchImpl: async (url) => { calls.push(url); if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user' }); return response(500, {}); } });
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, SUPABASE_SERVICE_ROLE_KEY: 'service-role-secret' }, fetchImpl: async (url, options) => { calls.push({ url, options }); if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user' }); if (url.includes('/storage/v1/object/profile-avatars')) return response(200, {}); return response(500, {}); } });
   await assert.rejects(() => service.removeAccount({ ...request('/api/account', { method: 'DELETE', body: { confirmation: 'DELETE' } }), body: { confirmation: 'DELETE' } }), (error) => error.status === 502);
-  assert.deepEqual(calls, ['https://project.supabase.co/auth/v1/user', 'https://project.supabase.co/auth/v1/admin/users/verified-user']);
+  assert.deepEqual(calls.map(({ url }) => url), ['https://project.supabase.co/auth/v1/user', 'https://project.supabase.co/storage/v1/object/profile-avatars', 'https://project.supabase.co/auth/v1/admin/users/verified-user']);
+  assert.deepEqual(JSON.parse(calls[1].options.body), { prefixes: ['verified-user/avatar.jpg'] });
+});
+
+test('account deletion gates Auth admin delete on Storage result', async () => {
+  const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  let failedAdminCalls = 0;
+  const failedStorage = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, SUPABASE_SERVICE_ROLE_KEY: 'service-role-secret' }, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user' });
+    if (url.includes('/storage/v1/object/profile-avatars')) return response(500, {});
+    failedAdminCalls += 1; return response(204, null);
+  } });
+  await assert.rejects(() => failedStorage.removeAccount({ ...request('/api/account', { method: 'DELETE', body: { confirmation: 'DELETE' } }), body: { confirmation: 'DELETE' } }), (error) => error.status === 502);
+  assert.equal(failedAdminCalls, 0);
+  let missingAdminCalls = 0;
+  const missingStorage = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, SUPABASE_SERVICE_ROLE_KEY: 'service-role-secret' }, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user' });
+    if (url.includes('/storage/v1/object/profile-avatars')) return response(400, { statusCode: 404 });
+    missingAdminCalls += 1; return response(204, null);
+  } });
+  assert.deepEqual(await missingStorage.removeAccount({ ...request('/api/account', { method: 'DELETE', body: { confirmation: 'DELETE' } }), body: { confirmation: 'DELETE' } }), { deleted: true });
+  assert.equal(missingAdminCalls, 1);
 });
 
 test('account deletion requires explicit confirmation before admin deletion', async () => {

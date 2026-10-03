@@ -53,6 +53,7 @@ test('feedback validates cursor, themes, rating, and origin', async () => {
   assert.equal((await request({ ...base, sessionId: 'feedback-session-10', rating: 'bad' }, { bodyObject: true })).status, 400);
   assert.equal((await request(base, { origin: 'https://evil.example', bodyObject: true })).status, 403);
   assert.equal((await request({ ...base, sessionId: 'feedback-my-set-1', cursor: 7, themeId: 'my-set', themeIds: ['my-set'] }, { bodyObject: true })).status, 200);
+  assert.equal((await request({ ...base, sessionId: 'feedback-shared-set-1', cursor: 7, themeId: 'shared-set', themeIds: ['shared-set'] }, { bodyObject: true })).status, 200);
   assert.equal((await request({ ...base, sessionId: 'feedback-my-set-2', cursor: 13, themeId: 'my-set', themeIds: ['date'] }, { bodyObject: true })).status, 400);
   assert.equal((await request({ ...base, sessionId: 'feedback-my-set-3', cursor: 41, themeId: 'my-set', themeIds: ['my-set'] }, { bodyObject: true })).status, 400);
 });

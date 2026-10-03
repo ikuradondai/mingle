@@ -7,7 +7,7 @@ export const partyFirstMeeting = {
   description: "パーティで初めて会った人同士が、答えやすい好みや最近の体験から自然に会話を始められる質問です。",
   adultOnly: false,
   questions: makeQuestions('party-first-meeting', [
-  "今日ここに来るまでに、ちょっといいことはあった？",
+  "これから、なんて呼んで欲しい？",
   "パーティ会場に着いて、つい最初に探すものは？",
   "パーティで、つい立ってしまう定位置はどこ？",
   "最近、誰かに教えてもらってすぐ試したことは？",

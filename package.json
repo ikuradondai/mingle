@@ -5,10 +5,12 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env.local server.mjs",
     "check": "node --test tests/*.test.mjs",
-    "build:account-sdk": "esbuild vendor/supabase-entry.js --bundle --format=esm --platform=browser --minify --outfile=dist/vendor/supabase.js"
+    "build:account-sdk": "esbuild vendor/supabase-entry.js --bundle --format=esm --platform=browser --minify --outfile=dist/vendor/supabase.js",
+    "build:qr": "esbuild vendor/qr-entry.js --bundle --format=esm --platform=browser --minify --outfile=dist/vendor/qr.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "2.117.2"
+    "@supabase/supabase-js": "2.117.2",
+    "qrcode": "1.5.4"
   },
   "devDependencies": {
     "esbuild": "0.25.12"

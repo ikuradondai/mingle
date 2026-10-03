@@ -47,3 +47,6 @@
 RLSの実行検証は外部プロジェクトを使わず、`tests/rls` で `npm ci` → `npm run test:rls` を実行します。PGlite上で所有者分離、別ユーザーの読取・更新・削除・所有権移転拒否、匿名拒否、制約、auth.users削除時のカスケードを検証します。通常の `npm run check` にはこのSQL-WASM検証を含めていません。
 
 保存するデータはユーザーID、質問ID、自作カードの本文・R18指定・作成更新日時、セット名、作成・更新日時です。静的カードの本文や回答、参加者名はアカウントAPIへ送信しません。自作カード本文は匿名集計・フィードバックへ送信しません。ゲーム中の回答者別いいねは従来どおり端末内の進行データです。
+
+
+プロフィール画像（任意）：`supabase/migrations/202610050001_profile_avatars.sql`をSQL Editorで実行し、非公開の`profile-avatars`バケットとowner-only Storage RLSを作成します（このmigrationは本番Supabaseへまだ自動適用されません）。UIはJPEGへ縮小して`PUT /api/account/avatar`へ`{ "imageData": "data:image/jpeg;base64,..." }`を送信します。APIはJPEG実体・256KiB以下を検証し、owner JWTで`<user-id>/avatar.jpg`へ保存して短期署名URLを返します。画像はJWTやAuth metadataへ保存しません。`GET /api/account/me`の`user.avatarUrl`が未設定時は`null`です。削除は`DELETE /api/account/avatar`で行い、Storage上の画像削除が確認された後に退会時のAuth削除へ進みます。画像が未登録（Storageの404相当）の場合は削除済みとして扱い、その他のStorage障害では退会成功を返しません。
