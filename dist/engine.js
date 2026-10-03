@@ -1,6 +1,6 @@
 export const ROUND_SIZE = 6;
 export const MAX_PARTICIPANTS = 8;
-export const MAX_NAME_LENGTH = 24;
+export const MAX_NAME_LENGTH = 40;
 
 function createSessionId() {
   try { if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID(); } catch {}
@@ -14,7 +14,7 @@ export function normalizeParticipants(participants) {
   if (participants.some((name) => typeof name !== 'string')) throw new Error('参加者の名前は文字で入力してください');
   const names = participants.map((name) => name.trim());
   if (names.some((name) => !name)) throw new Error('参加者の名前を入力してください');
-  if (names.some((name) => name.length > MAX_NAME_LENGTH)) throw new Error(`名前は${MAX_NAME_LENGTH}文字以内で入力してください`);
+  if (names.some((name) => Array.from(name).length > MAX_NAME_LENGTH || /[\u0000-\u001f\u007f]/u.test(name))) throw new Error(`名前は${MAX_NAME_LENGTH}文字以内で入力してください`);
   return names;
 }
 

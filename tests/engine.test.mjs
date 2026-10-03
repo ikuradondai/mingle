@@ -148,7 +148,9 @@ test('participant names and adult confirmation are strictly validated', () => {
   assert.throws(() => createSession({ participants: ['A'], deck }), /2〜8人/);
   assert.throws(() => createSession({ participants: Array.from({ length: 9 }, (_, i) => String(i)), deck }), /2〜8人/);
   assert.throws(() => createSession({ participants: [' ', 'B'], deck }), /名前/);
-  assert.throws(() => createSession({ participants: ['A'.repeat(25), 'B'], deck }), /24文字/);
+  assert.doesNotThrow(() => createSession({ participants: ['A'.repeat(40), 'B'], deck }));
+  assert.doesNotThrow(() => createSession({ participants: ['😀'.repeat(40), 'B'], deck }));
+  assert.throws(() => createSession({ participants: ['A'.repeat(41), 'B'], deck }), /40文字/);
   const adult = { ...deck, adultOnly: true };
   assert.throws(() => createSession({ participants: names, deck: adult, adultConfirmed: false }), /成人向け/);
   assert.throws(() => createSession({ participants: names, deck: adult, adultConfirmed: 'true' }), /成人向け/);

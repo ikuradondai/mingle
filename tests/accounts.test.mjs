@@ -71,6 +71,22 @@ test('favorite upsert is idempotent and set payload always uses verified user id
   await assert.rejects(() => service.set({ ...request('/api/account/sets', { method: 'POST', body: { name: 'bad', cardIds: [] } }), body: { name: 'bad', cardIds: [] } }), (error) => error.status === 400);
 });
 
+test('favorite validator accepts shipped R18 card ids through the real account service', async () => {
+  const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url, options) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user', email: 'x@y.test' });
+    if (url.includes('/favorites?user_id')) return response(200, []);
+    if (url.includes('/favorites?on_conflict')) return response(201, null);
+    return response(200, []);
+  } });
+  for (const cardId of ['intimacy-07', 'intimacy-36']) {
+    const result = await service.favorite(request(`/api/account/favorites/${cardId}`, { method: 'PUT' }), cardId);
+    assert.deepEqual(result, { favorite: true, cardId });
+  }
+  assert.deepEqual(calls.filter((call) => call.options.method === 'POST').map((call) => JSON.parse(call.options.body).card_id), ['intimacy-07', 'intimacy-36']);
+});
+
 test('profile accepts only a trimmed unicode display name and updates auth metadata', async () => {
   const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
   const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url, options) => {

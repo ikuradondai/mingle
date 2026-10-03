@@ -23,3 +23,33 @@ body.account-open{overflow:hidden}
 
 .library-editor textarea[data-custom-text]{display:block;width:100%;box-sizing:border-box;min-height:120px;padding:10px 11px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-size:16px;line-height:1.6;resize:vertical}
 .round-favorites{margin:18px 0;padding:14px;border:1px solid var(--line);border-radius:16px;background:#fff}.round-favorites h2{margin:0 0 4px;font-size:1.05rem}.round-favorite-list{display:grid;gap:6px;margin:10px 0}.round-favorite-row{display:flex;align-items:flex-start;gap:9px;min-height:48px;padding:9px 8px;border:1px solid var(--line);border-radius:11px;background:#fff;overflow-wrap:anywhere;cursor:pointer}.round-favorite-row input{width:22px;height:22px;flex:0 0 auto;margin:1px 0}.round-favorite-row span{flex:1;min-width:0}.round-favorite-row small{color:var(--muted);white-space:nowrap;font-size:12px}
+
+
+/* Account surfaces follow the same paper-and-ink system as the core screens. */
+.account-bar { margin-bottom:6px; }
+.account-button { width:46px; height:46px; border:2px solid #fff; color:var(--blue); background:var(--cream); box-shadow:0 8px 20px rgba(20,33,61,.12); }
+.account-button:hover,.account-button:focus-visible { background:#fff; transform:translateY(-1px); }
+.account-overlay { background:rgba(20,33,61,.2); backdrop-filter:blur(3px); }
+.account-dialog { border:0; border-radius:26px; background:var(--cream,#fffaf0); box-shadow:0 24px 70px rgba(20,33,61,.23); }
+.account-dialog-menu { padding:18px; }
+.account-dialog-menu .account-panel-head strong { font-size:1.2rem; letter-spacing:-.04em; }
+.account-dialog-menu .account-menu-action { border-radius:15px; }
+.account-dialog-menu .secondary-button { border:1px solid #d8e4fb; background:#edf4ff; }
+.account-dialog-menu .text-button { min-height:44px; }
+.account-dialog-library,.account-dialog-settings,.account-dialog-delete { background:#fffaf0; }
+.account-panel-head strong { letter-spacing:-.03em; }
+.account-panel-head .icon-button { background:#fff; }
+.account-email { font-size:13px; }
+.account-status { padding:9px 11px; border-radius:12px; background:#eef5ff; }
+.account-dialog .primary-button { min-height:50px; border-radius:16px; }
+.account-dialog .favorite-card-button { background:#fff; }
+.account-library h2 { letter-spacing:-.03em; }
+.library-set,.library-card { border:0; background:#fff; box-shadow:0 5px 16px rgba(20,33,61,.06); }
+.library-set button,.library-card button { border-color:#d8e4fb; background:#f5f8ff; }
+.library-editor { border:0; background:#fff3d6; box-shadow:none; }
+.account-dialog .round-favorites { border:0; background:#fff3d6; }
+@media(max-width:680px){
+  .account-dialog,.account-dialog-library { border-radius:26px 26px 0 0; }
+  .account-dialog-menu { width:min(330px,calc(100vw - 24px)); border-radius:20px; }
+  .account-dialog-library { padding-top:14px; }
+}
