@@ -2,14 +2,14 @@ import { decks } from './data/decks.js';
 import { trackPage, trackThemeStart, trackSessionProgress } from './analytics.js';
 import { loadSession, saveSession, clearSession } from './session-storage.js';
 import { canContinue } from './access-policy.js';
-import { ROUND_SIZE, createSession, createMixedSession, createSavedSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer, previousAnswer, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS, summarizeLikes } from './engine.js';
+import { ROUND_SIZE, createSession, createMixedSession, createSavedSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer, previousAnswer, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS, summarizeLikes, completedRoundFavoriteCards } from './engine.js';
 import { themeGroups, groupLabels } from './data/theme-groups.js';
 import { buildFeedbackPayload, feedbackKey, submitFeedback } from './feedback.js';
 import { accountConfig, accountApi, cardPayload, discoverAccountConfig } from './account.js';
 import { renderLibrary, canonicalCard } from './account-library.js';
 
 const root = document.querySelector('#app');
-const state = { screen: 'participants', participants: ['', ''], session: null, pendingCustomResume: null, error: '', busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, lastAdvanceAt: 0, focusAction: null, focusSelector: null, selectedDeckId: 'friends', selectedDeckIds: ['friends'], themeMode: 'single', filter: 'all', adultConfirmed: false, includeChallenges: false, resume: null, account: { enabled: accountConfig.enabled, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false, profileDraft: '', deletionAvailable: false, email: '', otp: '', otpSent: false, pendingSet: null, selectedCards: new Set(), editingSetId: null, setName: undefined, customEditorOpen: false, editingCardId: null, customDraft: '', customDraftR18: false, revealAdult: false, status: '', error: '', busy: false, generation: 0, profileRevision: 0 } };
+const state = { screen: 'participants', participants: ['', ''], session: null, pendingCustomResume: null, error: '', busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFavorite: null, lastAdvanceAt: 0, focusAction: null, focusSelector: null, selectedDeckId: 'friends', selectedDeckIds: ['friends'], themeMode: 'single', filter: 'all', adultConfirmed: false, includeChallenges: false, resume: null, account: { enabled: accountConfig.enabled, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false, profileDraft: '', deletionAvailable: false, email: '', otp: '', otpSent: false, pendingSet: null, selectedCards: new Set(), editingSetId: null, setName: undefined, customEditorOpen: false, editingCardId: null, customDraft: '', customDraftR18: false, revealAdult: false, status: '', error: '', busy: false, generation: 0, profileRevision: 0 } };
 
 function esc(value) { return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[char])); }
 function participantAvatar(name) { const first = Array.from(name.trim())[0]; if (first) return esc(first); return `<svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="21" fill="var(--participant-bg)"/><circle cx="16" cy="19" r="2" fill="var(--participant-fg)"/><circle cx="28" cy="19" r="2" fill="var(--participant-fg)"/><path d="M15 27c2.2 3.4 11.8 3.4 14 0" fill="none" stroke="var(--participant-fg)" stroke-width="2" stroke-linecap="round"/></svg>`; }
@@ -105,6 +105,14 @@ function render() {
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
   root.querySelectorAll('[data-select-card]').forEach((input) => input.addEventListener('change', (event) => { const id = event.currentTarget.dataset.cardId; if (event.currentTarget.checked) state.account.selectedCards.add(id); else state.account.selectedCards.delete(id); state.focusSelector = `[data-select-card][data-card-id=\"${id}\"]`; render(); }));
+  root.querySelectorAll('[data-round-favorite]').forEach((input) => input.addEventListener('change', (event) => {
+    const context = state.roundFavorite;
+    if (!context || context.saving) return;
+    const id = event.currentTarget.dataset.cardId;
+    if (event.currentTarget.checked) context.selected.add(id); else context.selected.delete(id);
+    state.focusSelector = `[data-round-favorite][data-card-id="${id}"]`;
+    render();
+  }));
   root.querySelector('[data-library-adult]')?.addEventListener('change', (event) => { state.account.revealAdult = event.currentTarget.checked; state.focusSelector = '[data-library-adult]'; render(); });
   root.querySelector('[data-delete-confirm]')?.addEventListener('change', (event) => { state.account.deleteConfirmed = event.currentTarget.checked; const button = root.querySelector('[data-action="account-delete-confirm"]'); if (button) button.disabled = state.account.busy || !state.account.deletionAvailable || !state.account.deleteConfirmed; });
   const setNameInput = root.querySelector('[data-set-name]'); const updateSetValidity = () => { const form = setNameInput?.closest('form'); const button = form?.querySelector('button[type=\"submit\"]'); if (!button || !setNameInput) return; const count = state.account.selectedCards.size; button.disabled = state.account.busy || !setNameInput.value.trim() || count < 6 || count > 40; }; setNameInput?.addEventListener('input', (event) => { state.account.setName = event.currentTarget.value; if (!event.isComposing) updateSetValidity(); }); setNameInput?.addEventListener('compositionend', updateSetValidity);
@@ -152,15 +160,17 @@ function accountSettingsView(a) {
   const valid = validDisplayName(a.profileDraft);
   return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-menu">戻る</button><strong id="account-dialog-title">アカウント設定</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><form class="account-settings-form" data-form="profile"><label>表示名<input type="text" data-profile-name value="${esc(a.profileDraft)}" maxlength="80" autocomplete="nickname" ${a.busy ? 'disabled' : ''}/></label><p class="account-hint">参加者の呼び名とは別に保存されます。</p><p class="account-email">${esc(a.user?.email || '')}</p><button type="submit" class="primary-button" ${a.busy || !valid ? 'disabled' : ''}>${a.busy ? '保存中…' : '表示名を保存'}</button></form>${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ''}${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ''}<section class="account-delete-section"><h2>退会</h2>${a.deletionAvailable ? '<button type="button" class="danger-button" data-action="account-delete-open">アカウントを削除</button>' : '<p class="account-hint">退会手続きは現在利用できません。</p><a class="account-support" href="mailto:inquiry@erudaite.ai">問い合わせる</a>'}</section>`, 'account-dialog-settings');
 }
-function accountView() {
+function accountView(options = {}) {
   if (!state.account.enabled) return '';
   const a = state.account;
+  const overlayOnly = options.overlayOnly === true;
   const bar = accountButton(a);
-  if (!a.open) return bar;
-  if (a.user && a.settingsOpen) return `${bar}${accountSettingsView(a)}`;
-  if (a.user && a.libraryOpen) return `${bar}${libraryAccountView(a)}`;
-  if (a.user) return `${bar}${accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">アカウント</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.user.displayName ? `<p class="account-display-name">${esc(a.user.displayName)}</p>` : ''}<p class="account-email">${esc(a.user.email || a.user.name || 'ログイン中')}</p><button type="button" class="secondary-button account-menu-action" data-action="account-settings-open">アカウント設定</button><button type="button" class="secondary-button account-menu-action" data-action="account-library-open">保存したカード・マイセット</button><button type="button" class="text-button account-menu-action" data-action="logout">ログアウト</button>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ''}`, 'account-dialog-menu')}`;
-  return `${bar}${accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">保存する</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.google ? '<button type="button" class="secondary-button account-provider" data-action="google-login">Googleで続ける</button>' : ''}<form class="account-otp" data-form="account"><label>メールアドレス<input type="email" data-account-email value="${esc(a.email)}" required autocomplete="email" /></label>${a.otpSent ? '<label>確認コード<input inputmode="numeric" data-account-otp value="' + esc(a.otp) + '" required autocomplete="one-time-code" /></label><button type="button" class="text-button muted" data-action="reset-otp"' + (a.busy ? ' disabled' : '') + '>メールアドレスを変更／コードを再送</button>' : ''}<button type="submit" class="primary-button">${a.busy ? '処理中…' : (a.otpSent ? 'ログインする' : '確認コードを送る')}</button></form><p class="account-status" role="status">${esc(a.status || 'ログインすると質問を保存できます')}</p><p class="form-error" role="alert">${esc(a.error)}</p>`, 'account-dialog-login')}`;
+  const wrap = (dialog) => overlayOnly ? dialog : `${bar}${dialog}`;
+  if (!a.open) return overlayOnly ? '' : bar;
+  if (a.user && a.settingsOpen) return wrap(accountSettingsView(a));
+  if (a.user && a.libraryOpen) return wrap(libraryAccountView(a));
+  if (a.user) return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">アカウント</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.user.displayName ? `<p class="account-display-name">${esc(a.user.displayName)}</p>` : ''}<p class="account-email">${esc(a.user.email || a.user.name || 'ログイン中')}</p><button type="button" class="secondary-button account-menu-action" data-action="account-settings-open">アカウント設定</button><button type="button" class="secondary-button account-menu-action" data-action="account-library-open">保存したカード・マイセット</button><button type="button" class="text-button account-menu-action" data-action="logout">ログアウト</button>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ''}`, 'account-dialog-menu'));
+  return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">保存する</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.google ? '<button type="button" class="secondary-button account-provider" data-action="google-login">Googleで続ける</button>' : ''}<form class="account-otp" data-form="account"><label>メールアドレス<input type="email" data-account-email value="${esc(a.email)}" required autocomplete="email" /></label>${a.otpSent ? '<label>確認コード<input inputmode="numeric" data-account-otp value="' + esc(a.otp) + '" required autocomplete="one-time-code" /></label><button type="button" class="text-button muted" data-action="reset-otp"' + (a.busy ? ' disabled' : '') + '>メールアドレスを変更／コードを再送</button>' : ''}<button type="submit" class="primary-button">${a.busy ? '処理中…' : (a.otpSent ? 'ログインする' : '確認コードを送る')}</button></form><p class="account-status" role="status">${esc(a.status || 'ログインすると質問を保存できます')}</p><p class="form-error" role="alert">${esc(a.error)}</p>`, 'account-dialog-login'));
 }
 
 function topicIcon(deck) {
@@ -234,11 +244,42 @@ function likeTotalsView(session) {
     : `<p class="like-total-label">今回の${session.cursor - currentStart}枚</p><ul>${rows(current)}</ul>${currentStart > 0 ? `<p class="like-total-label">これまでの合計（${session.cursor}枚）</p><ul>${rows(all)}</ul>` : ''}`;
   return `<section class="like-totals" aria-labelledby="like-totals-title"><h2 id="like-totals-title">いいね！の集計</h2>${body}</section>`;
 }
-function roundView() {
-  const session = state.session; const totalCards = session.questions.length; const isFinal = session.cursor >= totalCards; const feedback = feedbackState(session); const submitted = feedbackSubmitted(session);
-  const feedbackForm = submitted ? '<p class="feedback-success" role="status">フィードバック送信済み。ありがとう！</p>' : `<div class="feedback-box" aria-labelledby="feedback-title"><h2 id="feedback-title">${isFinal ? '遊んでみて、どうだった？' : 'この区切り、どうだった？'}</h2><div class="feedback-ratings" role="group" aria-label="評価"><button type="button" class="feedback-rating ${feedback.rating === 'positive' ? 'is-selected' : ''}" data-action="feedback-rating" data-rating="positive" aria-pressed="${feedback.rating === 'positive'}" ${state.feedbackBusy ? 'disabled' : ''}>いいね！</button><button type="button" class="feedback-rating ${feedback.rating === 'needs_improvement' ? 'is-selected' : ''}" data-action="feedback-rating" data-rating="needs_improvement" aria-pressed="${feedback.rating === 'needs_improvement'}" ${state.feedbackBusy ? 'disabled' : ''}>改善余地大きい！</button></div><label class="feedback-label" for="feedback-text">ひとこと（任意）</label><textarea id="feedback-text" data-feedback-text maxlength="1000" rows="3" placeholder="気づいたことがあれば" ${state.feedbackBusy ? 'disabled' : ''}>${esc(feedback.text)}</textarea><p class="form-error" role="alert">${esc(feedback.error)}</p><button type="button" class="secondary-button feedback-submit" data-action="feedback-submit" ${state.feedbackBusy || (!feedback.rating && !feedback.text.trim()) ? 'disabled' : ''}>${state.feedbackBusy ? '送信中…' : '送信する'}</button></div>`;
-  return frame(`<div class="round-break"><span class="round-badge">${session.cursor} / ${totalCards}</span><p class="kicker">ひと区切り</p><h1 tabindex="-1" data-focus>${isFinal ? 'すべてめくりました。' : 'ひと区切りです。'}</h1><p class="lead">${isFinal ? 'このテーマのカードを全部めくりました。' : `まだ${remaining(session)}枚あります。続きを遊ぶか、今日はここまでにできます。`}</p>${likeTotalsView(session)}${feedbackForm}<p class="form-error" role="alert">${esc(state.error)}</p><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy ? 'disabled' : ''}>${state.busy ? '確認中…' : '続きを遊ぶ'}</button>` : ''}<button class="secondary-button" data-action="finish">今日はここまで</button></div><button class="back-link" data-action="decks">テーマを選び直す</button></div>`);
+function roundFavoriteContext(session) {
+  const cards = completedRoundFavoriteCards(session);
+  if (!cards.length) {
+    if (state.roundFavorite?.sessionId === session.sessionId) state.roundFavorite = null;
+    return null;
+  }
+  const key = `${session.sessionId}:${session.roundStart}:${session.cursor}`;
+  if (!state.roundFavorite || state.roundFavorite.key !== key) state.roundFavorite = { key, sessionId: session.sessionId, roundStart: session.roundStart, cursor: session.cursor, cards, selected: new Set(), saving: false, error: '', loginPending: false };
+  else state.roundFavorite.cards = cards;
+  return state.roundFavorite;
 }
+function roundFavoriteView(session) {
+  const context = roundFavoriteContext(session);
+  if (!context) return '';
+  const selectable = context.cards.filter((card) => !state.account.favorites.has(card.id));
+  const selectedCount = [...context.selected].filter((id) => selectable.some((card) => card.id === id)).length;
+  const rows = context.cards.map((card) => {
+    const saved = state.account.favorites.has(card.id);
+    const checked = saved || context.selected.has(card.id);
+    const label = card.r18 === true && !session.adultConfirmed ? 'R18のテーマ' : card.text;
+    return `<label class="round-favorite-row"><input type="checkbox" data-round-favorite data-card-id="${esc(card.id)}" ${checked ? 'checked' : ''} ${saved || context.saving ? 'disabled' : ''}/><span>${esc(label)}</span>${saved ? '<small>保存済み</small>' : ''}</label>`;
+  }).join('');
+  const action = state.account.user
+    ? `<button type="button" class="secondary-button" data-action="round-favorite-save" ${context.saving || !selectedCount ? 'disabled' : ''}>${context.saving ? '保存中…' : '選択した質問を保存'}</button>`
+    : state.account.enabled ? `<button type="button" class="secondary-button" data-action="round-favorite-login" ${context.saving || !selectedCount ? 'disabled' : ''}>ログインして保存</button>` : '<p class="account-muted">現在、質問を保存できません。</p>';
+  return `<section class="round-favorites" aria-labelledby="round-favorites-title"><h2 id="round-favorites-title">気に入った質問を保存</h2><p class="account-muted">実際に見た質問だけ選べます。</p><div class="round-favorite-list">${rows}</div>${action}<p class="form-error" role="alert">${esc(context.error || '')}</p></section>`;
+}
+function roundView() {
+  const session = state.session;
+  const totalCards = session.questions.length; const isFinal = session.cursor >= totalCards; const feedback = feedbackState(session); const submitted = feedbackSubmitted(session);
+  const favoriteContext = roundFavoriteContext(session); const favoriteBusy = Boolean(favoriteContext?.saving);
+  const feedbackForm = submitted ? '<p class="feedback-success" role="status">フィードバック送信済み。ありがとう！</p>' : `<div class="feedback-box" aria-labelledby="feedback-title"><h2 id="feedback-title">${isFinal ? '遊んでみて、どうだった？' : 'この区切り、どうだった？'}</h2><div class="feedback-ratings" role="group" aria-label="評価"><button type="button" class="feedback-rating ${feedback.rating === 'positive' ? 'is-selected' : ''}" data-action="feedback-rating" data-rating="positive" aria-pressed="${feedback.rating === 'positive'}" ${state.feedbackBusy ? 'disabled' : ''}>いいね！</button><button type="button" class="feedback-rating ${feedback.rating === 'needs_improvement' ? 'is-selected' : ''}" data-action="feedback-rating" data-rating="needs_improvement" aria-pressed="${feedback.rating === 'needs_improvement'}" ${state.feedbackBusy ? 'disabled' : ''}>改善余地大きい！</button></div><label class="feedback-label" for="feedback-text">ひとこと（任意）</label><textarea id="feedback-text" data-feedback-text maxlength="1000" rows="3" placeholder="気づいたことがあれば" ${state.feedbackBusy ? 'disabled' : ''}>${esc(feedback.text)}</textarea><p class="form-error" role="alert">${esc(feedback.error)}</p><button type="button" class="secondary-button feedback-submit" data-action="feedback-submit" ${state.feedbackBusy || (!feedback.rating && !feedback.text.trim()) ? 'disabled' : ''}>${state.feedbackBusy ? '送信中…' : '送信する'}</button></div>`;
+  const accountOverlay = state.account.open ? accountView({ overlayOnly: true }) : '';
+  return frame(`<div class="round-break"><span class="round-badge">${session.cursor} / ${totalCards}</span><p class="kicker">ひと区切り</p><h1 tabindex="-1" data-focus>${isFinal ? 'すべてめくりました。' : 'ひと区切りです。'}</h1><p class="lead">${isFinal ? 'このテーマのカードを全部めくりました。' : `まだ${remaining(session)}枚あります。続きを遊ぶか、今日はここまでにできます。`}</p>${likeTotalsView(session)}${roundFavoriteView(session)}${feedbackForm}<p class="form-error" role="alert">${esc(state.error)}</p><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? 'disabled' : ''}>${state.busy ? '確認中…' : '続きを遊ぶ'}</button>` : ''}<button class="secondary-button" data-action="finish" ${favoriteBusy ? 'disabled' : ''}>今日はここまで</button></div><button class="back-link" data-action="decks" ${favoriteBusy ? 'disabled' : ''}>テーマを選び直す</button></div>${accountOverlay}`);
+}
+
 function finishView() { return roundView(); }
 
 
@@ -258,6 +299,8 @@ async function loadAccount() {
       if (generation !== state.account.generation || profileRevision !== state.account.profileRevision) return;
       state.account.favorites = new Set((me.favorites || []).map((item) => item.cardId || item.card_id || item.id || item));
       state.account.sets = (me.sets || []).map((set) => ({ ...set, cards: set.cards || (set.card_ids || []).map((cardId) => ({ cardId })) }));
+      const loginContext = state.roundFavorite;
+      if (loginContext?.loginPending && state.session && isCurrentRoundFavorite(loginContext, state.session, loginContext.key)) { loginContext.loginPending = false; state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.focusAction = 'round-favorite-save'; }
       const pending = state.pendingCustomResume;
       if (pending) {
         if (state.account.customCardsAvailable && pending.ownerUserId === state.account.user.id) state.resume = pending;
@@ -330,12 +373,54 @@ function persist(previous = null) { if (!state.session) return; if (previous) tr
 function advanceGuarded(action) { ensureSession(); const now = Date.now(); if (now - state.lastAdvanceAt < 300) return false; state.lastAdvanceAt = now; const previous = state.session; state.busy = true; render(); state.session = action(state.session); state.busy = false; persist(previous); render(); return true; }
 function resumeSaved() { const fresh = loadResumeForCurrentUser(); if (!fresh) { state.resume = null; state.error = '保存期限が切れています。'; render(); return; } state.resume = fresh; state.session = fresh; state.participants = [...state.session.participants]; state.selectedDeckIds = [...(state.session.deckIds || [state.session.deckId])]; state.selectedDeckId = state.session.mixed ? state.selectedDeckIds[0] : state.session.deckId; state.themeMode = state.session.mixed ? 'mixed' : 'single'; state.includeChallenges = state.session.includeChallenges === true; state.adultConfirmed = state.session.adultConfirmed === true; state.screen = 'play'; state.resume = null; state.error = ''; render(); }
 
+function isCurrentRoundFavorite(context, session, key) { return Boolean(context && session && state.roundFavorite === context && context.key === key && context.sessionId === session.sessionId && context.roundStart === session.roundStart && context.cursor === session.cursor); }
+
+async function saveRoundFavorites() {
+  const context = state.roundFavorite;
+  const session = state.session;
+  if (!context || context.saving || !session || !isCurrentRoundFavorite(context, session, context.key) || !state.account.user) return;
+  const ids = [...context.selected].filter((id) => !state.account.favorites.has(id));
+  if (!ids.length) return;
+  const key = context.key;
+  const generation = state.account.generation;
+  const sessionId = session.sessionId;
+  const roundStart = session.roundStart;
+  const cursor = session.cursor;
+  const cards = new Map(context.cards.map((card) => [card.id, card]));
+  context.saving = true;
+  context.error = '';
+  render();
+  try {
+    for (const id of ids) {
+      const current = state.roundFavorite;
+      if (!isCurrentRoundFavorite(context, state.session, key) || state.account.generation !== generation || !state.account.user) return;
+      const card = cards.get(id);
+      if (!card) { current.selected.delete(id); continue; }
+      try {
+        await accountApi.favorite(cardPayload(card, session.mixed ? card.sourceDeckId : session.deckId), true);
+      } catch {
+        if (isCurrentRoundFavorite(context, state.session, key) && state.account.generation === generation) context.error = '保存できなかった質問があります。もう一度保存してください。';
+        break;
+      }
+      if (!isCurrentRoundFavorite(context, state.session, key) || state.account.generation !== generation || !state.account.user || state.session.roundStart !== roundStart || state.session.cursor !== cursor) return;
+      state.account.favorites.add(id);
+      state.roundFavorite.selected.delete(id);
+      render();
+    }
+  } finally {
+    if (isCurrentRoundFavorite(context, state.session, key) && state.account.generation === generation && state.session.roundStart === roundStart && state.session.cursor === cursor) {
+      state.roundFavorite.saving = false;
+      render();
+    }
+  }
+}
+
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
   if (state.busy && action !== 'continue') return;
   state.focusAction = action;
   if (action === 'reveal') { const previous = ensureSession(); state.session = revealCard(previous); persist(previous); render(); return; }
-  if (action === 'home') { state.feedbackBusy = false; state.feedback = null; if (state.session && !isFinished(state.session)) saveSession(state.session); state.resume = loadResumeForCurrentUser(); state.screen = 'participants'; state.session = null; state.error = ''; state.includeChallenges = false; state.adultConfirmed = false; render(); return; }
+  if (action === 'home') { state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null; if (state.session && !isFinished(state.session)) saveSession(state.session); state.resume = loadResumeForCurrentUser(); state.screen = 'participants'; state.session = null; state.error = ''; state.includeChallenges = false; state.adultConfirmed = false; render(); return; }
   if (action === 'account') { state.account.open = true; state.account.libraryOpen = false; state.focusAction = state.account.user ? 'account-library-open' : 'account-close'; render(); return; }
   if (action === 'reset-otp') { if (state.account.busy) return; state.account.otpSent = false; state.account.otp = ''; state.account.status = ''; state.account.error = ''; render(); return; }
   if (action === 'google-login') { try { await accountApi.google(); } catch { state.account.error = 'Googleログインを開始できませんでした。'; render(); } return; }
@@ -348,7 +433,7 @@ async function handleAction(event) {
   if (action === 'account-menu') { if (state.account.busy) return; state.account.error = ''; state.account.status = ''; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.focusAction = 'account-settings-open'; render(); return; }
   if (action === 'account-library-open') { state.account.libraryOpen = true; state.focusAction = 'account-menu'; render(); return; }
   if (action === 'account-overlay-close') { state.account.open = false; state.account.libraryOpen = false; state.focusAction = 'account'; render(); return; }
-  if (action === 'logout') { const generation = ++state.account.generation; try { const privateSession = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (privateSession) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === 'play') state.screen = 'participants'; } await accountApi.logout(); if (generation !== state.account.generation) return; state.account.user = null; state.account.favorites = new Set(); state.account.customCards = []; state.account.customCardsAvailable = false; state.account.sets = []; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ''; state.account.customDraftR18 = false; state.account.pendingSet = null; state.account.revealAdult = false; state.account.status = ''; state.account.error = ''; state.account.otpSent = false; state.account.otp = ''; state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.deleteConfirmed = false; state.account.profileRevision += 1; state.account.profileDraft = ''; state.account.deletionAvailable = false; state.feedback = null; state.resume = null; render(); } catch { if (generation === state.account.generation) { state.account.error = 'ログアウトできませんでした。もう一度お試しください。'; render(); } } return; }
+  if (action === 'logout') { const generation = ++state.account.generation; try { const privateSession = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (privateSession) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === 'play') state.screen = 'participants'; } await accountApi.logout(); if (generation !== state.account.generation) return; state.account.user = null; state.account.favorites = new Set(); state.account.customCards = []; state.account.customCardsAvailable = false; state.account.sets = []; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ''; state.account.customDraftR18 = false; state.account.pendingSet = null; state.account.revealAdult = false; state.account.status = ''; state.account.error = ''; state.account.otpSent = false; state.account.otp = ''; state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.deleteConfirmed = false; state.account.profileRevision += 1; state.account.profileDraft = ''; state.account.deletionAvailable = false; state.feedback = null; state.roundFavorite = null; state.resume = null; render(); } catch { if (generation === state.account.generation) { state.account.error = 'ログアウトできませんでした。もう一度お試しください。'; render(); } } return; }
   if (action === 'custom-card-new') { if (state.account.busy || !state.account.customCardsAvailable) return; state.account.customEditorOpen = true; state.account.editingCardId = null; state.account.customDraft = ''; state.account.customDraftR18 = false; state.focusSelector = '[data-custom-text]'; render(); return; }
   if (action === 'custom-card-cancel') { if (state.account.busy) return; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ''; state.account.customDraftR18 = false; render(); return; }
   if (action === 'custom-card-edit') { if (state.account.busy) return; const id = String(event.currentTarget.dataset.cardId || ''); const card = state.account.customCards.find((item) => item.id === id); if (!card) return; state.account.customEditorOpen = true; state.account.editingCardId = id; state.account.customDraft = card.text; state.account.customDraftR18 = card.r18 === true; state.focusSelector = '[data-custom-text]'; render(); return; }
@@ -369,9 +454,16 @@ async function handleAction(event) {
     finally { if (generation === state.account.generation) { state.account.busy = false; render(); } }
     return;
   }
+  if (action === 'round-favorite-login') {
+    const context = state.roundFavorite;
+    if (!context || context.saving || ![...context.selected].some((id) => !state.account.favorites.has(id)) || !state.account.enabled) return;
+    state.account.open = true; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false;
+    state.account.error = ''; state.account.status = ''; context.loginPending = true; state.focusSelector = '[data-account-email]'; render(); return;
+  }
+  if (action === 'round-favorite-save') { saveRoundFavorites(); return; }
   if (action === 'add-person') { if (state.participants.length < MAX_PARTICIPANTS) { state.participants.push(''); state.focusSelector = `input[data-index="${state.participants.length - 1}"]`; } render(); return; }
   if (action === 'remove-person') { if (state.participants.length > 2) { state.participants.pop(); state.focusSelector = `input[data-index="${state.participants.length - 1}"]`; } render(); return; }
-  if (action === 'decks') { state.feedbackBusy = false; state.feedback = null; state.screen = 'decks'; state.error = ''; state.busy = false; render(); return; }
+  if (action === 'decks') { state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null; state.screen = 'decks'; state.error = ''; state.busy = false; render(); return; }
   if (action === 'choose-deck') { const deck = decks.find((item) => item.id === event.currentTarget.dataset.deck); const adultConfirmed = state.adultConfirmed; const includeR18 = Boolean(state.themeMode !== 'mixed' && deck?.r18Available && adultConfirmed); try { state.session = state.themeMode === 'mixed' ? createMixedSession({ participants: state.participants, decks: state.selectedDeckIds.map((id) => decks.find((item) => item.id === id)), includeChallenges: state.includeChallenges }) : createSession({ participants: state.participants, deck, adultConfirmed, includeR18, includeChallenges: state.includeChallenges }); state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null; trackThemeStart(state.session.deckId); saveSession(state.session); state.screen = 'play'; state.error = ''; render(); } catch (error) { state.error = error.message; render(); } return; }
   if (action === 'feedback-rating') { const feedback = feedbackState(ensureSession()); feedback.rating = feedback.rating === event.currentTarget.dataset.rating ? null : event.currentTarget.dataset.rating; feedback.error = ''; state.focusSelector = `[data-rating="${event.currentTarget.dataset.rating}"]`; render(); return; }
   if (action === 'feedback-submit') {
@@ -396,8 +488,8 @@ async function handleAction(event) {
   if (action === 'next-answer') { try { advanceGuarded(nextAnswer); } catch (error) { state.error = error.message; render(); } return; }
   if (action === 'previous-answer') { const previous = ensureSession(); state.session = previousAnswer(previous); persist(previous); render(); return; }
   if (action === 'pass') { try { advanceGuarded(passAnswer); } catch (error) { state.error = error.message; render(); } return; }
-  if (action === 'continue') { state.feedbackBusy = false; state.feedback = null; state.busy = true; state.error = ''; render(); try { const previous = ensureSession(); if (await canContinue(state.session)) { state.session = continueRound(state.session); persist(previous); } else state.error = '続きを始められませんでした。'; } catch (error) { state.error = error.message || '続きを始められませんでした。'; } finally { state.busy = false; render(); } return; }
-  if (action === 'finish') { state.feedbackBusy = false; state.feedback = null; state.resume = loadResumeForCurrentUser(); state.screen = 'participants'; state.session = null; state.error = ''; state.includeChallenges = false; state.adultConfirmed = false; render(); }
+  if (action === 'continue') { state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null; state.busy = true; state.error = ''; render(); try { const previous = ensureSession(); if (await canContinue(state.session)) { state.session = continueRound(state.session); persist(previous); } else state.error = '続きを始められませんでした。'; } catch (error) { state.error = error.message || '続きを始められませんでした。'; } finally { state.busy = false; render(); } return; }
+  if (action === 'finish') { state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null; state.resume = loadResumeForCurrentUser(); state.screen = 'participants'; state.session = null; state.error = ''; state.includeChallenges = false; state.adultConfirmed = false; render(); }
 }
 
 let webMcpRegistered = false;
@@ -422,4 +514,4 @@ function registerWebMcp() {
 
 try { const saved = loadSession(); if (saved?.customSet && saved.ownerUserId) state.pendingCustomResume = saved; else state.resume = saved; } catch { state.resume = null; state.pendingCustomResume = null; }
 render();
-discoverAccountConfig().then(() => { state.account.enabled = accountConfig.enabled; state.account.google = accountConfig.google; if (!state.account.enabled && state.pendingCustomResume) { clearSession(); state.pendingCustomResume = null; } if (state.account.enabled) { loadAccount(); accountApi.onAuthStateChange?.((event, session) => { setTimeout(() => { const nextUser = session?.user || null; const previousId = state.account.user?.id || null; const nextId = nextUser?.id || null; const identityChanged = Boolean(previousId && nextId && previousId !== nextId); const privateResume = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if ((event === 'SIGNED_OUT' || identityChanged) && privateResume) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === 'play') state.screen = 'participants'; } if (previousId === nextId && event !== 'SIGNED_OUT') { if (nextId) state.account.user = normalizeAccountUser(nextUser, state.account.user); return; } state.account.generation += 1; state.account.profileRevision += 1; state.account.busy = false; state.account.user = normalizeAccountUser(nextUser); state.account.favorites = new Set(); state.account.customCards = []; state.account.customCardsAvailable = false; state.account.sets = []; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ''; state.account.customDraftR18 = false; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.pendingSet = null; state.account.revealAdult = false; state.account.status = ''; state.account.error = ''; state.feedback = null; state.resume = null; if (state.account.user) { render(); loadAccount(); } else { state.account.favorites = new Set(); state.account.customCards = []; state.account.customCardsAvailable = false; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ''; state.account.customDraftR18 = false; state.account.sets = []; render(); } }, 0); }); } }).catch(() => {});
+discoverAccountConfig().then(() => { state.account.enabled = accountConfig.enabled; state.account.google = accountConfig.google; if (!state.account.enabled && state.pendingCustomResume) { clearSession(); state.pendingCustomResume = null; } if (state.account.enabled) { loadAccount(); accountApi.onAuthStateChange?.((event, session) => { setTimeout(() => { const nextUser = session?.user || null; const previousId = state.account.user?.id || null; const nextId = nextUser?.id || null; const identityChanged = Boolean(previousId && nextId && previousId !== nextId); if (event === 'SIGNED_OUT' || identityChanged) state.roundFavorite = null; const privateResume = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if ((event === 'SIGNED_OUT' || identityChanged) && privateResume) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === 'play') state.screen = 'participants'; } if (previousId === nextId && event !== 'SIGNED_OUT') { if (nextId) state.account.user = normalizeAccountUser(nextUser, state.account.user); return; } state.account.generation += 1; state.account.profileRevision += 1; state.account.busy = false; state.account.user = normalizeAccountUser(nextUser); state.account.favorites = new Set(); state.account.customCards = []; state.account.customCardsAvailable = false; state.account.sets = []; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ''; state.account.customDraftR18 = false; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.pendingSet = null; state.account.revealAdult = false; state.account.status = ''; state.account.error = ''; const preserveRound = Boolean(state.roundFavorite?.loginPending && state.session && nextId && !previousId); if (!preserveRound) state.feedback = null; state.resume = null; if (state.account.user) { render(); loadAccount(); } else { state.account.favorites = new Set(); state.account.customCards = []; state.account.customCardsAvailable = false; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ''; state.account.customDraftR18 = false; state.account.sets = []; render(); } }, 0); }); } }).catch(() => {});

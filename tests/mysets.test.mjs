@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decks } from '../dist/data/decks.js';
-import { createSavedSession, revealCard, nextAnswer, likeCurrentAnswer, continueRound } from '../dist/engine.js';
+import { createSavedSession, createSession, createMixedSession, revealCard, nextAnswer, likeCurrentAnswer, continueRound, advance, completedRoundFavoriteCards } from '../dist/engine.js';
 import { loadSession, saveSession, SESSION_STORAGE_KEY } from '../dist/session-storage.js';
 
 const storage = () => { const data = new Map(); return { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value), removeItem: (key) => data.delete(key) }; };
@@ -77,6 +77,35 @@ test('custom R18 persisted flags cannot be downgraded during hydration', () => {
   assert.equal(loadSession({ storage: target, now: 1001 }), null);
 });
 
+test('revealed history exposes only completed static questions and survives resume', () => {
+  const date = decks.find((deck) => deck.id === 'date');
+  let session = createSession({ participants: ['A', 'B'], deck: date, random: () => 0 });
+  assert.deepEqual(session.revealedQuestionIds, []);
+  session = nextAnswer(session); assert.deepEqual(session.revealedQuestionIds, []);
+  for (let i = 0; i < 6; i += 1) { session = revealCard(session); session = nextAnswer(session); session = nextAnswer(session); }
+  assert.equal(session.cursor, 6);
+  assert.equal(completedRoundFavoriteCards(session).length, 6);
+  const target = storage(); assert.equal(saveSession(session, { storage: target, now: 1000 }), true);
+  const restored = loadSession({ storage: target, now: 1001 });
+  assert.equal(restored.revealedQuestionIds.length, 6);
+  assert.deepEqual(completedRoundFavoriteCards(restored).map((card) => card.id), restored.questions.slice(0, 6).map((card) => card.id));
+  const legacy = JSON.parse(target.getItem(SESSION_STORAGE_KEY)); delete legacy.revealedQuestionIds; target.setItem(SESSION_STORAGE_KEY, JSON.stringify(legacy));
+  assert.deepEqual(loadSession({ storage: target, now: 1002 }).revealedQuestionIds, []);
+});
+
+test('revealed history excludes custom and challenge cards and waits for a completed round', () => {
+  const customId = 'custom:11111111-1111-4111-8111-111111111111';
+  let custom = createSavedSession({ participants: ['A', 'B'], cardIds: [customId, 'date-01', 'date-02', 'date-03', 'date-04', 'date-05'], customCards: [{ id: customId, text: '自作', r18: false }], ownerUserId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', random: () => 0 });
+  for (let i = 0; i < 6; i += 1) { custom = revealCard(custom); custom = nextAnswer(custom); custom = nextAnswer(custom); }
+  assert.equal(completedRoundFavoriteCards(custom).some((card) => card.id === customId), false);
+  let pending = createSession({ participants: ['A', 'B'], deck: decks.find((deck) => deck.id === 'date'), includeChallenges: true, random: () => 0 });
+  pending = revealCard(pending); assert.deepEqual(completedRoundFavoriteCards(pending), []);
+  const r18 = decks.find((deck) => deck.id === 'date').r18Questions[0].id;
+  let adult = createSavedSession({ participants: ['A', 'B'], cardIds: [r18, 'date-01', 'date-02', 'date-03', 'date-04', 'date-05'], adultConfirmed: true, random: () => 0 });
+  for (let i = 0; i < 6; i += 1) { adult = revealCard(adult); adult = nextAnswer(adult); adult = nextAnswer(adult); }
+  assert.equal(completedRoundFavoriteCards(adult).some((card) => card.id === r18), true);
+});
+
 
 test('custom cards mix with favorites, preserve owner snapshot, and keep text out of analytics-shaped records', () => {
   const customId = 'custom:11111111-1111-4111-8111-111111111111';
@@ -93,4 +122,59 @@ test('custom cards mix with favorites, preserve owner snapshot, and keep text ou
   assert.equal(restored.questions.find((card) => card.id === customId).text, '<b>自作</b>😀');
   assert.throws(() => createSavedSession({ participants: ['A', 'B'], cardIds: [customId, ...ids.slice(0, 5)], customCards: [{ id: customId, text: 'x'.repeat(301), r18: false }], ownerUserId: session.ownerUserId }), /不正/);
   const tampered = JSON.parse(target.getItem(SESSION_STORAGE_KEY)); tampered.customQuestions[0].r18 = true; tampered.adultConfirmed = false; target.setItem(SESSION_STORAGE_KEY, JSON.stringify(tampered)); assert.equal(loadSession({ storage: target, now: 1002 }), null);
+});
+
+test('favorite history isolates completed rounds and excludes advanced unseen cards', () => {
+  let session = createSavedSession({ participants: ['A', 'B'], cardIds: allIds.slice(0, 13), random: () => 0 });
+  for (let i = 0; i < 6; i += 1) { session = revealCard(session); session = nextAnswer(session); session = nextAnswer(session); }
+  assert.equal(completedRoundFavoriteCards(session).length, 6);
+  session = continueRound(session);
+  session = advance(session); session = advance(session); // two unseen questions are skipped
+  for (let i = 0; i < 4; i += 1) { session = revealCard(session); session = nextAnswer(session); session = nextAnswer(session); }
+  assert.equal(session.cursor, 12);
+  assert.equal(completedRoundFavoriteCards(session).length, 4);
+  assert.deepEqual(completedRoundFavoriteCards(session).map((card) => card.id), session.questions.slice(8, 12).map((card) => card.id));
+});
+
+test('mixed and partial final rounds expose only the completed round history', () => {
+  const mixed = createMixedSession({ participants: ['A', 'B'], decks: [decks[0], decks[1]], random: () => 0 });
+  let current = mixed;
+  for (let i = 0; i < 6; i += 1) { current = revealCard(current); current = nextAnswer(current); current = nextAnswer(current); }
+  assert.equal(completedRoundFavoriteCards(current).length, 6);
+  assert.ok(new Set(completedRoundFavoriteCards(current).map((card) => card.sourceDeckId)).size >= 2);
+
+  current = createSavedSession({ participants: ['A', 'B'], cardIds: allIds.slice(0, 10), random: () => 0 });
+  for (let i = 0; i < 6; i += 1) { current = revealCard(current); current = nextAnswer(current); current = nextAnswer(current); }
+  current = continueRound(current);
+  for (let i = 0; i < 4; i += 1) { current = revealCard(current); current = nextAnswer(current); current = nextAnswer(current); }
+  assert.equal(current.cursor, 10);
+  assert.equal(completedRoundFavoriteCards(current).length, 4);
+});
+
+test('challenge and adult consent filtering apply after a full round', () => {
+  let challenge = createSession({ participants: ['A', 'B'], deck: date, includeChallenges: true, random: () => 0 });
+  assert.ok(challenge.questions.slice(0, 6).some((card) => card.kind === 'challenge'));
+  for (let i = 0; i < 6; i += 1) { challenge = revealCard(challenge); challenge = nextAnswer(challenge); challenge = nextAnswer(challenge); }
+  assert.ok(challenge.revealedQuestionIds.every((id) => challenge.questions.find((card) => card.id === id)?.kind !== 'challenge'));
+  assert.ok(completedRoundFavoriteCards(challenge).every((card) => card.kind !== 'challenge'));
+
+  const r18 = date.r18Questions[0].id;
+  let adult = createSavedSession({ participants: ['A', 'B'], cardIds: [r18, ...allIds.slice(0, 5)], adultConfirmed: true, random: () => 0 });
+  for (let i = 0; i < 6; i += 1) { adult = revealCard(adult); adult = nextAnswer(adult); adult = nextAnswer(adult); }
+  assert.ok(completedRoundFavoriteCards({ ...adult, adultConfirmed: false }).every((card) => card.id !== r18));
+});
+
+test('revealed history rejects malformed, future, duplicate, unknown, and custom records', () => {
+  const target = storage();
+  const base = createSession({ participants: ['A', 'B'], deck: date, random: () => 0 });
+  saveSession(base, { storage: target, now: 1000 });
+  const mutate = (value) => { const raw = JSON.parse(target.getItem(SESSION_STORAGE_KEY)); value(raw); target.setItem(SESSION_STORAGE_KEY, JSON.stringify(raw)); assert.equal(loadSession({ storage: target, now: 1001 }), null); };
+  mutate((raw) => { raw.revealedQuestionIds = { bad: true }; });
+  saveSession(base, { storage: target, now: 1000 }); mutate((raw) => { raw.revealedQuestionIds = [raw.questionIds[0]]; });
+  saveSession(base, { storage: target, now: 1000 }); mutate((raw) => { raw.revealedQuestionIds = [raw.questionIds[0], raw.questionIds[0]]; });
+  saveSession(base, { storage: target, now: 1000 }); mutate((raw) => { raw.revealedQuestionIds = ['unknown-card']; });
+
+  const customId = 'custom:11111111-1111-4111-8111-111111111111';
+  const custom = createSavedSession({ participants: ['A', 'B'], cardIds: [customId, ...allIds.slice(0, 5)], customCards: [{ id: customId, text: '自作', r18: false }], ownerUserId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', random: () => 0 });
+  saveSession(custom, { storage: target, now: 1000 }); mutate((raw) => { raw.revealedQuestionIds = [customId]; });
 });

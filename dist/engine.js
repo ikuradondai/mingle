@@ -26,7 +26,7 @@ export function createSession({ participants, deck, adultConfirmed = false, incl
   if (includeR18 && (!Array.isArray(deck.r18Questions) || deck.r18Questions.length < 6)) throw new Error('R18質問が不正です');
   const baseQuestions = includeR18 ? composeR18Questions(deck, random) : shuffle(deck.questions, random);
   const questions = includeChallenges ? composeChallenges(baseQuestions, random, includeR18 && !deck.adultOnly, deck.id, names.length) : baseQuestions;
-  return { sessionId: createSessionId(), participants: names, deckId: deck.id, deckIds: [deck.id], mixed: false, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {} };
+  return { sessionId: createSessionId(), participants: names, deckId: deck.id, deckIds: [deck.id], mixed: false, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 // Build a session from a saved account set. Static IDs use the shipped catalog; custom IDs use validated owner snapshots.
@@ -53,7 +53,7 @@ export function createSavedSession({ participants, cardIds, customCards = [], ow
   if (includeR18 && adultConfirmed !== true) throw new Error('成人向け確認が必要です');
   const hasCustom = questions.some((card) => card.sourceDeckId === 'custom');
   if (hasCustom && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerUserId || '')) throw new Error('マイセットの所有者が不正です');
-  return { sessionId: createSessionId(), participants: names, deckId: 'my-set', deckIds: ['my-set'], customSet: true, ownerUserId: hasCustom && typeof ownerUserId === 'string' ? ownerUserId : null, customQuestions: hasCustom ? questions.filter((card) => card.sourceDeckId === 'custom').map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true })) : [], mixed: false, questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {} };
+  return { sessionId: createSessionId(), participants: names, deckId: 'my-set', deckIds: ['my-set'], customSet: true, ownerUserId: hasCustom && typeof ownerUserId === 'string' ? ownerUserId : null, customQuestions: hasCustom ? questions.filter((card) => card.sourceDeckId === 'custom').map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true })) : [], mixed: false, questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 function composeChallenges(cards, random, preserveR18 = false, deckId, participantCount) {
@@ -98,7 +98,7 @@ export function createMixedSession({ participants, decks, includeChallenges = fa
   questions.push(...shuffle(tail, random));
   if (questions.length !== 40 || new Set(questions.map((question) => question.id)).size !== 40) throw new Error('ミックス質問が不正です');
   const finalQuestions = includeChallenges ? composeChallenges(questions, random, false, ids, names.length) : questions;
-  return { sessionId: createSessionId(), participants: names, deckId: 'mix', deckIds: ids, mixed: true, questions: finalQuestions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: false, includeR18: false, includeChallenges, revealed: false, answerIndex: 0, likes: {} };
+  return { sessionId: createSessionId(), participants: names, deckId: 'mix', deckIds: ids, mixed: true, questions: finalQuestions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: false, includeR18: false, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 function composeR18Questions(deck, random) {
@@ -161,7 +161,10 @@ export function summarizeLikes(session, start = 0, end = session?.cursor ?? 0) {
 
 export function revealCard(session) {
   if (session.revealed || isFinished(session) || isRoundComplete(session) || !currentCard(session)) return session;
-  return { ...session, revealed: true };
+  const card = currentCard(session);
+  const eligible = card && card.sourceDeckId !== 'custom' && card.kind !== 'challenge' && card.custom !== true;
+  const revealedQuestionIds = eligible && !session.revealedQuestionIds?.includes(card.id) ? [...(session.revealedQuestionIds || []), card.id] : [...(session.revealedQuestionIds || [])];
+  return { ...session, revealed: true, revealedQuestionIds };
 }
 
 export function likeCurrentAnswer(session) {
@@ -211,6 +214,12 @@ export function continueRound(session) {
   if (!isRoundComplete(session) || isFinished(session)) return session;
   const unlockedUntil = Math.min(session.unlockedUntil + ROUND_SIZE, session.questions.length);
   return { ...session, unlockedUntil, roundStart: session.cursor, roundCount: session.cursor % ROUND_SIZE, roundNumber: Math.floor(session.cursor / ROUND_SIZE) + 1 };
+}
+
+export function completedRoundFavoriteCards(session) {
+  if (!session || (!isRoundComplete(session) && !isFinished(session))) return [];
+  const history = new Set(Array.isArray(session.revealedQuestionIds) ? session.revealedQuestionIds : []);
+  return session.questions.slice(session.roundStart, session.cursor).filter((card) => card && history.has(card.id) && card.sourceDeckId !== 'custom' && card.kind !== 'challenge' && card.custom !== true && (!card.r18 || session.adultConfirmed === true));
 }
 
 export function isRoundComplete(session) {

@@ -39,6 +39,7 @@ export function saveSession(session, options = {}) {
       unlockedUntil: session.unlockedUntil, roundStart: session.roundStart, roundCount: session.roundCount,
       roundNumber: session.roundNumber, revealed: session.revealed === true, answerIndex: session.answerIndex,
       likes: { ...(session.likes || {}) },
+      revealedQuestionIds: Array.isArray(session.revealedQuestionIds) ? [...new Set(session.revealedQuestionIds)] : [],
       feedbackSubmitted: Array.isArray(session.feedbackSubmitted) ? [...new Set(session.feedbackSubmitted.filter((cursor) => Number.isInteger(cursor) && cursor >= 6 && cursor <= session.questions.length))] : [],
     };
     storage.setItem(SESSION_STORAGE_KEY, JSON.stringify(record));
@@ -91,6 +92,15 @@ function hydrate(record, now) {
     if (card.r18 && record.adultConfirmed !== true) throw new Error('r18');
     return { ...card, ...(sources[i] ? { sourceDeckId: sources[i] } : {}) };
   });
+  const hasRevealedHistory = Object.hasOwn(record, 'revealedQuestionIds');
+  if (hasRevealedHistory && !Array.isArray(record.revealedQuestionIds)) throw new Error('revealed-history');
+  const revealedQuestionIds = hasRevealedHistory ? [...new Set(record.revealedQuestionIds)] : [];
+  if (revealedQuestionIds.length > 40 || revealedQuestionIds.length !== (hasRevealedHistory ? record.revealedQuestionIds.length : 0) || revealedQuestionIds.some((id) => typeof id !== 'string' || !record.questionIds.includes(id))) throw new Error('revealed-history');
+  const questionIndex = new Map(record.questionIds.map((id, index) => [id, index]));
+  if (revealedQuestionIds.some((id) => {
+    const card = questions[questionIndex.get(id)];
+    return card?.sourceDeckId === 'custom' || card?.custom === true || card?.kind === 'challenge' || questionIndex.get(id) > record.cursor || (!record.revealed && questionIndex.get(id) >= record.cursor);
+  })) throw new Error('revealed-history');
   const finalLength = record.questionIds.length;
   const validUnlock = (value) => value === finalLength || (value >= 6 && value < finalLength && value % 6 === 0);
   if (!Number.isInteger(record.cursor) || record.cursor < 0 || record.cursor > finalLength || !Number.isInteger(record.unlockedUntil) || !validUnlock(record.unlockedUntil) || record.cursor > record.unlockedUntil || (record.cursor === finalLength && record.unlockedUntil !== finalLength)) throw new Error('progress');
@@ -105,7 +115,7 @@ function hydrate(record, now) {
   }
   const feedbackSubmitted = Array.isArray(record.feedbackSubmitted) ? [...new Set(record.feedbackSubmitted.filter((cursor) => Number.isInteger(cursor) && cursor >= 6 && cursor <= finalLength && cursor <= record.cursor))] : [];
   if (record.cursor >= finalLength) return null;
-  return { sessionId: record.sessionId, participants: [...record.participants], deckId: record.deckId, deckIds, customSet, ownerUserId: hasCustom ? record.ownerUserId : null, customQuestions: hasCustom ? record.customQuestions.map((card) => ({ ...card })) : [], mixed: record.mixed === true, questions, cursor: record.cursor, unlockedUntil: record.unlockedUntil, roundStart: Number.isInteger(record.roundStart) ? record.roundStart : Math.max(0, record.unlockedUntil - 6), roundCount: Number.isInteger(record.roundCount) ? record.roundCount : record.cursor % 6, roundNumber: Number.isInteger(record.roundNumber) ? record.roundNumber : Math.floor(record.cursor / 6) + 1, adultConfirmed: record.adultConfirmed === true, includeR18: record.includeR18 === true, includeChallenges: record.includeChallenges === true, revealed: record.revealed === true, answerIndex: record.answerIndex, likes: { ...likes }, feedbackSubmitted };
+  return { sessionId: record.sessionId, participants: [...record.participants], deckId: record.deckId, deckIds, customSet, ownerUserId: hasCustom ? record.ownerUserId : null, customQuestions: hasCustom ? record.customQuestions.map((card) => ({ ...card })) : [], mixed: record.mixed === true, questions, cursor: record.cursor, unlockedUntil: record.unlockedUntil, roundStart: Number.isInteger(record.roundStart) ? record.roundStart : Math.max(0, record.unlockedUntil - 6), roundCount: Number.isInteger(record.roundCount) ? record.roundCount : record.cursor % 6, roundNumber: Number.isInteger(record.roundNumber) ? record.roundNumber : Math.floor(record.cursor / 6) + 1, adultConfirmed: record.adultConfirmed === true, includeR18: record.includeR18 === true, includeChallenges: record.includeChallenges === true, revealed: record.revealed === true, answerIndex: record.answerIndex, likes: { ...likes }, feedbackSubmitted, revealedQuestionIds };
 }
 
 export function loadSession(options = {}) {
