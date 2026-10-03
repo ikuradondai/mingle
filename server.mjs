@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { sessionHandler, statsHandler } from './server-side/admin-api.mjs';
 import trackHandler from './api/track.js';
 import feedbackHandler from './api/feedback.js';
+import accountHandler from './api/account.js';
 
 const root = normalize(fileURLToPath(new URL('./dist/', import.meta.url))).replace(/[\\/]+$/, '');
 const port = Number(process.env.PORT || 5180);
@@ -27,6 +28,7 @@ const server = createServer((request, response) => {
   if (pathname === '/api/admin/stats') return statsHandler(request, response);
   if (pathname === '/api/track') return trackHandler(request, response);
   if (pathname === '/api/feedback') return feedbackHandler(request, response);
+  if (pathname === '/api/account' || pathname.startsWith('/api/account/')) return accountHandler(request, response);
   if (pathname === '/admin' || pathname === '/admin/') request.url = '/admin.html';
   const target = safePath(request.url || '/');
   if (!target) { response.writeHead(400); response.end('Bad Request'); return; }

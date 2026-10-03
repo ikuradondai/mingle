@@ -15,5 +15,6 @@ export function trackSessionProgress(previousSession, nextSession) {
   }
   for (const cursor of [6, 12, 18, 24, 30, 36]) if (previous < cursor && next >= cursor) progressEvent('round_complete', nextSession.sessionId, themeId, `round-complete-${cursor}`);
   if (Number(nextSession.unlockedUntil) > Number(previousSession.unlockedUntil || 0) && previous >= Number(previousSession.unlockedUntil || 0)) progressEvent('round_continue', nextSession.sessionId, themeId, `continue-${nextSession.unlockedUntil}`);
-  if (previous < 40 && next >= 40) progressEvent('session_complete', nextSession.sessionId, themeId, 'session-complete');
+  const total = Array.isArray(nextSession.questions) ? nextSession.questions.length : 40;
+  if (previous < total && next >= total) progressEvent('session_complete', nextSession.sessionId, themeId, 'session-complete');
 }

@@ -3,7 +3,8 @@ const COMPLETED_CURSORS = new Set([6, 12, 18, 24, 30, 36, 40]);
 export function feedbackKey(sessionId, cursor) { return `${sessionId}:${cursor}`; }
 
 export function buildFeedbackPayload(session, cursor, rating = null, text = '') {
-  if (!session || typeof session.sessionId !== 'string' || !COMPLETED_CURSORS.has(cursor)) throw new Error('feedback');
+  const total = Array.isArray(session?.questions) ? session.questions.length : 40;
+  if (!session || typeof session.sessionId !== 'string' || cursor < 6 || cursor > total || (cursor < total && cursor % 6 !== 0)) throw new Error('feedback');
   const trimmed = typeof text === 'string' ? text.trim() : '';
   if (trimmed.length > 1000) throw new Error('feedback-text');
   const normalizedRating = rating === 'positive' || rating === 'needs_improvement' ? rating : null;

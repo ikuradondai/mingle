@@ -7,6 +7,7 @@ function createSessionId() {
   return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 import { challenges } from './data/challenges.js';
+import { decks } from './data/decks.js';
 
 export function normalizeParticipants(participants) {
   if (!Array.isArray(participants) || participants.length < 2 || participants.length > MAX_PARTICIPANTS) throw new Error('参加者は2〜8人で入力してください');
@@ -26,6 +27,22 @@ export function createSession({ participants, deck, adultConfirmed = false, incl
   const baseQuestions = includeR18 ? composeR18Questions(deck, random) : shuffle(deck.questions, random);
   const questions = includeChallenges ? composeChallenges(baseQuestions, random, includeR18 && !deck.adultOnly, deck.id, names.length) : baseQuestions;
   return { sessionId: createSessionId(), participants: names, deckId: deck.id, deckIds: [deck.id], mixed: false, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {} };
+}
+
+// Build a session from a saved account set. Only the canonical shipped catalog
+// is used; callers cannot supply question text or source metadata.
+export function createSavedSession({ participants, cardIds, adultConfirmed = false, random = Math.random }) {
+  const names = normalizeParticipants(participants);
+  if (!Array.isArray(cardIds) || cardIds.length < ROUND_SIZE || cardIds.length > 40 || new Set(cardIds).size !== cardIds.length || cardIds.some((id) => typeof id !== 'string')) throw new Error('マイセットの質問が不正です');
+  const catalog = new Map();
+  decks.forEach((deck) => {
+    deck.questions.forEach((card) => catalog.set(card.id, { ...card, sourceDeckId: deck.id, r18: card.r18 === true }));
+    (deck.r18Questions || []).forEach((card) => catalog.set(card.id, { ...card, sourceDeckId: deck.id, r18: true }));
+  });
+  const questions = shuffle(cardIds.map((id) => catalog.get(id) || (() => { throw new Error('マイセットの質問が不正です'); })()), random);
+  const includeR18 = questions.some((card) => card.r18 === true);
+  if (includeR18 && adultConfirmed !== true) throw new Error('成人向け確認が必要です');
+  return { sessionId: createSessionId(), participants: names, deckId: 'my-set', deckIds: ['my-set'], customSet: true, mixed: false, questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {} };
 }
 
 function composeChallenges(cards, random, preserveR18 = false, deckId, participantCount) {
