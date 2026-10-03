@@ -9,9 +9,9 @@ import { newDecks } from './new-decks.js';
 export const decks = [
   {
     id: 'date',
-    title: 'はじめてのデート',
-    subtitle: '恋愛・距離感・価値観',
-    description: '恋人候補と、恋愛や距離感、これからの関係について話す質問です。',
+    title: '初対面の初デート',
+    subtitle: 'アプリなどで、初めて顔を合わせる二人に',
+    description: '初めて顔を合わせる二人が、緊張をほどきながら恋愛や距離感を知る質問です。',
     adultOnly: false,
     r18Available: true,
     accent: '#E8798A',
@@ -412,6 +412,13 @@ export const decks = [
 
 decks.push(...newDecks);
 
+const acquaintanceIndex = decks.findIndex((deck) => deck.id === 'acquaintance-date');
+const dateIndex = decks.findIndex((deck) => deck.id === 'date');
+if (acquaintanceIndex >= 0 && dateIndex >= 0 && acquaintanceIndex !== dateIndex + 1) {
+  const [acquaintanceDate] = decks.splice(acquaintanceIndex, 1);
+  decks.splice(decks.findIndex((deck) => deck.id === 'date') + 1, 0, acquaintanceDate);
+}
+
 const dateDeck = decks.find((deck) => deck.id === 'date');
 const intimacyDeck = decks.find((deck) => deck.id === 'intimacy');
 const r18QuestionIds = [
@@ -422,3 +429,13 @@ dateDeck.r18Questions = r18QuestionIds.map((id) => ({
   ...intimacyDeck.questions.find((question) => question.id === id),
   r18: true,
 }));
+
+const acquaintanceDateDeck = decks.find((deck) => deck.id === 'acquaintance-date');
+if (acquaintanceDateDeck && intimacyDeck) {
+  acquaintanceDateDeck.r18Available = true;
+  acquaintanceDateDeck.r18Questions = r18QuestionIds.map((id, index) => ({
+    ...intimacyDeck.questions.find((question) => question.id === id),
+    id: `${acquaintanceDateDeck.id}-r18-${String(index + 1).padStart(2, '0')}`,
+    r18: true,
+  }));
+}

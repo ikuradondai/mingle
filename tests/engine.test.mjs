@@ -18,9 +18,9 @@ function answerCurrent(value, step = nextAnswer) {
   return value;
 }
 
-test('contains twenty-seven complete decks with unique question ids', () => {
-  assert.equal(decks.length, 27);
-  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 1080);
+test('contains complete decks with unique question ids', () => {
+  assert.equal(decks.length, 28);
+  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 1120);
   for (const item of decks) {
     assert.equal(item.questions.length, 40, item.id);
     assert.equal(new Set(item.questions.map((card) => card.id)).size, 40, item.id);
@@ -29,7 +29,18 @@ test('contains twenty-seven complete decks with unique question ids', () => {
     assert.equal(item.questions.every((question) => question.r18 === true), true, item.id);
   }
   assert.equal(new Set(challenges.map((card) => card.id)).size, 29);
-  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 1109);
+  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 1149);
+});
+
+test('acquaintance date keeps independent 40-card and R18 sources', () => {
+  const acquaintance = decks.find((item) => item.id === 'acquaintance-date');
+  assert.ok(acquaintance);
+  assert.equal(acquaintance.questions.length, 40);
+  assert.equal(acquaintance.questions.every((question) => question.r18 === false), true);
+  assert.equal(acquaintance.r18Questions.length, 8);
+  assert.equal(new Set([...acquaintance.questions, ...acquaintance.r18Questions].map((question) => question.id)).size, 48);
+  assert.equal(acquaintance.r18Questions.every((question) => question.id.startsWith('acquaintance-date-r18-') && question.r18 === true), true);
+  assert.equal(acquaintance.questions.some((question) => question.touch), false);
 });
 
 test('omiai is a regular non-touch theme and keeps concrete R18 refinements out of date', () => {
