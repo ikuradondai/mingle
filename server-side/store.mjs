@@ -16,6 +16,25 @@ function localRate(key, now) { const db = readLocal(); const r = db.rate[key] ||
 export function persistentStoreAvailable() { return hasRedis() || localEnabled; }
 export function usingLocalStore() { return !hasRedis() && localEnabled; }
 export async function consumeRate(key) { if (hasRedis()) return Number(await redisCommand(['EVAL', "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],60) end; return n", 1, `${REDIS_PREFIX}:rate:${key}`])); if (localEnabled) return localRate(key, Date.now()); throw new Error('store unavailable'); }
+export async function consumeAiQuota(key) {
+  const limit = (value, fallback) => (/^[1-9][0-9]{0,5}$/.test(String(value || '')) ? Number(value) : fallback);
+  const minuteLimit = limit(process.env.AI_MINUTE_LIMIT, 3);
+  const dailyLimit = limit(process.env.AI_DAILY_LIMIT, 30);
+  const day = new Date().toISOString().slice(0, 10);
+  if (hasRedis()) {
+    const result = await redisCommand(['EVAL', "local m=redis.call('INCR',KEYS[1]); if m==1 then redis.call('EXPIRE',KEYS[1],60) end; local d=redis.call('INCR',KEYS[2]); if d==1 then redis.call('EXPIRE',KEYS[2],86400) end; return {m,d}", 2, `${REDIS_PREFIX}:ai:minute:${key}`, `${REDIS_PREFIX}:ai:day:${day}:${key}`]);
+    const values = Array.isArray(result) ? result : [result]; return { minute: Number(values[0]), daily: Number(values[1]), minuteLimit, dailyLimit };
+  }
+  if (localEnabled) {
+    const db = readLocal(); const now = Date.now(); const minuteKey = `ai:${key}`; const dayKey = `${day}:${key}`;
+    const minute = db.aiMinute ||= {}; const daily = db.aiDaily ||= {};
+    if (!minute[minuteKey] || minute[minuteKey].reset < now) minute[minuteKey] = { count: 0, reset: now + 60000 };
+    if (!daily[dayKey]) daily[dayKey] = { count: 0 };
+    minute[minuteKey].count += 1; daily[dayKey].count += 1; saveLocal();
+    return { minute: minute[minuteKey].count, daily: daily[dayKey].count, minuteLimit, dailyLimit };
+  }
+  throw new Error('store unavailable');
+}
 export async function recordEvent({ type, pageId, themeId, eventId, date }) {
   if (hasRedis()) {
     const script = `if redis.call('SET', KEYS[6] .. ARGV[1], '1', 'NX', 'EX', 172800) == false then return 0 end; redis.call('SADD', KEYS[7], ARGV[2]); redis.call('SETNX', KEYS[8], ARGV[7]); redis.call('SET', KEYS[9], ARGV[7]); if ARGV[3] == 'page_view' then redis.call('HINCRBY', KEYS[1], 'pageViews', 1); redis.call('HINCRBY', KEYS[2], 'pageViews', 1); redis.call('HINCRBY', KEYS[3], ARGV[4], 1) elseif ARGV[3] == 'theme_start' then redis.call('HINCRBY', KEYS[1], 'themeStarts', 1); redis.call('HINCRBY', KEYS[2], 'themeStarts', 1); redis.call('HINCRBY', KEYS[4], ARGV[5], 1) else redis.call('HINCRBY', KEYS[1], ARGV[6], 1); redis.call('HINCRBY', KEYS[2], ARGV[6], 1); redis.call('HINCRBY', KEYS[5], ARGV[5] .. ':' .. ARGV[6], 1) end; return 1`;

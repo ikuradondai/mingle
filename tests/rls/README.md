@@ -18,3 +18,16 @@ $env:MINGLE_SITE_ROOT=(Get-Location).Path
 node ../artifacts/accounts/sql-runtime/avatar-verify.mjs
 Remove-Item ../artifacts/accounts/sql-runtime/avatar-verify.mjs
 ```
+
+Set-draft migration/RPC verification (PGlite):
+
+```powershell
+Copy-Item tests/rls/set-draft-verify.mjs ../artifacts/accounts/sql-runtime/set-draft-verify.mjs
+Push-Location ../artifacts/accounts/sql-runtime
+$env:MINGLE_SITE_ROOT=(Resolve-Path ../../../site).Path
+node set-draft-verify.mjs
+Pop-Location
+Remove-Item ../artifacts/accounts/sql-runtime/set-draft-verify.mjs
+```
+
+The temporary runtime already contains the pinned `@electric-sql/pglite` dependency; the repository itself does not add a PGlite dependency.

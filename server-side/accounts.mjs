@@ -1,5 +1,6 @@
 import { decks } from '../dist/data/decks.js';
 import { createHash, randomBytes } from 'node:crypto';
+import { consumeAiQuota, persistentStoreAvailable } from './store.mjs';
 
 const MAX_NAME = 80;
 const MAX_CARDS = 40;
@@ -11,6 +12,7 @@ const SHARE_TOKEN_BYTES = 32;
 const AVATAR_BUCKET = 'profile-avatars';
 const AVATAR_PATH = (userId) => `${userId}/avatar.jpg`;
 const AVATAR_MAX_BYTES = 256 * 1024;
+const DRAFT_MAX_ITEMS = 40;
 
 export const ACCOUNT_ERRORS = {
   unavailable: 'FEATURE_UNAVAILABLE',
@@ -62,8 +64,10 @@ async function supabaseFetch(config, path, options = {}, fetchImpl = fetch) {
   }
   function storagePath(path) { return String(path).split('/').map((part) => encodeURIComponent(part)).join('/'); }
   function storageUrl(value, config) { if (typeof value !== 'string' || !value) return null; return /^https?:\/\//i.test(value) ? value : `${config.url}/storage/v1${value.startsWith('/') ? value : `/${value}`}`; }
-export function createAccountService({ env = process.env, fetchImpl = fetch } = {}) {
+export function createAccountService({ env = process.env, fetchImpl = fetch, rateLimitImpl = consumeAiQuota } = {}) {
   const config = accountConfig(env);
+  const openAiKey = typeof env.OPENAI_API_KEY === 'string' ? env.OPENAI_API_KEY : '';
+  const openAiModel = typeof env.OPENAI_SET_MODEL === 'string' && env.OPENAI_SET_MODEL.trim() ? env.OPENAI_SET_MODEL.trim() : 'gpt-5.6-luna';
   async function requireUser(req) {
     if (!config) throw fail(503, ACCOUNT_ERRORS.unavailable);
     const authorization = authHeader(req);
@@ -115,7 +119,95 @@ export function createAccountService({ env = process.env, fetchImpl = fetch } = 
     let customCards = []; let customCardsAvailable = true;
     try { customCards = (await customRows(user.id, authorization)).map(mapCustom); } catch (error) { if (missingCustomTable(error)) customCardsAvailable = false; else throw error; }
     let avatarUrlValue = null; try { avatarUrlValue = await avatarUrl(user.id, authorization); } catch { /* Storage may not be configured; account data remains available. */ }
-    return { user: { id: user.id, email: user.email || null, displayName: userDisplayName(user), avatarUrl: avatarUrlValue }, account: { deletionAvailable: Boolean(config.serviceKey) }, favorites, sets, customCards, customCardsAvailable };
+    let drafts = []; let draftsAvailable = true;
+    try {
+      const draftRows = await rows('my_set_drafts', user.id, authorization, '&select=id,source_set_id,name,items,updated_at&order=updated_at.desc');
+      drafts = draftRows.map(mapDraft);
+    } catch (error) { if (missingDraftTable(error)) draftsAvailable = false; else throw error; }
+    return { user: { id: user.id, email: user.email || null, displayName: userDisplayName(user), avatarUrl: avatarUrlValue }, account: { deletionAvailable: Boolean(config.serviceKey), completionAvailable: Boolean(config.serviceKey) }, favorites, sets, customCards, customCardsAvailable, drafts, draftsAvailable, aiGenerationAvailable: Boolean(openAiKey && (persistentStoreAvailable() || rateLimitImpl !== consumeAiQuota)) };
+  }
+  async function draft(req, draftId = '') {
+    const { user, authorization } = await requireUser(req);
+    if (!draftId && req.method === 'GET') {
+      const found = await rows('my_set_drafts', user.id, authorization, '&select=id,source_set_id,name,items,updated_at&order=updated_at.desc');
+      return { drafts: found.map(mapDraft), draftsAvailable: true };
+    }
+    if (!draftId && req.method === 'POST') {
+      const input = req.body || {};
+      if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['name', 'items', 'sourceSetId'].includes(key)) || !Object.prototype.hasOwnProperty.call(input, 'name') || !Object.prototype.hasOwnProperty.call(input, 'items')) throw fail(400, ACCOUNT_ERRORS.invalid);
+      const name = draftName(input.name); const items = draftItems(input.items);
+      let sourceSetId = null;
+      if (Object.prototype.hasOwnProperty.call(input, 'sourceSetId')) {
+        if (input.sourceSetId !== null && (typeof input.sourceSetId !== 'string' || !/^[0-9a-f-]{16,64}$/i.test(input.sourceSetId))) throw fail(400, ACCOUNT_ERRORS.invalid);
+        sourceSetId = input.sourceSetId;
+        if (sourceSetId) {
+          const source = await rows('my_sets', user.id, authorization, `&id=eq.${encodeURIComponent(sourceSetId)}&select=id`);
+          if (!source.length) throw fail(404, 'NOT_FOUND');
+        }
+      }
+      if (items.some((item) => item.kind === 'saved' && item.cardId.startsWith('custom:'))) {
+        const owned = await ownerCardIds(user.id, authorization);
+        if (items.some((item) => item.kind === 'saved' && item.cardId.startsWith('custom:') && !owned.has(item.cardId))) throw fail(403, ACCOUNT_ERRORS.forbidden);
+      }
+      const created = await supabaseFetch(config, '/rest/v1/my_set_drafts', { method: 'POST', body: JSON.stringify({ user_id: user.id, source_set_id: sourceSetId, name, items, status: 'draft' }), headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl);
+      const row = Array.isArray(created) ? created[0] : created; if (!row) throw fail(502, ACCOUNT_ERRORS.unavailable);
+      return { draft: mapDraft(row) };
+    }
+    if (!draftId || !/^[0-9a-f-]{16,64}$/i.test(draftId)) throw fail(400, ACCOUNT_ERRORS.invalid);
+    const path = `/rest/v1/my_set_drafts?id=eq.${encodeURIComponent(draftId)}&user_id=eq.${encodeURIComponent(user.id)}`;
+    if (req.method === 'PATCH') {
+      const input = req.body || {}; if (!input || typeof input !== 'object' || Array.isArray(input) || !Object.keys(input).length || Object.keys(input).some((key) => !['name', 'items'].includes(key))) throw fail(400, ACCOUNT_ERRORS.invalid);
+      const update = {}; if (Object.prototype.hasOwnProperty.call(input, 'name')) update.name = draftName(input.name); if (Object.prototype.hasOwnProperty.call(input, 'items')) update.items = draftItems(input.items);
+      if (update.items?.some((item) => item.kind === 'saved' && item.cardId.startsWith('custom:'))) { const owned = await ownerCardIds(user.id, authorization); if (update.items.some((item) => item.kind === 'saved' && item.cardId.startsWith('custom:') && !owned.has(item.cardId))) throw fail(403, ACCOUNT_ERRORS.forbidden); }
+      const updated = await supabaseFetch(config, path, { method: 'PATCH', body: JSON.stringify(update), headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl); const row = Array.isArray(updated) ? updated[0] : updated; if (!row) throw fail(404, 'NOT_FOUND'); return { draft: mapDraft(row) };
+    }
+    if (req.method === 'DELETE') { const deleted = await supabaseFetch(config, path, { method: 'DELETE', headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl); if (Array.isArray(deleted) && !deleted.length) throw fail(404, 'NOT_FOUND'); return { deleted: true, id: draftId }; }
+    throw fail(405, 'METHOD_NOT_ALLOWED');
+  }
+  async function completeDraft(req, draftId = '') {
+    const { user, authorization } = await requireUser(req);
+    if (!config.serviceKey) throw fail(503, ACCOUNT_ERRORS.unavailable);
+    if (!/^[0-9a-f-]{16,64}$/i.test(draftId)) throw fail(400, ACCOUNT_ERRORS.invalid);
+    const found = await rows('my_set_drafts', user.id, authorization, `&id=eq.${encodeURIComponent(draftId)}&select=id,name,source_set_id,items`);
+    if (!found.length) throw fail(404, 'NOT_FOUND');
+    const items = draftItems(found[0].items); if (items.length < MIN_CARDS) throw fail(400, ACCOUNT_ERRORS.invalid);
+    if (items.some((item) => item.kind === 'saved' && item.cardId.startsWith('custom:'))) { const owned = await ownerCardIds(user.id, authorization); if (items.some((item) => item.kind === 'saved' && item.cardId.startsWith('custom:') && !owned.has(item.cardId))) throw fail(403, ACCOUNT_ERRORS.forbidden); }
+    const rpcConfig = { ...config, key: config.serviceKey };
+    const result = await supabaseFetch(rpcConfig, '/rest/v1/rpc/complete_my_set_draft', { method: 'POST', body: JSON.stringify({ p_draft_id: draftId, p_user_id: user.id, p_expected_items: items }), headers: { Authorization: `Bearer ${config.serviceKey}`, Prefer: 'return=representation' } }, fetchImpl);
+    const value = Array.isArray(result) ? result[0] : result; const setId = value?.id || value?.set_id; if (!setId) throw fail(502, ACCOUNT_ERRORS.unavailable);
+    const sets = await rows('my_sets', user.id, authorization, `&id=eq.${encodeURIComponent(setId)}&select=id,name,card_ids,created_at,updated_at`); if (!sets.length) throw fail(502, ACCOUNT_ERRORS.unavailable);
+    return { set: sets[0] };
+  }
+  async function aiQuestions(req) {
+    const { user } = await requireUser(req);
+    if (!openAiKey) throw fail(503, 'AI_GENERATION_UNAVAILABLE');
+    let quota; try { quota = await rateLimitImpl(user.id); } catch { throw fail(503, 'AI_GENERATION_UNAVAILABLE'); }
+    const minute = typeof quota === 'object' ? Number(quota.minute) : Number(quota);
+    const daily = typeof quota === 'object' ? Number(quota.daily) : 0;
+    const minuteLimit = typeof quota === 'object' ? Number(quota.minuteLimit) : 10;
+    const dailyLimit = typeof quota === 'object' ? Number(quota.dailyLimit) : Number.POSITIVE_INFINITY;
+    if (!Number.isFinite(minute) || !Number.isFinite(daily) || minute > minuteLimit || daily > dailyLimit) throw fail(429, 'AI_RATE_LIMITED');
+    const input = req.body || {};
+    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['theme', 'tone', 'count'].includes(key)) || typeof input.theme !== 'string' || typeof input.tone !== 'string' || ![6, 12].includes(input.count)) throw fail(400, ACCOUNT_ERRORS.invalid);
+    const theme = input.theme.trim(); const tone = input.tone.trim();
+    if (!theme || Array.from(theme).length > 80 || !tone || Array.from(tone).length > 80 || /[\u0000-\u001f\u007f\u2028\u2029]/u.test(theme + tone)) throw fail(400, ACCOUNT_ERRORS.invalid);
+    let response;
+    try {
+      response = await fetchImpl('https://api.openai.com/v1/responses', { method: 'POST', signal: AbortSignal.timeout(25000), headers: { Authorization: `Bearer ${openAiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: openAiModel, store: false, instructions: '日本語の相互自己開示質問を作成する。露骨な性的内容、危険行為、差別、個人情報の要求を含めない。出力は指定されたJSONだけにする。', max_output_tokens: 3000, input: [{ role: 'user', content: [{ type: 'input_text', text: `テーマ: ${theme}\nトーン: ${tone}\n${input.count}件の質問案を作成してください。` }] }], text: { format: { type: 'json_schema', name: 'mingle_question_set', strict: true, schema: { type: 'object', additionalProperties: false, properties: { name: { type: 'string' }, questions: { type: 'array', minItems: input.count, maxItems: input.count, items: { type: 'object', additionalProperties: false, properties: { text: { type: 'string' }, r18: { type: 'boolean', enum: [false] } }, required: ['text', 'r18'] } } }, required: ['name', 'questions'] } } } }) });
+    } catch { throw fail(503, 'AI_GENERATION_FAILED'); }
+    if (!response?.ok) throw fail(503, 'AI_GENERATION_FAILED');
+    let payload; try { payload = await response.json(); } catch { throw fail(503, 'AI_GENERATION_FAILED'); }
+    let text = payload?.output_text;
+    if (!text && Array.isArray(payload?.output)) text = payload.output.flatMap((item) => item.content || []).find((part) => part.type === 'output_text')?.text;
+    let generated; try { generated = JSON.parse(text); } catch { throw fail(503, 'AI_GENERATION_FAILED'); }
+    if (!generated || typeof generated !== 'object' || Array.isArray(generated) || Object.keys(generated).some((key) => !['name', 'questions'].includes(key)) || !Array.isArray(generated.questions) || generated.questions.length !== input.count) throw fail(503, 'AI_GENERATION_FAILED');
+    let questions; try { questions = generated.questions.map((question) => {
+      if (!question || typeof question !== 'object' || Array.isArray(question) || Object.keys(question).length !== 2 || question.r18 !== false) throw new Error('invalid');
+      return { text: customText(question.text), r18: false, origin: 'ai' };
+    }); } catch { throw fail(503, 'AI_GENERATION_FAILED'); }
+    if (new Set(questions.map((question) => question.text)).size !== questions.length) throw fail(503, 'AI_GENERATION_FAILED');
+    let name; try { name = draftName(generated.name); } catch { throw fail(503, 'AI_GENERATION_FAILED'); }
+    return { name, questions };
   }
   async function profile(req) {
     const { user, authorization } = await requireUser(req);
@@ -243,6 +335,28 @@ export function createAccountService({ env = process.env, fetchImpl = fetch } = 
     if (!image.length || image.length > AVATAR_MAX_BYTES || image[0] !== 0xff || image[1] !== 0xd8 || image[2] !== 0xff || image.at(-2) !== 0xff || image.at(-1) !== 0xd9) throw fail(400, ACCOUNT_ERRORS.invalid);
     return image;
   }
+  function draftName(value) {
+    if (typeof value !== 'string') throw fail(400, ACCOUNT_ERRORS.invalid);
+    const name = value.trim(); if (!name || Array.from(name).length > MAX_NAME) throw fail(400, ACCOUNT_ERRORS.invalid);
+    return name;
+  }
+  function draftItems(value) {
+    if (!Array.isArray(value) || value.length > DRAFT_MAX_ITEMS) throw fail(400, ACCOUNT_ERRORS.invalid);
+    const ids = new Set(); const texts = new Set();
+    return value.map((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item) || !['saved', 'custom'].includes(item.kind)) throw fail(400, ACCOUNT_ERRORS.invalid);
+      if (item.kind === 'saved') {
+        if (Object.keys(item).length !== 2 || typeof item.cardId !== 'string' || ids.has(item.cardId)) throw fail(400, ACCOUNT_ERRORS.invalid);
+        if (item.cardId.startsWith('custom:') ? !customUuid(item.cardId) : !validCardId(item.cardId)) throw fail(400, ACCOUNT_ERRORS.invalid);
+        ids.add(item.cardId); return { kind: 'saved', cardId: item.cardId };
+      }
+      if (Object.keys(item).length !== 4 || typeof item.text !== 'string' || typeof item.r18 !== 'boolean' || !['user', 'ai'].includes(item.origin)) throw fail(400, ACCOUNT_ERRORS.invalid);
+      const text = customText(item.text); if (texts.has(text)) throw fail(400, ACCOUNT_ERRORS.invalid); texts.add(text);
+      return { kind: 'custom', text, r18: item.r18, origin: item.origin };
+    });
+  }
+  function mapDraft(row) { return { id: row.id, sourceSetId: row.source_set_id || null, name: row.name, items: Array.isArray(row.items) ? row.items : [], updatedAt: row.updated_at }; }
+  function missingDraftTable(error) { if (error?.status !== 404) return false; const remote = error.remote || {}; return (remote.code === 'PGRST205' || remote.code === '42P01') && /my_set_drafts/i.test(JSON.stringify(remote)); }
   function avatarCacheBust(url) { if (!url) return null; return `${url}${url.includes('?') ? '&' : '?'}v=${Date.now().toString(36)}`; }
   async function avatarUrl(userId, authorization) {
     try {
@@ -276,7 +390,7 @@ export function createAccountService({ env = process.env, fetchImpl = fetch } = 
     await supabaseFetch({ ...config, key: config.serviceKey }, `/auth/v1/admin/users/${encodeURIComponent(user.id)}`, { method: 'DELETE', body: JSON.stringify({ should_soft_delete: false }), headers: { Authorization: `Bearer ${config.serviceKey}` } }, fetchImpl);
     return { deleted: true };
   }
-  return { account, profile, avatar, favorite, set, customCard, shareSet, stopShare, publicShare, removeAccount, available: Boolean(config), config: config && { url: config.url, key: config.key, googleEnabled: config.googleEnabled } };
+  return { account, profile, avatar, favorite, set, customCard, draft, completeDraft, aiQuestions, shareSet, stopShare, publicShare, removeAccount, available: Boolean(config), config: config && { url: config.url, key: config.key, googleEnabled: config.googleEnabled } };
 }
 
 export { MAX_NAME, MAX_CARDS, MIN_CARDS, DISPLAY_NAME_MAX, CARD_IDS, CUSTOM_TEXT_MAX };

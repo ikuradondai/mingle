@@ -259,10 +259,73 @@ test('custom card account read degrades only when its table is missing', async (
   const missing = createAccountService({ ...base, fetchImpl: async (url) => {
     if (url.endsWith('/auth/v1/user')) return response(200, { id: 'owner-1' });
     if (url.includes('/custom_cards')) return response(404, { code: 'PGRST205', message: 'custom_cards missing' });
+    if (url.includes('/my_set_drafts')) return response(404, { code: 'PGRST205', message: 'my_set_drafts missing' });
     return response(200, []);
   } });
   const result = await missing.account(request('/api/account'));
-  assert.equal(result.customCardsAvailable, false); assert.deepEqual(result.customCards, []);
+  assert.equal(result.customCardsAvailable, false); assert.deepEqual(result.customCards, []); assert.equal(result.draftsAvailable, false); assert.deepEqual(result.drafts, []);
   const broken = createAccountService({ ...base, fetchImpl: async (url) => url.endsWith('/auth/v1/user') ? response(200, { id: 'owner-1' }) : response(500, { message: 'database down' }) });
   await assert.rejects(() => broken.account(request('/api/account')), (error) => error.status === 502);
+});
+
+test('set drafts validate bounded items and owner-scoped source sets', async () => {
+  const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const calls = [];
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'owner-1' });
+    if (url.includes('/my_sets')) return response(200, []);
+    if (url.includes('/my_set_drafts')) return response(201, [{ id: '11111111-1111-1111-1111-111111111111', source_set_id: null, name: 'Ideas', items: [], updated_at: 'now' }]);
+    return response(200, []);
+  } });
+  const created = await service.draft({ ...request('/api/account/set-drafts', { method: 'POST', body: { name: ' Ideas ', items: [] } }), body: { name: ' Ideas ', items: [] } });
+  assert.equal(created.draft.name, 'Ideas'); assert.deepEqual(created.draft.items, []);
+  await assert.rejects(() => service.draft({ ...request('/api/account/set-drafts', { method: 'POST', body: { name: 'x', items: [{ kind: 'saved', cardId: 'date-01' }, { kind: 'saved', cardId: 'date-01' }] } }), body: { name: 'x', items: [{ kind: 'saved', cardId: 'date-01' }, { kind: 'saved', cardId: 'date-01' }] } }), (error) => error.status === 400);
+  await assert.rejects(() => service.draft({ ...request('/api/account/set-drafts', { method: 'POST', body: { name: 'x', items: [], sourceSetId: '11111111-1111-1111-1111-111111111111' } }), body: { name: 'x', items: [], sourceSetId: '11111111-1111-1111-1111-111111111111' } }), (error) => error.status === 404);
+  assert.ok(calls.some((call) => call.url.includes('/my_set_drafts')));
+});
+
+test('draft completion keeps the six-card boundary and uses atomic RPC', async () => {
+  const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const draftRow = { id: '22222222-2222-2222-2222-222222222222', source_set_id: null, name: 'Ready', items: ['date-01','date-02','date-03','date-04','date-05'].map((cardId) => ({ kind: 'saved', cardId })) };
+  const calls = [];
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, SUPABASE_SERVICE_ROLE_KEY: 'service-role-test' }, fetchImpl: async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'owner-1' });
+    if (url.includes('/my_set_drafts')) return response(200, [draftRow]);
+    if (url.includes('/rpc/complete_my_set_draft')) return response(200, { id: 'set-1' });
+    if (url.includes('/my_sets')) return response(200, [{ id: 'set-1', name: 'Ready', card_ids: ['date-01','date-02','date-03','date-04','date-05','date-06'] }]);
+    return response(200, []);
+  } });
+  await assert.rejects(() => service.completeDraft(request('/api/account/set-drafts/22222222-2222-2222-2222-222222222222', { method: 'POST' }), '22222222-2222-2222-2222-222222222222'), (error) => error.status === 400);
+  draftRow.items.push({ kind: 'saved', cardId: 'date-06' });
+  const completed = await service.completeDraft(request('/api/account/set-drafts/22222222-2222-2222-2222-222222222222', { method: 'POST' }), '22222222-2222-2222-2222-222222222222');
+  assert.equal(completed.set.id, 'set-1'); assert.ok(calls.some((call) => call.url.includes('/rpc/complete_my_set_draft')));
+});
+
+test('AI question generation is optional, strict, and never persists a draft', async () => {
+  const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  let aiRequest;
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, OPENAI_API_KEY: 'openai-test' }, rateLimitImpl: async () => 1, fetchImpl: async (url, options = {}) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'owner-1' });
+    if (url === 'https://api.openai.com/v1/responses') { aiRequest = JSON.parse(options.body); return response(200, { output_text: JSON.stringify({ name: 'AI案', questions: Array.from({ length: 6 }, (_, index) => ({ text: `質問${index}`, r18: false })) }) }); }
+    return response(200, []);
+  } });
+  const result = await service.aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: { theme: '初対面', tone: '軽い', count: 6 } }), body: { theme: '初対面', tone: '軽い', count: 6 } });
+  assert.equal(result.questions.length, 6); assert.equal(result.questions[0].origin, 'ai'); assert.equal(aiRequest.store, false); assert.equal(aiRequest.model, 'gpt-5.6-luna');
+  await assert.rejects(() => service.aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: { theme: 'x', tone: 'y', count: 7 } }), body: { theme: 'x', tone: 'y', count: 7 } }), (error) => error.status === 400);
+  const unavailable = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url) => url.endsWith('/auth/v1/user') ? response(200, { id: 'owner-1' }) : response(200, []) });
+  await assert.rejects(() => unavailable.aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: { theme: 'x', tone: 'y', count: 6 } }), body: { theme: 'x', tone: 'y', count: 6 } }), (error) => error.status === 503);
+});
+
+test('AI generation fails closed on quota, provider, malformed, R18, and abort results', async () => {
+  const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const input = { theme: 'x', tone: 'y', count: 6 };
+  const make = (rateLimitImpl, fetchImpl) => createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, OPENAI_API_KEY: 'openai-test' }, rateLimitImpl, fetchImpl: async (url, options) => url.endsWith('/auth/v1/user') ? response(200, { id: 'owner-1' }) : fetchImpl(url, options) });
+  await assert.rejects(() => make(async () => ({ minute: 4, daily: 1, minuteLimit: 3, dailyLimit: 30 }), async () => response(200, {})).aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: input }), body: input }), (error) => error.status === 429);
+  await assert.rejects(() => make(async () => ({ minute: Number.NaN, daily: 1, minuteLimit: 3, dailyLimit: 30 }), async () => response(200, {})).aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: input }), body: input }), (error) => error.status === 429);
+  await assert.rejects(() => make(async () => ({ minute: 1, daily: 1, minuteLimit: 3, dailyLimit: 30 }), async () => response(500, {})).aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: input }), body: input }), (error) => error.status === 503);
+  await assert.rejects(() => make(async () => ({ minute: 1, daily: 1, minuteLimit: 3, dailyLimit: 30 }), async () => response(200, { output_text: '{' })).aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: input }), body: input }), (error) => error.status === 503);
+  await assert.rejects(() => make(async () => ({ minute: 1, daily: 1, minuteLimit: 3, dailyLimit: 30 }), async () => response(200, { output_text: JSON.stringify({ name: 'x', questions: Array.from({ length: 6 }, () => ({ text: 'q', r18: true })) }) })).aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: input }), body: input }), (error) => error.status === 503);
+  let signalSeen; await assert.rejects(() => make(async () => ({ minute: 1, daily: 1, minuteLimit: 3, dailyLimit: 30 }), async (_url, options) => { signalSeen = options.signal; throw new Error('AbortError'); }).aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: input }), body: input }), (error) => error.status === 503); assert.ok(signalSeen);
 });

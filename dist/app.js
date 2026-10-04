@@ -46,6 +46,7 @@ const state = {
     email: "",
     otp: "", otpSent: false, pendingSet: null, selectedCards: new Set(), editingSetId: null, setName: undefined, customEditorOpen: false, editingCardId: null, customDraft: "",
     customDraftR18: false,
+    drafts: [], draftsAvailable: false, completionAvailable: false, aiGenerationAvailable: false, studioMode: "list", studioAiReturnMode: "list", editingDraftId: null, studioItems: [], studioRequestId: 0, studioReplaceIndex: null, aiQuestions: [], aiName: "", aiTheme: "", aiTone: "", aiCount: 6,
     revealAdult: false,
     status: "",
     error: "",
@@ -261,7 +262,7 @@ function render() {
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
   root.querySelectorAll("[data-select-card]").forEach((input) =>
-    input.addEventListener("change", (event) => { const id = event.currentTarget.dataset.cardId; if (event.currentTarget.checked) state.account.selectedCards.add(id); else state.account.selectedCards.delete(id); state.focusSelector = `[data-select-card][data-card-id=\"${id}\"]`; render(); }),
+    input.addEventListener("change", (event) => { const id = event.currentTarget.dataset.cardId; if (event.currentTarget.checked) { if (state.account.studioReplaceIndex !== null && state.account.studioReplaceIndex !== undefined) { const replaceIndex = state.account.studioReplaceIndex; const duplicate = state.account.studioItems.some((item, index) => index !== replaceIndex && item.kind === "saved" && item.cardId === id); if (duplicate) { event.currentTarget.checked = false; state.account.error = "同じ質問はセットに重複して追加できません。"; } else { const old = state.account.studioItems[replaceIndex]; if (old?.kind === "saved") state.account.selectedCards.delete(old.cardId); state.account.studioItems[replaceIndex] = { kind: "saved", cardId: id }; state.account.selectedCards.add(id); state.account.studioReplaceIndex = null; state.account.studioMode = "editor"; } } else if (state.account.studioItems.length >= 40) { event.currentTarget.checked = false; state.account.error = "質問は40枚まで追加できます。"; } else if (state.account.studioItems.some((item) => item.kind === "saved" && item.cardId === id)) { event.currentTarget.checked = false; state.account.error = "同じ質問はセットに重複して追加できません。"; } else { state.account.selectedCards.add(id); state.account.studioItems.push({ kind: "saved", cardId: id }); } } else { state.account.selectedCards.delete(id); state.account.studioItems = state.account.studioItems.filter((item) => !(item.kind === "saved" && item.cardId === id)); } state.focusSelector = `[data-select-card][data-card-id=\"${id}\"]`; render(); }),
   );
   root.querySelectorAll("[data-round-favorite]").forEach((input) =>
     input.addEventListener("change", (event) => {
@@ -281,11 +282,20 @@ function render() {
   root.querySelector("[data-delete-confirm]")?.addEventListener("change", (event) => { state.account.deleteConfirmed = event.currentTarget.checked; const button = root.querySelector('[data-action="account-delete-confirm"]'); if (button) button.disabled = state.account.busy || !state.account.deletionAvailable || !state.account.deleteConfirmed; });
   const setNameInput = root.querySelector("[data-set-name]");
   const updateSetValidity = () => {
-    const form = setNameInput?.closest("form"); const button = form?.querySelector('button[type=\"submit\"]'); if (!button || !setNameInput) return; const count = state.account.selectedCards.size; button.disabled = state.account.busy || !setNameInput.value.trim() || count < 6 || count > 40; }; setNameInput?.addEventListener("input", (event) => { state.account.setName = event.currentTarget.value; if (!event.isComposing) updateSetValidity(); }); setNameInput?.addEventListener("compositionend", updateSetValidity);
-  root.querySelector('form[data-form="set"]')?.addEventListener("submit", async (event) => { event.preventDefault(); if (state.account.busy) return; const name = new FormData(event.currentTarget).get("set-name")?.toString().trim(); const cardIds = [...state.account.selectedCards]; if (!name || cardIds.length < 6 || cardIds.length > 40 || cardIds.some((id) => !canonicalCard(id, state.account.customCards))) { state.account.error = "名前とカード数（6〜40枚）を確認してください。"; render(); return; } const generation = state.account.generation; const editingId = state.account.editingSetId; state.account.busy = true; render(); try { const payload = { name, cardIds }; const result = editingId ? await accountApi.updateSet(editingId, payload) : await accountApi.createSet(name, cardIds); if (generation !== state.account.generation) return; const row = result.set || result; state.account.sets = editingId ? state.account.sets.map((set) => (set.id === row.id ? row : set)) : [...state.account.sets, row]; state.account.editingSetId = null; state.account.setName = undefined; state.account.selectedCards = new Set(); state.account.status = "保存しました。";
-    } catch {
-      if (generation !== state.account.generation) return;
-      state.account.error = "セットを保存できませんでした。"; } finally { if (generation === state.account.generation) { state.account.busy = false; render(); } } });
+    const form = setNameInput?.closest("form"); const button = form?.querySelector('button[type=\"submit\"]') || root.querySelector('.studio-save-footer button[type=\"submit\"]'); if (!button || !setNameInput) return; const count = state.account.studioItems.length; button.disabled = state.account.busy || !setNameInput.value.trim() || Array.from(setNameInput.value.trim()).length > 80 || count > 40 || state.account.draftsAvailable === false; }; setNameInput?.addEventListener("input", (event) => { state.account.setName = event.currentTarget.value; if (!event.isComposing) updateSetValidity(); }); setNameInput?.addEventListener("compositionend", updateSetValidity);
+  root.querySelectorAll('[data-action="studio-back"]').forEach((button) => button.addEventListener('click', () => { const mode = state.account.studioMode; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; state.account.busy = false; if (mode === 'picker') state.account.studioMode = 'editor'; else if (mode === 'ai') state.account.studioMode = state.account.studioAiReturnMode === 'editor' ? 'editor' : 'list'; else { state.account.studioMode = 'list'; state.account.studioItems = []; state.account.selectedCards = new Set(); state.account.setName = undefined; state.account.editingDraftId = null; state.account.editingSetId = null; } if (mode !== 'ai' || state.account.studioMode === 'list') { state.account.aiQuestions = []; state.account.aiName = ''; state.account.aiTheme = ''; state.account.aiTone = ''; } render(); }));
+  root.querySelector('[data-action="studio-picker"]')?.addEventListener('click', () => { state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; state.account.studioMode = 'picker'; render(); });
+  root.querySelectorAll('[data-action="studio-remove-card"]').forEach((button) => button.addEventListener('click', () => { state.account.selectedCards.delete(button.dataset.cardId); state.account.studioItems = state.account.studioItems.filter((item) => item.cardId !== button.dataset.cardId); state.focusAction = 'studio-picker'; render(); }));
+  root.querySelectorAll('[data-action="studio-remove-item"]').forEach((button) => button.addEventListener('click', () => { state.account.studioRequestId += 1; const index = Number(button.dataset.itemIndex); const item = state.account.studioItems[index]; if (item?.kind === 'saved') state.account.selectedCards.delete(item.cardId); state.account.studioItems.splice(index, 1); render(); }));
+  root.querySelectorAll('[data-studio-item-text], [data-studio-custom-text]').forEach((input) => input.addEventListener('input', (event) => { const index = Number(event.currentTarget.dataset.itemIndex); const item = state.account.studioItems[index]; if (!item || item.kind !== 'custom') return; const value = event.currentTarget.value; item.text = value; }));
+  root.querySelectorAll('[data-action="studio-replace-item"]').forEach((button) => button.addEventListener('click', () => { const index = Number(button.dataset.itemIndex); if (!Number.isInteger(index) || !state.account.studioItems[index]) return; state.account.studioReplaceIndex = index; state.account.studioMode = 'picker'; state.focusAction = 'studio-back'; render(); }));
+  root.querySelectorAll('[data-ai-select]').forEach((input) => input.addEventListener('change', (event) => { const index = Number(event.currentTarget.dataset.aiIndex); if (state.account.aiQuestions[index]) state.account.aiQuestions[index].selected = event.currentTarget.checked; }));
+  root.querySelectorAll('[data-ai-text]').forEach((input) => input.addEventListener('input', (event) => { const index = Number(event.currentTarget.dataset.aiIndex); if (state.account.aiQuestions[index]) state.account.aiQuestions[index].text = event.currentTarget.value; }));
+  root.querySelector('[data-form="ai"]')?.addEventListener('submit', (event) => { event.preventDefault(); state.account.aiTheme = root.querySelector('[data-ai-theme]')?.value || ''; state.account.aiTone = root.querySelector('[data-ai-tone]')?.value || ''; state.account.aiCount = Number(root.querySelector('[data-ai-count]')?.value || 6); generateStudioQuestions(); });
+  root.querySelector('[data-action="studio-ai-adopt"]')?.addEventListener('click', adoptStudioQuestions);
+  root.querySelector('[data-action="studio-ai-discard"]')?.addEventListener('click', () => { state.account.studioRequestId += 1; state.account.busy = false; state.account.aiQuestions = []; state.account.aiName = ''; state.account.aiTheme = ''; state.account.aiTone = ''; state.account.studioMode = state.account.studioAiReturnMode === 'editor' ? 'editor' : 'list'; render(); });
+  root.querySelector('form[data-form="studio"]')?.addEventListener('submit', (event) => { event.preventDefault(); state.account.setName = root.querySelector('[data-set-name]')?.value || ''; saveStudioDraft(); });
+  root.querySelector('.studio-save-footer button[type="submit"]')?.addEventListener('click', (event) => { event.preventDefault(); state.account.setName = root.querySelector('[data-set-name]')?.value || ''; saveStudioDraft(); });
   root.querySelector(".card-back")?.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === ' ') { event.preventDefault(); playFlipSound(); const previous = ensureSession(); state.session = revealCard(previous); persist(previous); render(); } });
   updateAdultButton();
@@ -332,7 +342,7 @@ function accountButton(a) {
   return `<div class="account-bar"><button type="button" class="account-button" data-action="account" aria-label="${label}" aria-expanded="${a.open}" aria-controls="account-dialog" title="${label}"><span class="account-avatar">${accountAvatar(a.user)}</span><span class="visually-hidden">${label}</span></button></div>`;
 }
 function libraryAccountView(a) {
-  return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button account-back" data-action="account-menu">戻る</button><strong id="account-dialog-title">保存したカード</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.pendingSet ? '<p class="account-status">このセットにはR18カードが含まれます。参加者全員の同意が必要です。</p><button type="button" class="primary-button" data-action="confirm-set-play">同意して遊ぶ</button>' : ""}${renderLibrary({ ...a, hideTitle: true })}`, "account-dialog-library");
+  return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button account-back" data-action="account-menu">戻る</button><strong id="account-dialog-title">マイセット</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.pendingSet ? '<p class="account-status">このセットにはR18カードが含まれます。参加者全員の同意が必要です。</p><button type="button" class="primary-button" data-action="confirm-set-play">同意して遊ぶ</button>' : ""}${renderLibrary({ ...a, replaceItemIndex: a.studioReplaceIndex, hideTitle: true })}`, "account-dialog-library");
 }
 function avatarSettingsView(a) {
   const remove = a.avatarUrl ? `<button type="button" class="text-button muted" data-action="avatar-remove" ${a.avatarBusy ? "disabled" : ""}>画像を削除</button>` : "";
@@ -722,6 +732,7 @@ async function loadAccount() {
     if (!state.account.avatarBusy && !state.account.avatarDraft) state.account.avatarError = "";
     state.account.deletionAvailable = me.account?.deletionAvailable === true;
     state.account.customCardsAvailable = me.customCardsAvailable === true;
+    state.account.draftsAvailable = me.draftsAvailable === true; state.account.completionAvailable = me.account?.completionAvailable === true; state.account.aiGenerationAvailable = me.aiGenerationAvailable === true; state.account.drafts = Array.isArray(me.drafts) ? me.drafts : [];
     state.account.customCards = state.account.customCardsAvailable && Array.isArray(me.customCards) ? me.customCards.map((card) => ({ ...card, id: typeof card.id === "string" && card.id.startsWith("custom:") ? card.id : `custom:${card.id}`,
           }))
         : [];
@@ -774,7 +785,52 @@ async function saveProfile() {
   finally { if (generation === state.account.generation) { state.account.busy = false; render(); } }
 }
 function validCustomText(value) { return typeof value === "string" && !/[\u0000-\u001f\u007f\u2028\u2029]/u.test(value) && Array.from(value.trim()).length >= 1 && Array.from(value.trim()).length <= 300; }
-async function saveCustomCard() {
+async function saveStudioDraft() {
+  if (state.account.busy) return;
+  const name = String(state.account.setName || '').trim();
+  const items = state.account.studioItems.map((item) => ({ ...item }));
+  const invalidItem = items.find((item) => item.kind === 'custom' && !validCustomText(item.text));
+  if (invalidItem) { state.account.error = '空欄の質問を入力するか、質問を外してください。'; render(); return; }
+  if (!name || items.length > 40) { state.account.error = 'セット名とカード数（0〜40枚）を確認してください。'; render(); return; }
+  const generation = state.account.generation; const requestId = ++state.account.studioRequestId; state.account.busy = true; state.account.error = ''; render();
+  try {
+    const payload = { name, items, ...(!state.account.editingDraftId && state.account.editingSetId ? { sourceSetId: state.account.editingSetId } : {}) };
+    const result = state.account.editingDraftId ? await accountApi.updateDraft(state.account.editingDraftId, payload) : await accountApi.createDraft(payload);
+    if (generation !== state.account.generation || requestId !== state.account.studioRequestId) return;
+    const row = result.draft || result;
+    state.account.drafts = state.account.editingDraftId ? state.account.drafts.map((draft) => draft.id === row.id ? row : draft) : [...state.account.drafts, row];
+    state.account.editingDraftId = row.id || state.account.editingDraftId;
+    if (items.length >= 6 && state.account.completionAvailable !== false) {
+      const completed = await accountApi.completeDraft(row.id);
+      if (generation !== state.account.generation || requestId !== state.account.studioRequestId) return;
+      const ready = completed.set || completed;
+      if (ready?.id) state.account.sets = [...state.account.sets.filter((set) => set.id !== ready.id), ready];
+      state.account.drafts = state.account.drafts.filter((draft) => draft.id !== row.id);
+      state.account.status = 'セットを保存しました。';
+      state.account.editingDraftId = null;
+      await loadAccount();
+      if (generation !== state.account.generation || requestId !== state.account.studioRequestId) return;
+    } else state.account.status = '下書きを保存しました。6枚以上で遊べます。';
+    state.account.studioMode = 'list'; state.account.editingSetId = null; state.account.setName = undefined; state.account.selectedCards = new Set(); state.account.studioItems = [];
+  } catch (error) { if (generation === state.account.generation && requestId === state.account.studioRequestId) state.account.error = error?.status === 404 ? '下書き機能を利用できません。' : 'セットを保存できませんでした。'; }
+  finally { if (generation === state.account.generation && requestId === state.account.studioRequestId) { state.account.busy = false; render(); } }
+}
+async function generateStudioQuestions() {
+  if (state.account.busy || state.account.aiGenerationAvailable !== true) return;
+  state.account.busy = true; state.account.error = ''; render(); const generation = state.account.generation; const requestId = ++state.account.studioRequestId;
+  try { const result = await accountApi.generateAiQuestions({ theme: (state.account.aiTheme || '').trim(), tone: (state.account.aiTone || '').trim() || '自然であたたかい', count: state.account.aiCount === 12 ? 12 : 6 }); if (generation !== state.account.generation || requestId !== state.account.studioRequestId) return; state.account.aiName = typeof result.name === 'string' ? result.name.trim() : ''; state.account.aiQuestions = (result.questions || []).map((question) => ({ text: question.text || '', r18: question.r18 === true, selected: true })); state.account.status = ''; }
+  catch (error) { if (generation === state.account.generation && requestId === state.account.studioRequestId) state.account.error = error?.status === 404 ? 'AIセット作成は現在利用できません。' : 'AI案を作成できませんでした。'; }
+  finally { if (generation === state.account.generation && requestId === state.account.studioRequestId) { state.account.busy = false; render(); } }
+}
+async function adoptStudioQuestions() {
+  if (state.account.busy) return;
+  const selected = state.account.aiQuestions.filter((question) => question.selected !== false && typeof question.text === 'string' && question.text.trim());
+  if (!selected.length) return;
+  const generation = state.account.generation; state.account.busy = true; state.account.error = ''; render();
+  try { if (generation !== state.account.generation) return; const invalid = state.account.aiQuestions.find((question) => question.selected !== false && !validCustomText(question.text)); if (invalid) { state.account.error = '空欄の質問を入力するか、選択を外してください。'; return; } if (!state.account.setName && state.account.aiName) state.account.setName = state.account.aiName; if (state.account.studioItems.length + selected.length > 40) { state.account.error = '質問は40枚まで追加できます。'; return; } state.account.studioItems.push(...selected.map((question) => ({ kind: 'custom', text: question.text.trim(), r18: question.r18 === true, origin: 'ai' }))); state.account.studioMode = 'editor'; state.account.aiQuestions = []; state.account.status = 'AI案をセットに追加しました。保存時に質問カードとして登録します。'; }
+  catch (error) { if (generation === state.account.generation) state.account.error = 'AI案を保存できませんでした。'; }
+  finally { if (generation === state.account.generation) { state.account.busy = false; render(); } }
+}async function saveCustomCard() {
   if (state.account.busy || !state.account.customCardsAvailable) return;
   if (!validCustomText(state.account.customDraft)) { state.account.error = "質問は1〜300文字で、改行せずに入力してください。";
     state.account.status = ""; render(); return; }
@@ -823,7 +879,7 @@ async function deleteAccount() {
     state.pendingCustomResume = null;
     state.account.user = null;
     state.account.favorites = new Set();
-    state.account.customCards = [];
+    state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.completionAvailable = false; state.account.studioRequestId += 1; state.account.studioItems = []; state.account.aiTheme = ""; state.account.aiTone = ""; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = [];
     state.account.customCardsAvailable = false;
     state.account.sets = [];
     state.account.selectedCards = new Set();
@@ -1167,7 +1223,7 @@ async function handleAction(event) {
     state.sharedRequestId += 1;
     state.shared = null;
     state.sharedLoading = false;
-    const generation = ++state.account.generation; try { const privateSession = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (privateSession) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === "play") state.screen = "participants"; } await accountApi.logout(); if (generation !== state.account.generation) return; state.account.user = null; state.account.favorites = new Set(); state.account.customCards = []; state.account.customCardsAvailable = false; state.account.sets = []; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = "";
+    const generation = ++state.account.generation; try { const privateSession = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (privateSession) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === "play") state.screen = "participants"; } await accountApi.logout(); if (generation !== state.account.generation) return; state.account.user = null; state.account.favorites = new Set(); state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = []; state.account.aiName = ""; state.account.studioReplaceIndex = null; state.account.customCardsAvailable = false; state.account.sets = []; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = "";
       state.account.customDraftR18 = false;
       state.account.pendingSet = null;
       state.account.avatarUrl = "";
@@ -1185,12 +1241,7 @@ async function handleAction(event) {
     }
     return;
   }
-  if (action === "custom-card-new") { if (state.account.busy || !state.account.customCardsAvailable) return; state.account.customEditorOpen = true; state.account.editingCardId = null; state.account.customDraft = "";
-    state.account.customDraftR18 = false;
-    state.focusSelector = "[data-custom-text]";
-    render();
-    return;
-  }
+  if (action === "custom-card-new") { if (state.account.busy || !state.account.customCardsAvailable) return; state.account.customEditorOpen = true; state.account.editingCardId = null; state.account.customDraft = ""; state.account.customDraftR18 = false; state.account.error = ""; state.focusSelector = '[data-custom-text]'; render(); return; }
   if (action === "custom-card-cancel") { if (state.account.busy) return; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = "";
     state.account.customDraftR18 = false;
     render();
@@ -1328,13 +1379,16 @@ async function handleAction(event) {
     render();
     return;
   }
-  if (action === "set-new") { const hasSavedCard = [...state.account.favorites].some((id) => canonicalCard(id, state.account.customCards)) || state.account.customCards.length > 0; if (state.account.busy || !hasSavedCard) return; state.account.editingSetId = null; state.account.setName = "";
-    state.account.selectedCards = new Set();
-    state.account.error = "";
-    state.focusSelector = "[data-set-name]";
-    render();
-    return;
-  }
+  if (action === "studio-from-favorites") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; state.account.studioMode = "picker"; state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = []; state.account.selectedCards = new Set(); state.account.error = ""; render(); return; }
+  if (action === "studio-write") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; if (state.account.studioMode === "editor") { state.account.studioItems.push({ kind: "custom", text: "", r18: false, origin: "user" }); state.focusSelector = `[data-studio-item-text][data-item-index="${state.account.studioItems.length - 1}"]`; } else { state.account.studioMode = "editor"; state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = [{ kind: "custom", text: "", r18: false, origin: "user" }]; state.account.selectedCards = new Set(); state.account.error = ""; state.focusSelector = '[data-studio-item-text][data-item-index="0"]'; } render(); return; }
+  if (action === "studio-ai") { if (state.account.busy || state.account.aiGenerationAvailable === false) return; state.account.studioRequestId += 1; state.account.aiName = ''; state.account.studioAiReturnMode = state.account.studioMode === "editor" ? "editor" : "list"; if (state.account.studioMode !== "editor") { state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = []; state.account.selectedCards = new Set(); } state.account.studioMode = "ai"; state.account.aiQuestions = []; state.account.error = ""; render(); return; }
+  if (action === "studio-favorites") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioMode = "favorites"; state.account.error = ""; render(); return; }
+  if (action === "studio-custom-library") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioMode = "custom"; state.account.error = ""; render(); return; }
+  if (action === "studio-picker") { state.account.studioMode = "picker"; render(); return; }
+  if (action === "studio-edit-set") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; const set = state.account.sets.find((row) => row.id === event.currentTarget.dataset.setId); if (!set) return; state.account.studioMode = "editor"; state.account.editingSetId = set.id; state.account.editingDraftId = null; state.account.setName = set.name || ""; state.account.studioItems = (set.card_ids || []).map((cardId) => ({ kind: "saved", cardId })); state.account.selectedCards = new Set(set.card_ids || []); render(); return; }
+  if (action === "studio-edit-draft") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; const draft = state.account.drafts.find((row) => row.id === event.currentTarget.dataset.draftId); if (!draft) return; state.account.studioMode = "editor"; state.account.editingDraftId = draft.id; state.account.editingSetId = draft.sourceSetId || null; state.account.setName = draft.name || ""; state.account.studioItems = (draft.items || []).map((item) => ({ ...item })); state.account.selectedCards = new Set((draft.items || []).filter((item) => item.kind === "saved").map((item) => item.cardId)); render(); return; }
+  if (action === "studio-delete-draft") { if (state.account.busy) return; const id = event.currentTarget.dataset.draftId; const generation = state.account.generation; state.account.busy = true; render(); try { await accountApi.deleteDraft(id); if (generation !== state.account.generation) return; state.account.drafts = state.account.drafts.filter((row) => row.id !== id); state.account.status = "下書きを破棄しました。"; } catch { if (generation === state.account.generation) state.account.error = "下書きを破棄できませんでした。"; } finally { if (generation === state.account.generation) { state.account.busy = false; render(); } } return; }
+  if (action === "set-new") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; state.account.studioMode = "editor"; state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = []; state.account.selectedCards = new Set(); state.account.error = ""; state.focusSelector = "[data-set-name]"; render(); return; }
   if (action === "set-cancel") { state.account.editingSetId = null; state.account.setName = undefined; state.account.selectedCards = new Set(); render(); return; }
   if (action === "set-edit") { if (state.account.busy) return; const set = state.account.sets.find((item) => item.id === event.currentTarget.dataset.setId); state.account.editingSetId = set?.id || null; state.account.setName = set?.name || ""; state.account.selectedCards = new Set(set?.card_ids || []); render(); return; }
   if (action === "set-delete") { if (state.account.busy) return; const id = event.currentTarget.dataset.setId; const generation = state.account.generation; state.account.busy = true; render(); try { await accountApi.deleteSet(id); if (generation !== state.account.generation) return; state.account.sets = state.account.sets.filter((set) => set.id !== id); state.account.status = "削除しました。";
@@ -1590,11 +1644,11 @@ discoverAccountConfig().then(() => { state.account.enabled = accountConfig.enabl
           const privateResume = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (event === "SIGNED_OUT" || identityChanged) clearAccountParticipantName();
           if ((event === "SIGNED_OUT" || identityChanged) && privateResume) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === "play") state.screen = "participants";
           }
-          if (previousId === nextId && event !== "SIGNED_OUT") { if (nextId) state.account.user = normalizeAccountUser(nextUser, state.account.user); return; } state.account.generation += 1; state.account.profileRevision += 1; state.account.busy = false; state.account.user = normalizeAccountUser(nextUser); if (!state.account.user) state.account.authReady = true; state.account.favorites = new Set(); state.account.customCards = []; state.account.customCardsAvailable = false; state.account.sets = []; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ""; state.account.customDraftR18 = false; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.pendingSet = null; state.account.avatarUrl = "";
+          if (previousId === nextId && event !== "SIGNED_OUT") { if (nextId) state.account.user = normalizeAccountUser(nextUser, state.account.user); return; } state.account.generation += 1; state.account.profileRevision += 1; state.account.busy = false; state.account.user = normalizeAccountUser(nextUser); if (!state.account.user) state.account.authReady = true; state.account.favorites = new Set(); state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = []; state.account.aiName = ""; state.account.studioReplaceIndex = null; state.account.customCardsAvailable = false; state.account.sets = []; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ""; state.account.customDraftR18 = false; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.pendingSet = null; state.account.avatarUrl = "";
           state.account.avatarRevision += 1;
           state.account.avatarDraft = "";
           state.account.avatarBusy = false;
           state.account.avatarError = "";
           state.account.revealAdult = false;
           state.account.status = "";
-          state.account.error = ""; const preserveRound = Boolean((state.roundFavorite?.loginPending || state.continuePending) && state.session && nextId && !previousId); if (!preserveRound) state.feedback = null; if (state.continuePending?.kind !== "resume") state.resume = null; if (state.account.user) { render(); loadAccount(); } else { state.account.favorites = new Set(); state.account.customCards = []; state.account.customCardsAvailable = false; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ""; state.account.customDraftR18 = false; state.account.sets = []; render(); } }, 0); }); } }).catch(() => { state.account.authReady = true; state.account.enabled = false; render(); });
+          state.account.error = ""; const preserveRound = Boolean((state.roundFavorite?.loginPending || state.continuePending) && state.session && nextId && !previousId); if (!preserveRound) state.feedback = null; if (state.continuePending?.kind !== "resume") state.resume = null; if (state.account.user) { render(); loadAccount(); } else { state.account.favorites = new Set(); state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = []; state.account.aiName = ""; state.account.studioReplaceIndex = null; state.account.customCardsAvailable = false; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ""; state.account.customDraftR18 = false; state.account.sets = []; render(); } }, 0); }); } }).catch(() => { state.account.authReady = true; state.account.enabled = false; render(); });

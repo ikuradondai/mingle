@@ -22,6 +22,7 @@ export default async function account(req, res) {
       return json(res, 405, { error: 'METHOD_NOT_ALLOWED' });
     }
     if (pathname === '/api/account/profile' && req.method === 'PATCH') { req.body = await body(req); return json(res, 200, await service.profile(req)); }
+    if (pathname === '/api/account/ai/questions' && req.method === 'POST') { req.body = await body(req); return json(res, 200, await service.aiQuestions(req)); }
     if (pathname === '/api/account/avatar') {
       if (req.method === 'PUT') req.body = await bodyWithLimit(req, 400 * 1024);
       if (req.method === 'GET' || req.method === 'PUT' || req.method === 'DELETE') return json(res, 200, await service.avatar(req));
@@ -35,6 +36,21 @@ export default async function account(req, res) {
       return json(res, 200, await service.favorite(req, cardId));
     }
     if (pathname === '/api/account/sets' && req.method === 'POST') { req.body = await body(req); return json(res, 201, await service.set(req)); }
+    if (pathname === '/api/account/set-drafts' && (req.method === 'GET' || req.method === 'POST')) {
+      if (req.method === 'POST') req.body = await body(req);
+      return json(res, req.method === 'POST' ? 201 : 200, await service.draft(req));
+    }
+    const draftCompleteMatch = pathname.match(/^\/api\/account\/set-drafts\/([^/]+)\/complete$/);
+    if (draftCompleteMatch && req.method === 'POST') {
+      req.body = await body(req);
+      if (req.body != null && (typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).length)) return json(res, 400, { error: 'INVALID_REQUEST' });
+      return json(res, 200, await service.completeDraft(req, decodeURIComponent(draftCompleteMatch[1])));
+    }
+    const draftMatch = pathname.match(/^\/api\/account\/set-drafts\/([^/]+)$/);
+    if (draftMatch) {
+      if (req.method === 'PATCH') req.body = await body(req);
+      return json(res, 200, await service.draft(req, decodeURIComponent(draftMatch[1])));
+    }
     const setMatch = pathname.match(/^\/api\/account\/sets\/([^/]+)$/);
     if (setMatch) { if (req.method === 'PATCH' || req.method === 'POST') req.body = await body(req); return json(res, 200, await service.set(req, decodeURIComponent(setMatch[1]))); }
     const shareMatch = pathname.match(/^\/api\/account\/sets\/([^/]+)\/share$/);
