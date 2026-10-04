@@ -472,7 +472,6 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
   .round-feedback-details > summary { padding:0 12px; }
   .round-feedback-details > summary span { font-size:11px; }
 }
-.ad-slot-creative{display:block;padding:8px 10px}.ad-slot-creative>a{display:block!important}.ad-slot-creative .ad-creative{display:block;width:min(100%,720px);height:auto;margin:0 auto}.ad-slot-creative .ad-creative[hidden]{display:none}.ad-slot-creative .ad-creative img{display:block;width:100%;height:auto;max-height:180px;object-fit:cover;object-position:center}.ad-slot-creative .ad-creative-fallback{display:none}.ad-slot-creative.ad-creative-failed .ad-creative-fallback{display:flex;align-items:center;justify-content:space-between;gap:10px;width:min(100%,720px);margin:0 auto}@media(max-width:540px){.ad-slot-creative{padding:7px}.ad-slot-creative .ad-creative{width:100%}.ad-slot-creative .ad-creative img{max-height:180px}.ad-slot-creative .ad-creative-fallback{display:none}.ad-slot-creative.ad-creative-failed .ad-creative-fallback{display:flex}}
 /* Separate house ads from the product UI while keeping the existing ad
    markup, sponsor link, and creative fallback compatible. */
 .ad-slot { display:block; width:100%; margin:24px 0 14px; padding:10px 0 0; border:0; border-top:1px solid rgba(23,105,232,.18); border-radius:0; background:transparent; font-size:14px; }
@@ -481,49 +480,28 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 .ad-slot > a .ad-copy { font-size:14px; }
 .ad-slot > a .ad-subline { font-size:13px; }
 .ad-slot > a .ad-cta { min-height:36px; padding:0 10px; border-radius:6px; font-size:12px; }
-.ad-slot-creative > a { display:block; min-height:0; overflow:hidden; padding:0; text-align:center; line-height:0; }
-.ad-slot-creative > a .ad-creative { display:block; width:100%; height:auto; }
-.ad-slot-creative > a .ad-creative img { display:block; width:100%; height:auto; max-height:none; margin:0 auto; object-fit:contain; }
-.ad-slot-creative > a .ad-creative-fallback { line-height:normal; text-align:left; }
 @media (max-width:680px) {
   .ad-slot { margin:16px 0 12px; }
   .ad-slot .ad-label { width:min(100%,320px); margin-bottom:6px; }
   .ad-slot > a { display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"logo spacer cta" "copy copy copy"; gap:4px 6px; align-items:center; width:min(100%,320px); min-height:100px; padding:7px 10px; border-radius:8px; }
   .ad-slot > a .ad-logo { width:clamp(86px,32vw,120px); height:24px; }
   .ad-slot > a .ad-cta { min-height:24px; padding:4px 6px; }
-  .ad-slot-creative > a { display:block; min-height:0; padding:0; }
-  .ad-slot-creative > a .ad-creative img { max-height:none; }
 }
 .home-screen .ad-slot, .round-break > .ad-slot { margin-top:24px; }
 @media (max-width:680px) {
   .home-screen .ad-slot, .round-break > .ad-slot { margin-top:16px; }
 }
-/* Purpose-built creative layout: exact HTML copy stays readable beside the generated art. */
-.ad-slot-creative > a { display:grid!important; grid-template-columns:minmax(0,1fr) 140px 180px; grid-template-areas:"content art cta"; align-items:center; gap:12px; min-height:90px; padding:7px 10px; line-height:normal; }
-.ad-slot-creative > a .ad-creative-art { grid-area:art; width:140px; height:76px; overflow:hidden; }
-.ad-slot-creative > a .ad-creative-art .ad-creative { display:block; width:100%; height:100%; }
-.ad-slot-creative .ad-creative[hidden] { display:none !important; }
-.ad-slot-creative > a .ad-creative-art .ad-creative img { display:block; width:auto; height:96px; max-width:none; object-fit:cover; object-position:right center; transform:translateX(calc(140px - 100%)); }
-.ad-slot-creative > a .ad-creative-content { grid-area:content; display:grid; grid-template-columns:auto 1fr; grid-template-areas:"brand kicker" "headline headline" "subline subline"; align-items:center; column-gap:7px; min-width:0; }
-.ad-slot-creative > a .ad-creative-content > * { min-width:0; max-width:100%; }
-.ad-slot-creative > a .ad-creative-brand { grid-area:brand; display:flex; align-items:center; min-width:0; }
-.ad-slot-creative > a .ad-creative-logo { display:block; width:92px; height:20px; object-fit:contain; object-position:left center; }
-.ad-slot-creative > a .ad-creative-brand-fallback { color:var(--blue); font-size:11px; font-weight:800; }
-.ad-slot-creative > a .ad-creative-kicker { grid-area:kicker; color:var(--muted); font-size:11px; font-weight:800; white-space:nowrap; text-align:left; }
-.ad-slot-creative > a .ad-creative-headline { grid-area:headline; display:flex; gap:0; flex-wrap:nowrap; color:var(--ink); font-size:21px; line-height:1.05; letter-spacing:-.02em; }
-.ad-slot-creative > a .ad-creative-subline { grid-area:subline; color:#197c7c; font-size:13px; font-weight:700; }
-.ad-slot-creative > a > .ad-cta { grid-area:cta; justify-self:stretch; min-height:38px; padding:0 9px; border:0; border-radius:7px; background:#007f8b; color:#fff; font-size:13px; white-space:normal; text-align:center; }
-.ad-slot-creative > a > .ad-cta:hover { background:#00656f; }
-.ad-slot-creative > a .ad-creative-logo[hidden] { display:none !important; }
+/* Full generated house creatives: the image owns the complete ad design. */
+.ad-slot-default-creative > a { display:block !important; min-height:0; padding:0; line-height:0; overflow:hidden; }
+.ad-slot-default-creative > a .ad-creative-art { display:block; width:min(100%,728px); aspect-ratio:728 / 90; height:auto; margin:0 auto; overflow:hidden; }
+.ad-slot-default-creative > a .ad-creative-art .ad-creative { display:block; width:100%; height:100%; }
+ .ad-slot-default-creative > a .ad-creative-art .ad-creative img { position:relative; top:50%; display:block; width:100%; height:auto; max-width:none; object-fit:contain; transform:translateY(-47.7%); }
+.ad-slot-default-creative > a .ad-creative[hidden] { display:none !important; }
+.ad-slot-default-creative > a .ad-creative-fallback { display:none; min-height:90px; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; line-height:normal; text-align:left; }
+.ad-slot-default-creative.ad-creative-failed > a .ad-creative-art { display:none; }
+.ad-slot-default-creative.ad-creative-failed > a .ad-creative-fallback { display:flex; }
 @media (max-width:680px) {
-  .ad-slot-creative > a { grid-template-columns:minmax(0,1fr) 100px; grid-template-rows:58px 34px; grid-template-areas:"content art" "content cta"; gap:4px 6px; min-height:100px; padding:7px 10px; }
-  .ad-slot-creative > a .ad-creative-art { width:100px; height:58px; }
-  .ad-slot-creative > a .ad-creative-art .ad-creative img { height:68px; transform:translateX(calc(100px - 100%)); }
-  .ad-slot-creative > a .ad-creative-content { grid-template-columns:1fr; grid-template-areas:"brand" "kicker" "headline" "subline"; row-gap:1px; text-align:left; }
-  .ad-slot-creative > a .ad-creative-logo { width:78px; height:18px; }
-  .ad-slot-creative > a .ad-creative-kicker { display:block; font-size:10px; letter-spacing:-.03em; text-align:left; white-space:nowrap; }
-  .ad-slot-creative > a .ad-creative-headline span { display:block; white-space:nowrap; }
-  .ad-slot-creative > a .ad-creative-headline { font-size:15px; line-height:1.08; letter-spacing:-.08em; }
-  .ad-slot-creative > a .ad-creative-subline { font-size:11px; letter-spacing:-.02em; }
-  .ad-slot-creative > a > .ad-cta { min-height:28px; padding:3px 5px; font-size:12px; line-height:1.15; }
+  .ad-slot-default-creative > a .ad-creative-art { width:100%; aspect-ratio:auto; height:auto; }
+  .ad-slot-default-creative > a .ad-creative-art .ad-creative img { position:static; width:100%; height:auto; transform:none; }
+  .ad-slot-default-creative > a .ad-creative-fallback { min-height:100px; padding:7px 10px; }
 }
