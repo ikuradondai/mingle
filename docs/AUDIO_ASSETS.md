@@ -5,13 +5,15 @@
 - Provider: ElevenLabs Sound Generation API
 - Generated: 2026-10-04
 - Runtime asset: `dist/assets/audio/mingle-card-flip.mp3`
-- Source candidate: Aurora
-- Decoded format: MP3, 48 kHz, stereo, 0.72 seconds
-- Post-processing: none; the generated MP3 is used unchanged
+- Source candidate: 17 Cotton Table
+- Decoded format: MP3, 48 kHz, stereo, 0.48 seconds
+- Source SHA-256: `fb811852c967ff14a5faf29065c27ca900e7f31bb2985598ff06b6a73bec95ce`
+- Peak: -2.85 dBFS; clipped samples: 0
+- Post-processing: listening-copy loudness normalization (`loudnorm=I=-24:TP=-3:LRA=7`); the selected MP3 is used unchanged at runtime
 - Runtime behavior: played from the local asset; no runtime audio-generation API call
 
 Selection prompt:
 
-> A distinctive tactile sound of a thick paper conversation card being turned over on a tabletop: soft airy paper whoosh first, then a crisp gentle paper snap as it lands, followed by a tiny bright upward shimmer that suggests opening a meaningful conversation. Intimate, warm, memorable, elegant, repeatable, no voice, no speech, no music, no melody, no notification ding, no game reward fanfare, no metal.
+> A single paper card turn on a cotton-covered surface: gentle close paper flutter, tiny fabric brush, and a soft muted contact. Clearly one card flip, intimate, calm, and repeatable. No voice, speech, music, melody, chime, magic, fanfare, or extra taps.
 
 Other generated candidates remain in the external audio artifact directory and are not included in the product bundle.

@@ -50,15 +50,32 @@ test('public share metadata omits question content and start requires consent fo
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url, options });
     if (url.includes('/shared_sets?token_hash=') && url.includes('select=name,card_count,adult_only,cards')) return response(200, [{ name: '大人', card_count: 6, adult_only: true, cards: [{ id: 'intimacy-01', text: 'private text', r18: true }] }]);
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'guest-account' });
     throw new Error(`unexpected ${url}`);
   };
   const service = createAccountService({ env: { ...env, SUPABASE_SERVICE_ROLE_KEY: 'service-role-test' }, fetchImpl });
   const metadata = await service.publicShare(req(`/api/share/${token}`), token, false);
   assert.deepEqual(metadata.share, { name: '大人', cardCount: 6, adultOnly: true, active: true });
-  await assert.rejects(() => service.publicShare(req(`/api/share/${token}/start`, { method: 'POST', body: { participants: ['A', 'B'], adultConfirmed: false } }), token, true), (error) => error.status === 403 && error.code === 'ADULT_CONSENT_REQUIRED');
-  const started = await service.publicShare(req(`/api/share/${token}/start`, { method: 'POST', body: { participants: ['A', 'B'], adultConfirmed: true } }), token, true);
+  await assert.rejects(() => service.publicShare(req(`/api/share/${token}/start`, { method: 'POST', headers: { authorization: '' }, body: { participants: ['A', 'B'], adultConfirmed: true } }), token, true), (error) => error.status === 401 && error.code === 'UNAUTHENTICATED');
+  await assert.rejects(() => service.publicShare(req(`/api/share/${token}/start`, { method: 'POST', headers: { authorization: 'Bearer user-token' }, body: { participants: ['A', 'B'], adultConfirmed: false } }), token, true), (error) => error.status === 403 && error.code === 'ADULT_CONSENT_REQUIRED');
+  const started = await service.publicShare(req(`/api/share/${token}/start`, { method: 'POST', headers: { authorization: 'Bearer user-token' }, body: { participants: ['A', 'B'], adultConfirmed: true } }), token, true);
   assert.equal(started.cards[0].text, 'private text');
   assert.equal(calls.every((call) => !call.url.includes('token=')), true);
+});
+
+test('non-adult public share starts for an unauthenticated guest', async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.includes('/shared_sets?token_hash=') && url.includes('select=name,card_count,adult_only,cards')) return response(200, [{ name: 'はじめまして', card_count: 6, adult_only: false, cards: [{ id: 'date-01', text: 'guest-safe question', r18: false }] }]);
+    if (url.endsWith('/auth/v1/user')) throw new Error('unauthenticated guest must not call auth');
+    throw new Error(`unexpected ${url}`);
+  };
+  const service = createAccountService({ env: { ...env, SUPABASE_SERVICE_ROLE_KEY: 'service-role-test' }, fetchImpl });
+  const started = await service.publicShare(req(`/api/share/${token}/start`, { method: 'POST', headers: {}, body: { participants: ['A', 'B'], adultConfirmed: false } }), token, true);
+  assert.equal(started.cards[0].text, 'guest-safe question');
+  assert.equal(started.participants[0], 'A');
+  assert.equal(calls.some((call) => call.url.endsWith('/auth/v1/user')), false);
 });
 
 test('public share lookup is unavailable without the server-only key', async () => {

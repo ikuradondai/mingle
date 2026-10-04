@@ -110,7 +110,7 @@ export const decks = [
   },
   {
     id: 'intimacy',
-    title: 'R18のテーマ',
+    title: '大人の本音、話してみる？',
     subtitle: '大人同士で話したいときに',
     description: '大人同士で、ふだんは話さないことを。お互いに話したいときだけ。',
     adultOnly: true,

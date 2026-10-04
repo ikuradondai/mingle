@@ -317,7 +317,7 @@ export const newDecks = [
   },
   {
     "id": "intimacy-distance",
-    "title": "ふたりのペースを、あらためて",
+    "title": "ひさしぶりに踏み出せないふたり",
     "subtitle": "触れ合い・気持ち・これから",
     "description": "親密な時間が少なくなった今、それぞれの気持ちや心地よい距離を話すテーマです。",
     "adultOnly": true,

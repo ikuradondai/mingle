@@ -321,7 +321,12 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     if (!start) return { share: { name: share.name, cardCount: share.card_count, adultOnly: Boolean(share.adult_only), active: true } };
     const input = req.body || {};
     if (!input || typeof input !== 'object' || Array.isArray(input) || !Array.isArray(input.participants) || input.participants.length < 2 || input.participants.length > 8 || input.participants.some((value) => typeof value !== 'string' || /[\u0000-\u001f\u007f\u2028\u2029]/u.test(value) || !value.trim() || Array.from(value.trim()).length > 40) || Object.keys(input).some((key) => !['participants', 'adultConfirmed'].includes(key)) || typeof input.adultConfirmed !== 'boolean') throw fail(400, ACCOUNT_ERRORS.invalid);
-    if (share.adult_only && input.adultConfirmed !== true) throw fail(403, 'ADULT_CONSENT_REQUIRED');
+    if (share.adult_only) {
+      // Adult shared sets require an authenticated account as well as the
+      // existing per-session all-participants consent.
+      await requireUser(req);
+      if (input.adultConfirmed !== true) throw fail(403, 'ADULT_CONSENT_REQUIRED');
+    }
     return { share: { name: share.name, cardCount: share.card_count, adultOnly: Boolean(share.adult_only), active: true }, participants: input.participants.map((value) => value.trim()), cards: Array.isArray(share.cards) ? share.cards : [] };
   }
 
