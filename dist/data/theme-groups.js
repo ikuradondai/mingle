@@ -7,6 +7,7 @@ export const themeGroups = {
   founders: ['work'], team: ['work'], 'new-colleagues': ['work'], 'sports-teammates': ['sports'],
   'party-first-meeting': ['first-meeting'], 'business-meetup': ['first-meeting', 'work'], 'bar-first-meeting': ['first-meeting'],
   'promotion-rivals': ['roleplay'], 'love-rivals': ['roleplay'], 'arch-enemies': ['roleplay'], 'hero-and-demon-king': ['roleplay'], 'assassin-and-target': ['roleplay'],
+  'ex-lovers': ['roleplay'], 'detective-and-phantom-thief': ['roleplay'], 'in-laws': ['family', 'roleplay'], 'same-oshi-fans': ['friends', 'roleplay'], 'roommates': ['friends'], 'grandparents-and-grandchildren': ['family'], 'neighbors': ['first-meeting'], 'travel-companions': ['friends', 'first-meeting'], 'late-night-diner': ['friends'], 'group-mixer': ['first-meeting', 'relationship'],
 };
 
 export function isAdultGroup(deck) { return Boolean(deck?.adultOnly || deck?.r18Available || themeGroups[deck?.id]?.includes('adult')); }

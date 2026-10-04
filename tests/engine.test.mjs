@@ -7,6 +7,7 @@ import {
 } from '../dist/engine.js';
 import { decks } from '../dist/data/decks.js';
 import { challenges } from '../dist/data/challenges.js';
+import { themeGroups } from '../dist/data/theme-groups.js';
 
 const deck = { id: 'test', adultOnly: false, questions: Array.from({ length: 40 }, (_, index) => ({ id: `q-${index}`, text: `質問${index}` })) };
 const names = ['A', 'B', 'C'];
@@ -19,8 +20,8 @@ function answerCurrent(value, step = nextAnswer) {
 }
 
 test('contains complete decks with unique question ids', () => {
-  assert.equal(decks.length, 28);
-  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 1120);
+  assert.equal(decks.length, 38);
+  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 1520);
   for (const item of decks) {
     assert.equal(item.questions.length, 40, item.id);
     assert.equal(new Set(item.questions.map((card) => card.id)).size, 40, item.id);
@@ -29,7 +30,7 @@ test('contains complete decks with unique question ids', () => {
     assert.equal(item.questions.every((question) => question.r18 === true), true, item.id);
   }
   assert.equal(new Set(challenges.map((card) => card.id)).size, 29);
-  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 1149);
+  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 1549);
 });
 
 test('acquaintance date keeps independent 40-card and R18 sources', () => {
@@ -44,7 +45,8 @@ test('acquaintance date keeps independent 40-card and R18 sources', () => {
 });
 
 test('first-meeting themes include the shared name preference question once', () => {
-  const ids = ['date', 'omiai', 'party-first-meeting', 'business-meetup', 'bar-first-meeting'];
+  const ids = decks.filter((item) => themeGroups[item.id]?.includes('first-meeting')).map((item) => item.id);
+  assert.equal(ids.length, 8);
   for (const id of ids) {
     const deck = decks.find((item) => item.id === id);
     assert.ok(deck, id);

@@ -630,6 +630,16 @@ function topicIcon(deck) {
   paths["arch-enemies"] = '<path d="m5 5 14 14M19 5 5 19"/><circle cx="12" cy="12" r="9"/>';
   paths["hero-and-demon-king"] = '<path d="M12 3 14 8l5 1-4 3 1 6-4-3-4 3 1-6-4-3 5-1 2-5Z"/><path d="M4 21h16"/>';
   paths["assassin-and-target"] = '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="m4 4 5 5"/>';
+  paths["ex-lovers"] = '<path d="M12 20S3 14.8 3 8.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 9 2.5C21 14.8 12 20 12 20Z"/><path d="m12 6-1.5 4 3 2-1.5 4"/>';
+  paths["detective-and-phantom-thief"] = '<circle cx="10" cy="10" r="6"/><path d="m14.5 14.5 6 6M7.5 10h5"/>';
+  paths["in-laws"] = '<path d="M4 9h13v4a6 6 0 0 1-6 6h-1a6 6 0 0 1-6-6V9Z"/><path d="M17 10h1.5a2.5 2.5 0 0 1 0 5H17M8 3v3M12 3v3"/>';
+  paths["same-oshi-fans"] = '<path d="M9 21h6M10 21V11h4v10"/><path d="M12 3v4M6.5 5.5l2 2M17.5 5.5l-2 2"/>';
+  paths["roommates"] = '<path d="m3 11 9-8 9 8v9H3v-9Z"/><path d="M7 20v-5h3v5M14 20v-5h3v5"/>';
+  paths["grandparents-and-grandchildren"] = '<circle cx="8" cy="7" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c.5-4 2.5-6 5-6s4.5 2 5 6M14 20c.4-2.6 1.4-4 3-4s2.6 1.4 3 4"/>';
+  paths["neighbors"] = '<path d="M2 20v-9l5-4 5 4v9M12 20v-9l5-4 5 4v9M1 20h22"/>';
+  paths["travel-companions"] = '<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 7V4h6v3M4 12h16"/>';
+  paths["late-night-diner"] = '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>';
+  paths["group-mixer"] = '<circle cx="6" cy="9" r="2.5"/><circle cx="12" cy="7" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M2 19c.4-3 1.8-5 4-5M22 19c-.4-3-1.8-5-4-5M8 19c.5-3.5 1.8-6 4-6s3.5 2.5 4 6"/>';
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[deck.id] ?? paths.team}</svg>`;
 }
 function decksView() {

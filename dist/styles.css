@@ -78,6 +78,16 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 .topic-arch-enemies { background:#e8e8ed; color:#4a4b5c; }
 .topic-hero-and-demon-king { background:#fff0c8; color:#9b6900; }
 .topic-assassin-and-target { background:#e1e8ec; color:#405361; }
+.topic-ex-lovers { background:#f6e1e7; color:#8a4258; }
+.topic-detective-and-phantom-thief { background:#e1e6f0; color:#26324f; }
+.topic-in-laws { background:#eef0d6; color:#6b7024; }
+.topic-same-oshi-fans { background:#dcf6fa; color:#0b7f90; }
+.topic-roommates { background:#ecf6d8; color:#5b8a1c; }
+.topic-grandparents-and-grandchildren { background:#fff6d6; color:#9a7a10; }
+.topic-neighbors { background:#e0f3e6; color:#2f7a46; }
+.topic-travel-companions { background:#e2eafb; color:#2a5db0; }
+.topic-late-night-diner { background:#e8e5fa; color:#4b3f9e; }
+.topic-group-mixer { background:#ffe2e4; color:#c42a38; }
 @media (max-width:680px) and (max-height:700px) { .masthead-slot { width:min(100%,290px); aspect-ratio:34 / 23; }.masthead-image { width:105%; max-width:none; top:-8.7%; }.home-illustration { margin-top:2px; }.question-card { min-height:210px; }.question-card p { font-size:clamp(23px,6vw,30px); }.answer-actions button { min-height:44px; } }
 @media (orientation:landscape) and (max-height:560px) { .topbar { padding-left:max(16px,env(safe-area-inset-left)); padding-right:max(16px,env(safe-area-inset-right)); }.content { padding-left:max(16px,env(safe-area-inset-left)); padding-right:max(16px,env(safe-area-inset-right)); }.app-shell[data-screen="play"] .content { display:grid; grid-template-columns:minmax(0,1fr) 220px; grid-template-rows:auto auto 1fr; gap:8px 16px; }.app-shell[data-screen="play"] .play-head,.app-shell[data-screen="play"] .round-progress { grid-column:1 / -1; }.app-shell[data-screen="play"] .participant-strip { display:none; }.app-shell[data-screen="play"] .card-back-wrap,.app-shell[data-screen="play"] .card-back,.app-shell[data-screen="play"] .round-break { grid-column:1 / -1; }.app-shell[data-screen="play"] .question-card { min-height:205px; grid-column:1; grid-row:3; }.app-shell[data-screen="play"] .speaker-pill { grid-column:1; grid-row:4; }.app-shell[data-screen="play"] .round-break { padding:20px 0; }.app-shell[data-screen="play"] .answer-actions { grid-column:2; grid-row:3 / span 2; display:flex; flex-direction:column; margin:0; }.app-shell[data-screen="play"] .answer-actions .like-button { order:0; }.app-shell[data-screen="play"] .answer-actions button { width:100%; }.home-illustration { max-height:none; } }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { transition:none!important; animation:none!important; scroll-behavior:auto!important; } }
@@ -178,6 +188,16 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 .theme-screen .deck-option.theme-card-promotion-rivals,.theme-screen .deck-option.theme-card-hero-and-demon-king { background:#d9c8ff; }
 .theme-screen .deck-option.theme-card-love-rivals { background:#ffc4d9; }
 .theme-screen .deck-option.theme-card-arch-enemies,.theme-screen .deck-option.theme-card-assassin-and-target { background:#d9e0e8; }
+.theme-screen .deck-option.theme-card-ex-lovers { background:#f3c9d3; }
+.theme-screen .deck-option.theme-card-detective-and-phantom-thief { background:#c9d2e3; }
+.theme-screen .deck-option.theme-card-in-laws { background:#e3e6b8; }
+.theme-screen .deck-option.theme-card-same-oshi-fans { background:#b8eef5; }
+.theme-screen .deck-option.theme-card-roommates { background:#d9efb0; }
+.theme-screen .deck-option.theme-card-grandparents-and-grandchildren { background:#fff0b0; }
+.theme-screen .deck-option.theme-card-neighbors { background:#c4ead0; }
+.theme-screen .deck-option.theme-card-travel-companions { background:#c6d6f5; }
+.theme-screen .deck-option.theme-card-late-night-diner { background:#d3cdf2; }
+.theme-screen .deck-option.theme-card-group-mixer { background:#ffc2c6; }
 .theme-screen .deck-option input { position:relative; z-index:2; }
 .theme-screen .deck-option.is-selected::after { content:'✓'; position:absolute; right:10px; top:12px; display:grid; place-items:center; width:22px; height:22px; border-radius:50%; color:#fff; background:var(--blue); font-size:13px; font-weight:900; pointer-events:none; }
 .theme-screen .deck-option input:checked { opacity:0; }

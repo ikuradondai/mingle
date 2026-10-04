@@ -13,6 +13,16 @@ import { loveRivals } from './love-rivals.js';
 import { archEnemies } from './arch-enemies.js';
 import { heroAndDemonKing } from './hero-and-demon-king.js';
 import { assassinAndTarget } from './assassin-and-target.js';
+import { exLovers } from './ex-lovers.js';
+import { detectiveAndPhantomThief } from './detective-and-phantom-thief.js';
+import { inLaws } from './in-laws.js';
+import { sameOshiFans } from './same-oshi-fans.js';
+import { roommates } from './roommates.js';
+import { grandparentsAndGrandchildren } from './grandparents-and-grandchildren.js';
+import { neighbors } from './neighbors.js';
+import { travelCompanions } from './travel-companions.js';
+import { lateNightDiner } from './late-night-diner.js';
+import { groupMixer } from './group-mixer.js';
 
 export const newDecks = [
   {
@@ -629,4 +639,14 @@ newDecks.push(
   archEnemies,
   heroAndDemonKing,
   assassinAndTarget,
+  exLovers,
+  detectiveAndPhantomThief,
+  inLaws,
+  sameOshiFans,
+  roommates,
+  grandparentsAndGrandchildren,
+  neighbors,
+  travelCompanions,
+  lateNightDiner,
+  groupMixer,
 );
