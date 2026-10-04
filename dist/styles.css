@@ -288,5 +288,18 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 .share-dialog-details summary { color:var(--blue); cursor:pointer; font-size:13px; font-weight:900; }.share-dialog-text { display:block; width:100%; min-height:92px; margin-top:8px; box-sizing:border-box; padding:10px 12px; border:1px solid var(--line); border-radius:14px; color:var(--ink); background:#fff; font:inherit; font-size:13px; line-height:1.45; resize:vertical; }
 .share-dialog-url { margin:9px 0 0; overflow-wrap:anywhere; color:var(--muted); font-size:12px; }.share-dialog-url span { color:var(--ink); font-weight:900; }
 @media (max-width:380px) { .share-overlay { padding:10px; }.share-dialog-body { padding:17px 15px 18px; }.share-dialog-links { gap:6px; }.share-social { border-radius:15px; }.share-social span { width:44px; height:44px; } }
-.home-screen .masthead-slot { width:min(100%,934px); height:auto; aspect-ratio:auto; overflow:visible; }
-.home-screen .home-hero { display:block; position:static; width:100%; max-width:none; height:auto; margin:0 auto; transform:none; object-fit:contain; }
+.home-screen .masthead-slot { width:min(100%,210px); aspect-ratio:1493 / 1054; height:auto; margin:0 auto 8px; overflow:visible; }
+.home-screen .masthead-image { position:static; display:block; width:100%; max-width:none; height:auto; margin:0; transform:none; }
+.home-screen .form-panel { width:min(100%,480px); margin-left:auto; margin-right:auto; }
+.home-screen .name-field { min-height:56px; }
+.home-screen .name-avatar { width:38px; height:38px; border-radius:13px; }
+.home-screen .name-avatar svg { width:38px; height:38px; }
+.home-screen .name-field input { min-height:38px; }
+.home-screen .add-person,.home-screen .primary-button { min-height:48px; }
+.home-screen .inline-actions { gap:6px; margin:4px 0 6px; }
+.home-screen .home-illustration { display:block; width:min(calc(100% + 44px),600px); max-width:none; height:auto; margin:10px auto 8px; object-fit:contain; object-position:center bottom; }
+@media (max-width:680px) {
+  .home-screen .masthead-slot { width:min(100%,180px); margin-bottom:6px; }
+  .home-screen .form-panel { width:min(100%,320px); }
+  .home-screen .home-illustration { width:100%; margin-top:8px; }
+}
