@@ -308,12 +308,15 @@ test('AI question generation is optional, strict, and never persists a draft', a
   let aiRequest;
   const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, OPENAI_API_KEY: 'openai-test' }, rateLimitImpl: async () => 1, fetchImpl: async (url, options = {}) => {
     if (url.endsWith('/auth/v1/user')) return response(200, { id: 'owner-1' });
-    if (url === 'https://api.openai.com/v1/responses') { aiRequest = JSON.parse(options.body); return response(200, { output_text: JSON.stringify({ name: 'AI案', questions: Array.from({ length: 6 }, (_, index) => ({ text: `質問${index}`, r18: false })) }) }); }
+    if (url === 'https://api.openai.com/v1/responses') { aiRequest = JSON.parse(options.body); const includeR18 = aiRequest.instructions.includes('成人向けの話題を含めてもよい'); return response(200, { output_text: JSON.stringify({ name: 'AI案', questions: Array.from({ length: 6 }, (_, index) => ({ text: `質問${index}`, r18: includeR18 && index === 0 })) }) }); }
     return response(200, []);
   } });
   const result = await service.aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: { theme: '初対面', tone: '軽い', count: 6 } }), body: { theme: '初対面', tone: '軽い', count: 6 } });
-  assert.equal(result.questions.length, 6); assert.equal(result.questions[0].origin, 'ai'); assert.equal(aiRequest.store, false); assert.equal(aiRequest.model, 'gpt-5.6-luna');
+  assert.equal(result.questions.length, 6); assert.equal(result.questions[0].origin, 'ai'); assert.equal(result.questions.every((question) => question.r18 === false), true); assert.equal(aiRequest.store, false); assert.equal(aiRequest.model, 'gpt-5.6-luna'); assert.match(aiRequest.instructions, /成人向けの話題は含めず/);
+  const adult = await service.aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: { theme: '初対面', tone: '軽い', count: 6, r18: true } }), body: { theme: '初対面', tone: '軽い', count: 6, r18: true } });
+  assert.equal(adult.questions[0].r18, true); assert.equal(adult.questions[1].r18, false); assert.match(aiRequest.instructions, /成人向けの話題を含めてもよい/);
   await assert.rejects(() => service.aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: { theme: 'x', tone: 'y', count: 7 } }), body: { theme: 'x', tone: 'y', count: 7 } }), (error) => error.status === 400);
+  await assert.rejects(() => service.aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: { theme: 'x', tone: 'y', count: 6, r18: 'true' } }), body: { theme: 'x', tone: 'y', count: 6, r18: 'true' } }), (error) => error.status === 400);
   const unavailable = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url) => url.endsWith('/auth/v1/user') ? response(200, { id: 'owner-1' }) : response(200, []) });
   await assert.rejects(() => unavailable.aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: { theme: 'x', tone: 'y', count: 6 } }), body: { theme: 'x', tone: 'y', count: 6 } }), (error) => error.status === 503);
 });

@@ -188,12 +188,13 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     const dailyLimit = typeof quota === 'object' ? Number(quota.dailyLimit) : Number.POSITIVE_INFINITY;
     if (!Number.isFinite(minute) || !Number.isFinite(daily) || minute > minuteLimit || daily > dailyLimit) throw fail(429, 'AI_RATE_LIMITED');
     const input = req.body || {};
-    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['theme', 'tone', 'count'].includes(key)) || typeof input.theme !== 'string' || typeof input.tone !== 'string' || ![6, 12].includes(input.count)) throw fail(400, ACCOUNT_ERRORS.invalid);
+    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['theme', 'tone', 'count', 'r18'].includes(key)) || typeof input.theme !== 'string' || typeof input.tone !== 'string' || ![6, 12].includes(input.count) || (input.r18 !== undefined && typeof input.r18 !== 'boolean')) throw fail(400, ACCOUNT_ERRORS.invalid);
+    const includeR18 = input.r18 === true;
     const theme = input.theme.trim(); const tone = input.tone.trim();
     if (!theme || Array.from(theme).length > 80 || !tone || Array.from(tone).length > 80 || /[\u0000-\u001f\u007f\u2028\u2029]/u.test(theme + tone)) throw fail(400, ACCOUNT_ERRORS.invalid);
     let response;
     try {
-      response = await fetchImpl('https://api.openai.com/v1/responses', { method: 'POST', signal: AbortSignal.timeout(25000), headers: { Authorization: `Bearer ${openAiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: openAiModel, store: false, instructions: '日本語の相互自己開示質問を作成する。露骨な性的内容、危険行為、差別、個人情報の要求を含めない。出力は指定されたJSONだけにする。', max_output_tokens: 3000, input: [{ role: 'user', content: [{ type: 'input_text', text: `テーマ: ${theme}\nトーン: ${tone}\n${input.count}件の質問案を作成してください。` }] }], text: { format: { type: 'json_schema', name: 'mingle_question_set', strict: true, schema: { type: 'object', additionalProperties: false, properties: { name: { type: 'string' }, questions: { type: 'array', minItems: input.count, maxItems: input.count, items: { type: 'object', additionalProperties: false, properties: { text: { type: 'string' }, r18: { type: 'boolean', enum: [false] } }, required: ['text', 'r18'] } } }, required: ['name', 'questions'] } } } }) });
+      response = await fetchImpl('https://api.openai.com/v1/responses', { method: 'POST', signal: AbortSignal.timeout(25000), headers: { Authorization: `Bearer ${openAiKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: openAiModel, store: false, instructions: `日本語の相互自己開示質問を作成する。露骨な性的描写、危険行為、差別、個人情報の要求を含めない。${includeR18 ? '成人向けの話題を含めてもよいが、露骨な性的描写は避け、該当する質問だけr18=trueにする。' : '成人向けの話題は含めず、すべてr18=falseにする。'} 出力は指定されたJSONだけにする。`, max_output_tokens: 3000, input: [{ role: 'user', content: [{ type: 'input_text', text: `テーマ: ${theme}\nトーン: ${tone}\n${input.count}件の質問案を作成してください。` }] }], text: { format: { type: 'json_schema', name: 'mingle_question_set', strict: true, schema: { type: 'object', additionalProperties: false, properties: { name: { type: 'string' }, questions: { type: 'array', minItems: input.count, maxItems: input.count, items: { type: 'object', additionalProperties: false, properties: { text: { type: 'string' }, r18: includeR18 ? { type: 'boolean' } : { type: 'boolean', enum: [false] } }, required: ['text', 'r18'] } } }, required: ['name', 'questions'] } } } }) });
     } catch { throw fail(503, 'AI_GENERATION_FAILED'); }
     if (!response?.ok) throw fail(503, 'AI_GENERATION_FAILED');
     let payload; try { payload = await response.json(); } catch { throw fail(503, 'AI_GENERATION_FAILED'); }
@@ -202,8 +203,8 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     let generated; try { generated = JSON.parse(text); } catch { throw fail(503, 'AI_GENERATION_FAILED'); }
     if (!generated || typeof generated !== 'object' || Array.isArray(generated) || Object.keys(generated).some((key) => !['name', 'questions'].includes(key)) || !Array.isArray(generated.questions) || generated.questions.length !== input.count) throw fail(503, 'AI_GENERATION_FAILED');
     let questions; try { questions = generated.questions.map((question) => {
-      if (!question || typeof question !== 'object' || Array.isArray(question) || Object.keys(question).length !== 2 || question.r18 !== false) throw new Error('invalid');
-      return { text: customText(question.text), r18: false, origin: 'ai' };
+      if (!question || typeof question !== 'object' || Array.isArray(question) || Object.keys(question).length !== 2 || typeof question.r18 !== 'boolean' || (!includeR18 && question.r18 !== false)) throw new Error('invalid');
+      return { text: customText(question.text), r18: question.r18 === true, origin: 'ai' };
     }); } catch { throw fail(503, 'AI_GENERATION_FAILED'); }
     if (new Set(questions.map((question) => question.text)).size !== questions.length) throw fail(503, 'AI_GENERATION_FAILED');
     let name; try { name = draftName(generated.name); } catch { throw fail(503, 'AI_GENERATION_FAILED'); }

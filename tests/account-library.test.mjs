@@ -52,6 +52,15 @@ test('AI preview edits are constrained and can be adopted or discarded', () => {
   assert.match(html, /maxlength="300"/);
 });
 
+test('AI creation keeps the R18 option off by default and preserves an explicit choice', () => {
+  const safe = renderLibrary({ studioMode: 'ai', aiGenerationAvailable: true, aiR18: false });
+  assert.match(safe, /data-ai-r18/);
+  assert.doesNotMatch(safe, /data-ai-r18[^>]+checked/);
+  const adult = renderLibrary({ studioMode: 'ai', aiGenerationAvailable: true, aiR18: true });
+  assert.match(adult, /data-ai-r18[^>]+checked/);
+  assert.match(adult, /R18の話題を含める/);
+});
+
 test('custom card management keeps its dedicated editor view', () => {
   const html = renderLibrary({ studioMode: 'custom', customEditorOpen: true, customDraft: '自分の質問', customDraftR18: false });
   assert.match(html, /data-form="custom-card"/);
