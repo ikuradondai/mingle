@@ -644,14 +644,14 @@ async function shareRoundResult() {
             .filter(Boolean)
             .join("・") || "テーマミックス"
         : deck?.title || "会話テーマ";
-  const text = `ミングルで、「${title}」の会話やってみた！`;
   const url = "https://mingle.cards/";
+  const text = `ミングルで、「${title}」の会話やってみた！\n#ミングる #Minglecards #あたらしい会話のはじめかた\n${url}`;
   try {
     if (navigator.share) {
-      await navigator.share({ title: "Mingle.Cards", text, url });
+      await navigator.share({ title: "Mingle.Cards", text });
       state.shareStatus = "共有しました。";
     } else if (navigator.clipboard) {
-      await navigator.clipboard.writeText(`${text} ${url}`);
+      await navigator.clipboard.writeText(text);
       state.shareStatus = "共有文をコピーしました。";
     } else {
       state.shareStatus = "共有機能を利用できません。";
