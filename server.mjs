@@ -6,6 +6,7 @@ import { sessionHandler, statsHandler } from './server-side/admin-api.mjs';
 import trackHandler from './api/track.js';
 import feedbackHandler from './api/feedback.js';
 import accountHandler from './api/account.js';
+import venueHandler from './api/venue.js';
 import shareHandler from './api/share.js';
 
 const root = normalize(fileURLToPath(new URL('./dist/', import.meta.url))).replace(/[\\/]+$/, '');
@@ -31,6 +32,7 @@ const server = createServer((request, response) => {
   if (pathname === '/api/track') return trackHandler(request, response);
   if (pathname === '/api/feedback') return feedbackHandler(request, response);
   if (pathname === '/api/account' || pathname.startsWith('/api/account/')) return accountHandler(request, response);
+  if (pathname === '/api/venue' || pathname.startsWith('/api/venue/')) return venueHandler(request, response);
   if (pathname.startsWith('/api/share/')) return shareHandler(request, response);
   if (pathname === '/admin' || pathname === '/admin/') request.url = '/admin.html';
   const target = safePath(request.url || '/');

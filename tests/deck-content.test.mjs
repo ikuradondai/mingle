@@ -37,10 +37,10 @@ test('every question text is at most 60 characters', () => {
 
 test('new decks use the agreed theme groups', () => {
   const expected = {
-    'ex-lovers': ['roleplay'],
+    'ex-lovers': ['relationship', 'roleplay'],
     'detective-and-phantom-thief': ['roleplay'],
-    'in-laws': ['family', 'roleplay'],
-    'same-oshi-fans': ['friends', 'roleplay'],
+    'in-laws': ['family'],
+    'same-oshi-fans': ['friends'],
     roommates: ['friends'],
     'grandparents-and-grandchildren': ['family'],
     neighbors: ['first-meeting'],

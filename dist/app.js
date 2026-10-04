@@ -16,6 +16,8 @@ import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThem
 const root = document.querySelector("#app");
 const state = {
   shared: null,
+  venue: null,
+  selectedVenueSetId: null,
   sharedLoading: false,
   sharedRequestId: 0,
   shareStatus: "",
@@ -90,7 +92,23 @@ function accountAccessReady() { return state.account.enabled && state.account.au
 function isRegisteredUser() { return Boolean(accountAccessReady() && state.account.user?.id); }
 function canUseDeck(deck) { return canUseThemeForAccount(deck, state.account); }
 function sessionNeedsRegistration(session) {
+  if (isActiveVenueSession(session)) return false;
   return sessionNeedsThemeAccess(session, state.account);
+}
+function isActiveVenueSession(session = state.session) {
+  return Boolean(state.venue?.token && session?.sharedGuest && session.venueSession && session.venueSetId && state.venue.sets?.some((set) => set.id === session.venueSetId));
+}
+function selectedVenueSet() {
+  return state.venue?.sets?.find((set) => set.id === state.selectedVenueSetId) || state.venue?.sets?.[0] || null;
+}
+function syncSelectedVenueSet() {
+  const set = selectedVenueSet();
+  if (!set || !state.shared) return set;
+  state.selectedVenueSetId = set.id;
+  state.shared.cardCount = set.cardCount;
+  state.shared.adultOnly = set.adultOnly === true;
+  state.adultConfirmed = state.shared.adultOnly ? state.adultConfirmed : false;
+  return set;
 }
 function esc(value) {
   return String(value).replace(
@@ -206,6 +224,8 @@ function render() {
       if (submit) submit.disabled = state.sharedLoading || state.busy || (state.shared?.adultOnly === true && !state.adultConfirmed);
     }),
   );
+  root.querySelector("[data-venue-set]")?.addEventListener("change", (event) => { state.selectedVenueSetId = event.currentTarget.value; state.adultConfirmed = false; state.error = ""; syncSelectedVenueSet(); render(); });
+  root.querySelector("[data-venue-count]")?.addEventListener("change", (event) => { const count = Math.max(2, Math.min(MAX_PARTICIPANTS, Number(event.currentTarget.value) || 2)); while (state.participants.length < count) state.participants.push(""); state.participants.length = count; render(); });
   root.querySelectorAll('input[name="participant"]').forEach((input) => {
     input.addEventListener("input", (event) => { const index = Number(event.target.dataset.index); if (index === 0) { state.participantNameUserEdited = true; if (state.participantNameOrigin === "account" && event.target.value !== state.participantNameAutoValue) {
           state.participantNameOrigin = null;
@@ -406,11 +426,20 @@ function frame(content, eyebrow = "Mingle.Cards", withHeader = true) { const qui
 }
 function sharedView() {
   const shared = state.shared || {};
-  const consent = shared.adultOnly === true;
-  const registered = isRegisteredUser();
+  const venueSet = syncSelectedVenueSet();
+  const consent = state.venue ? venueSet?.adultOnly === true : shared.adultOnly === true;
+  const registered = state.venue ? true : isRegisteredUser();
   const registrationNotice = consent && !registered ? `<p class="guest-theme-note">R18の共有セットは無料登録後に使えます。<button type="button" class="text-button" data-action="account" data-auth-return="true">ログイン / 新規登録</button></p>` : "";
   const consentControl = consent ? `<label class="adult-consent"><input type="checkbox" data-shared-adult ${state.adultConfirmed ? "checked" : ""} ${!registered ? "disabled" : ""} aria-disabled="${!registered}" /> ${registered ? "参加者全員が18歳以上で、R18の話題に同意します" : "登録後に参加者全員の同意を確認します"}</label>` : "";
-  return frame(`<div class="shared-landing"><div class="shared-brand"><img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" /></div><p class="eyebrow">共有されたマイセット</p><h1 tabindex="-1" data-focus>${esc(shared.name || "共有セット")}</h1><p class="shared-meta">${Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p><p class="account-hint">質問内容は、参加者を入力して始めるまで表示されません。</p>${registrationNotice}<form class="panel form-panel" data-form="shared-participants"><div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="呼び名" aria-label="${index + 1}人目の呼び名" /></label>`).join("")}</div><div class="inline-actions"><button type="button" class="text-button add-person" data-action="add-person" ${state.participants.length >= MAX_PARTICIPANTS ? "disabled" : ""}>＋ 参加者を追加</button>${state.participants.length > 2 ? '<button type="button" class="text-button muted" data-action="remove-person">最後の人を削除</button>' : ""}</div>${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${state.busy || state.sharedLoading || (consent && (!registered || !state.adultConfirmed)) ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button></form><button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button>${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, "共有セット", false); }
+  const venuePicker = state.venue ? `<label class="venue-picker"><span>店舗のおすすめテーマ</span><select data-venue-set aria-label="店舗のおすすめテーマ">${state.venue.sets.map((set) => `<option value="${esc(set.id)}" ${set.id === (venueSet?.id || '') ? 'selected' : ''}>${esc(set.name)}（${set.cardCount}枚${set.adultOnly ? '・R18' : ''}）</option>`).join('')}</select></label>` : '';
+  const participantFields = `<div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="${state.venue ? '呼び名（任意）' : '呼び名'}" aria-label="${index + 1}人目の呼び名" /></label>`).join("")}</div>`;
+  const participantInput = state.venue ? `<label class="venue-count"><span>参加人数</span><select data-venue-count aria-label="参加人数">${Array.from({ length: MAX_PARTICIPANTS - 1 }, (_, index) => index + 2).map((count) => `<option value="${count}" ${count === state.participants.length ? "selected" : ""}>${count}人</option>`).join("")}</select></label><details class="venue-names"><summary>呼び名をつける（任意）</summary>${participantFields}</details>` : `${participantFields}<div class="inline-actions"><button type="button" class="text-button add-person" data-action="add-person" ${state.participants.length >= MAX_PARTICIPANTS ? "disabled" : ""}>＋ 参加者を追加</button>${state.participants.length > 2 ? '<button type="button" class="text-button muted" data-action="remove-person">最後の人を削除</button>' : ""}</div>`;
+  const title = state.venue ? state.venue.venue.name : '共有されたマイセット';
+  const welcome = state.venue?.venue.welcomeText ? `<p class="account-hint venue-welcome">${esc(state.venue.venue.welcomeText)}</p>` : "";
+  const store = state.venue?.venue.storeUrl ? `<a class="text-button venue-store-link" href="${esc(state.venue.venue.storeUrl)}" target="_blank" rel="noopener noreferrer">店舗の公式サイト</a>` : "";
+  const footer = state.venue ? `<div class="venue-footer-links">${store}<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button></div>` : `<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button>`;
+  const landingHint = state.venue ? "テーマと人数を選んで、会話をはじめましょう。" : "質問内容は、参加者を入力して始めるまで表示されません。";
+  return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? title : (shared.name || "共有セット"))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}<p class="account-hint">${landingHint}</p>${registrationNotice}<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${state.busy || state.sharedLoading || (consent && (!registered || !state.adultConfirmed)) ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button></form>${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
 
 function participantsView() {
   syncAccountParticipantName();
@@ -588,7 +617,7 @@ function shareDialogView(a) {
   return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button account-back" data-action="share-close">戻る</button><strong id="account-dialog-title">セットを共有</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><p class="account-share-title">${esc(share.name || "マイセット")}</p><p class="account-hint">${Number.isFinite(share.cardCount) ? `${share.cardCount}枚` : ""}${share.adultOnly === true ? " · R18を含む" : ""}。リンクを知っている人は、最初の6枚を登録なしで遊べます。</p>${url ? `<label class="account-share-url">共有リンク<input readonly value="${esc(url)}" data-share-url /></label>${share.active === false ? "" : `<div class="share-actions"><button type="button" class="primary-button" data-action="share-copy">リンクをコピー</button><button type="button" class="secondary-button" data-action="share-native">端末で共有</button></div>`}${qr}` : '<p class="account-hint">共有リンクはまだ発行されていません。</p>'}<div class="share-actions"><button type="button" class="secondary-button" data-action="share-rotate" ${a.shareBusy ? "disabled" : ""}>${url ? "リンクを作り直す" : "リンクを発行"}</button>${url && share.active !== false ? `<button type="button" class="text-button" data-action="share-stop" ${a.shareBusy ? "disabled" : ""}>共有を停止</button>` : ""}</div>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ""}`, "account-dialog-share");
 }
 function accountSettingsView(a) {
-  if (a.deleteOpen) return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-settings">戻る</button><strong id="account-dialog-title">退会の確認</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-delete-warning"><p>退会すると、このアカウントの表示名・お気に入り・自作質問カード・非公開マイセットを削除します。</p><p>この端末の呼び名と途中データも削除されます。</p><p>削除後は取り消せません。</p><label class="account-delete-confirm-label"><input type="checkbox" data-delete-confirm ${a.deleteConfirmed ? "checked" : ""} ${a.busy ? "disabled" : ""}/> 内容を確認しました</label></div>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}<div class="account-delete-actions"><button type="button" class="text-button" data-action="account-delete-cancel" ${a.busy ? "disabled" : ""}>キャンセル</button><button type="button" class="danger-button" data-action="account-delete-confirm" ${a.busy || !a.deletionAvailable || !a.deleteConfirmed ? "disabled" : ""}>${a.busy ? "削除中…" : "退会して削除"}</button></div>`, "account-dialog-delete");
+  if (a.deleteOpen) return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-settings">戻る</button><strong id="account-dialog-title">退会の確認</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-delete-warning"><p>退会すると、このアカウントの表示名・お気に入り・自作質問カード・非公開マイセットを削除します。</p><p>このアカウントが所有する店舗設定・提供テーマ・卓上QR・利用集計も削除されます。</p><p>この端末の呼び名と途中データも削除されます。</p><p>削除後は取り消せません。</p><label class="account-delete-confirm-label"><input type="checkbox" data-delete-confirm ${a.deleteConfirmed ? "checked" : ""} ${a.busy ? "disabled" : ""}/> 内容を確認しました</label></div>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}<div class="account-delete-actions"><button type="button" class="text-button" data-action="account-delete-cancel" ${a.busy ? "disabled" : ""}>キャンセル</button><button type="button" class="danger-button" data-action="account-delete-confirm" ${a.busy || !a.deletionAvailable || !a.deleteConfirmed ? "disabled" : ""}>${a.busy ? "削除中…" : "退会して削除"}</button></div>`, "account-dialog-delete");
   const valid = validDisplayName(a.profileDraft);
   return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-menu">戻る</button><strong id="account-dialog-title">アカウント設定</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${avatarSettingsView(a)}<form class="account-settings-form" data-form="profile"><label>表示名<input type="text" data-profile-name value="${esc(a.profileDraft)}" maxlength="80" autocomplete="nickname" ${a.busy ? "disabled" : ""}/></label><p class="account-hint">1人目の呼び名に自動入力されます。遊ぶときに変更できます。</p><p class="account-email">${esc(a.user?.email || "")}</p><button type="submit" class="primary-button" ${a.busy || !valid ? "disabled" : ""}>${a.busy ? "保存中…" : "表示名を保存"}</button></form>${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ""}${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}<section class="account-delete-section"><h2>退会</h2>${a.deletionAvailable ? `<button type="button" class="danger-button" data-action="account-delete-open" ${a.avatarBusy ? "disabled" : ""}>アカウントを削除</button>` : '<p class="account-hint">退会手続きは現在利用できません。</p><a class="account-support" href="mailto:inquiry@erudaite.ai">問い合わせる</a>'}</section>`, "account-dialog-settings");
 }
@@ -602,7 +631,7 @@ function accountView(options = {}) {
   if (a.user && a.shareOpen) return wrap(shareDialogView(a));
   if (a.user && a.settingsOpen) return wrap(accountSettingsView(a));
   if (a.user && a.libraryOpen) return wrap(libraryAccountView(a));
-  if (a.user) return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">アカウント</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-menu-avatar"><span class="account-avatar">${accountAvatar(a.user)}</span></div>${a.user.displayName ? `<p class="account-display-name">${esc(a.user.displayName)}</p>` : ""}<p class="account-email">${esc(a.user.email || a.user.name || "ログイン中")}</p><button type="button" class="secondary-button account-menu-action" data-action="account-settings-open">アカウント設定</button><button type="button" class="secondary-button account-menu-action" data-action="account-library-open">保存したカード・マイセット</button><button type="button" class="text-button account-menu-action" data-action="logout">ログアウト</button>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}`, "account-dialog-menu"));
+  if (a.user) return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">アカウント</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-menu-avatar"><span class="account-avatar">${accountAvatar(a.user)}</span></div>${a.user.displayName ? `<p class="account-display-name">${esc(a.user.displayName)}</p>` : ""}<p class="account-email">${esc(a.user.email || a.user.name || "ログイン中")}</p><button type="button" class="secondary-button account-menu-action" data-action="account-settings-open">アカウント設定</button><button type="button" class="secondary-button account-menu-action" data-action="account-library-open">保存したカード・マイセット</button><a class="secondary-button account-menu-action" href="/venue.html">店舗管理</a><button type="button" class="text-button account-menu-action" data-action="logout">ログアウト</button>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}`, "account-dialog-menu"));
   return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">${state.continuePending ? "ログイン / 新規登録" : "ログインする"}</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.google ? '<button type="button" class="secondary-button account-provider" data-action="google-login">Googleで続ける</button>' : ""}<form class="account-otp" data-form="account"><label>メールアドレス<input type="email" data-account-email value="${esc(a.email)}" required autocomplete="email" /></label>${a.otpSent ? '<label>確認コード<input inputmode="numeric" data-account-otp value="' + esc(a.otp) + '" required autocomplete="one-time-code" /></label><button type="button" class="text-button muted" data-action="reset-otp"' + (a.busy ? " disabled" : "") + ">メールアドレスを変更／コードを再送</button>" : ""}<button type="submit" class="primary-button">${a.busy ? "処理中…" : a.otpSent ? "ログインする" : "確認コードを送る"}</button></form><p class="account-status" role="status">${esc(a.status || "ログインすると質問を保存できます")}</p><p class="form-error" role="alert">${esc(a.error)}</p>`, "account-dialog-login"));
 }
 function topicIcon(deck) {
@@ -824,9 +853,10 @@ function roundView() {
   const session = state.session;
   const totalCards = session.questions.length; const isFinal = session.cursor >= totalCards; const feedback = feedbackState(session); const submitted = feedbackSubmitted(session);
   const favoriteContext = roundFavoriteContext(session); const favoriteBusy = Boolean(favoriteContext?.saving);
+  const endingLink = isActiveVenueSession() && state.venue?.venue.endingUrl ? `<a class="venue-ending-link" href="${esc(state.venue.venue.endingUrl)}" target="_blank" rel="noopener noreferrer">店舗の公式SNS/サイトを見る</a>` : "";
   const feedbackForm = submitted ? '<p class="feedback-success" role="status">フィードバック送信済み。ありがとう！</p>' : `<details class="round-feedback-details" data-round-feedback ${state.roundFeedbackExpanded ? "open" : ""}><summary>α版アンケート <span>ご意見をお聞かせください</span></summary><div class="feedback-box" aria-labelledby="feedback-title"><h2 id="feedback-title" class="feedback-survey-title">α版アンケート</h2><p id="feedback-survey-description" class="feedback-survey-description">今回のミングルについて意見をきかせてください。どうすればもっと楽しめますか？</p><div class="feedback-ratings" role="group" aria-label="評価"><button type="button" class="feedback-rating ${feedback.rating === "positive" ? "is-selected" : ""}" data-action="feedback-rating" data-rating="positive" aria-pressed="${feedback.rating === "positive"}" ${state.feedbackBusy ? "disabled" : ""}>いいね！</button><button type="button" class="feedback-rating ${feedback.rating === "needs_improvement" ? "is-selected" : ""}" data-action="feedback-rating" data-rating="needs_improvement" aria-pressed="${feedback.rating === "needs_improvement"}" ${state.feedbackBusy ? "disabled" : ""}>改善余地大きい！</button></div><label class="feedback-label" for="feedback-text">ひとこと（任意）</label><textarea id="feedback-text" data-feedback-text maxlength="1000" rows="3" placeholder="気づいたことがあれば" ${state.feedbackBusy ? "disabled" : ""}>${esc(feedback.text)}</textarea><p class="form-error" role="alert">${esc(feedback.error)}</p><button type="button" class="secondary-button feedback-submit" data-action="feedback-submit" ${state.feedbackBusy || (!feedback.rating && !feedback.text.trim()) ? "disabled" : ""}>${state.feedbackBusy ? "送信中…" : "送信する"}</button></div></details>`;
   const accountOverlay = state.account.open ? accountView({ overlayOnly: true }) : "";
-  return frame(`<div class="round-break">${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : "続きを遊ぶ"}</button>` : ""}<button class="secondary-button" data-action="finish" ${favoriteBusy ? "disabled" : ""}>今日はここまで</button><button class="secondary-button social-share-button" data-action="social-share" ${favoriteBusy ? "disabled" : ""}>SNSでシェア</button></div>${likeTotalsView(session)}${roundFavoriteView(session)}${feedbackForm}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" ${favoriteBusy ? "disabled" : ""}>テーマを選び直す</button></div>${state.shareDialogOpen ? roundShareDialogView() : ""}${accountOverlay}`);
+  return frame(`<div class="round-break">${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : "続きを遊ぶ"}</button>` : ""}<button class="secondary-button" data-action="finish" ${favoriteBusy ? "disabled" : ""}>今日はここまで</button><button class="secondary-button social-share-button" data-action="social-share" ${favoriteBusy ? "disabled" : ""}>SNSでシェア</button></div>${likeTotalsView(session)}${roundFavoriteView(session)}${feedbackForm}${endingLink}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" ${favoriteBusy ? "disabled" : ""}>テーマを選び直す</button></div>${state.shareDialogOpen ? roundShareDialogView() : ""}${accountOverlay}`);
 }
 
 function finishView() { return roundView(); }
@@ -1052,17 +1082,18 @@ function playSavedSet(set) {
 }
 async function startSharedSet() {
   const shared = state.shared;
+  const venueMode = Boolean(state.venue);
   if (!shared || state.busy || state.sharedLoading) return;
   let participants;
   try {
-    participants = normalizeParticipants(state.participants.map((name) => String(name)));
+    participants = normalizeParticipants(state.participants.map((name, index) => venueMode ? (String(name || "").trim() || `参加者${index + 1}`) : String(name)));
   } catch (error) {
     state.error = error.message || "呼び名を確認してください。";
     render();
     return;
   }
   const adultConfirmed = state.adultConfirmed === true;
-  if (shared.adultOnly === true && !isRegisteredUser()) {
+  if (!venueMode && shared.adultOnly === true && !isRegisteredUser()) {
     state.error = "R18の共有セットは無料登録後に使えます。";
     state.account.open = true;
     state.account.status = state.error;
@@ -1081,14 +1112,14 @@ async function startSharedSet() {
   state.error = "";
   render();
   try {
-    const result = await accountApi.startSharedSet(token, participants, adultConfirmed);
+    const result = venueMode ? await accountApi.startVenue(token, state.selectedVenueSetId, participants, adultConfirmed) : await accountApi.startSharedSet(token, participants, adultConfirmed);
     const cards = Array.isArray(result.cards) ? result.cards : [];
     const customCards = cards.filter((card) => card.id?.startsWith("custom:"));
     if (requestId !== state.sharedRequestId || !state.shared || state.shared.token !== token) {
       state.busy = false;
       return;
     }
-    const sharedName = shared.name || result.share?.name || "共有セット";
+    const sharedName = venueMode ? (result.set?.name || state.venue.venue.name) : (shared.name || result.share?.name || "共有セット");
     state.feedback = null;
     state.feedbackBusy = false;
     state.roundFavorite = null;
@@ -1103,11 +1134,12 @@ async function startSharedSet() {
       adultConfirmed,
     });
     session.setName = sharedName;
+    if (venueMode) { session.venueSession = result.session; session.venueSetId = state.selectedVenueSetId; session.sharedGuest = true; }
     state.participants = session.participants;
     state.session = session;
     state.resume = null;
     state.shared = null;
-    if (location.search.includes("share=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
+    if (location.search.includes("share=") || location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
     state.busy = false;
     state.screen = "play";
     state.error = "";
@@ -1137,7 +1169,7 @@ function saveCurrentSession(session) {
 function persist(previous = null) { if (!state.session) return; if (previous) trackSessionProgress(previous, state.session); if (state.session.sharedGuest) return;
   if (state.session.cursor >= state.session.questions.length) clearSession();
   else saveCurrentSession(state.session); }
-function advanceGuarded(action) { ensureSession(); const now = Date.now(); if (now - state.lastAdvanceAt < 300) return false; state.lastAdvanceAt = now; const previous = state.session; state.busy = true; render(); state.session = action(state.session); state.busy = false; persist(previous); render(); return true; }
+function advanceGuarded(action) { ensureSession(); const now = Date.now(); if (now - state.lastAdvanceAt < 300) return false; state.lastAdvanceAt = now; const previous = state.session; state.busy = true; render(); state.session = action(state.session); state.busy = false; persist(previous); if (isActiveVenueSession() && previous.cursor < state.session.cursor && state.session.cursor > 0 && state.session.cursor % ROUND_SIZE === 0) accountApi.venueEvent(state.venue.token, { eventType: "completed_round", setId: state.session.venueSetId, session: state.session.venueSession, roundIndex: state.session.cursor / ROUND_SIZE }).catch(() => {}); render(); return true; }
 function resumeSaved(snapshot = null) { const fresh = snapshot || loadResumeForCurrentUser(); if (!fresh) { state.resume = null; state.error = "保存期限が切れています。"; render(); return; } const needsAuth = fresh.cursor >= 6 && fresh.unlockedUntil > 6; const lockedTheme = sessionNeedsRegistration(fresh); if ((needsAuth || lockedTheme) && !state.account.authReady) { state.resume = fresh; state.error = "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; } if ((needsAuth || lockedTheme) && !state.account.user) { state.resume = fresh; if (!state.account.enabled) { state.error = "ログイン設定を利用できないため、続きを再開できません。"; render(); return; } state.continuePending = { kind: "resume", sessionId: fresh.sessionId, snapshot: fresh }; state.account.open = true; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.error = ""; state.account.status = lockedTheme ? "このテーマは無料登録で使えます。ログインまたは新規登録してください。" : "ログインまたは新規登録で、続きを無料で楽しめます。"; state.focusSelector = "[data-account-email]"; render(); return; } state.resume = fresh; state.session = fresh; state.participantNameOrigin = null; state.participantNameAutoValue = ""; state.participantNameUserEdited = true; state.participants = [...state.session.participants]; state.selectedDeckIds = [...(state.session.deckIds || [state.session.deckId])]; state.selectedDeckId = state.session.mixed ? state.selectedDeckIds[0] : state.session.deckId; state.themeMode = state.session.mixed ? "mixed" : "single"; state.includeChallenges = state.session.includeChallenges === true; state.adultConfirmed = state.session.adultConfirmed === true; state.screen = "play";
   state.resume = null;
   state.error = ""; render(); }
@@ -1199,7 +1231,7 @@ function isContinuePendingCurrent() {
   return Boolean(pending && pending.kind !== "resume" && session && pending.sessionId === session.sessionId && pending.roundStart === session.roundStart && pending.cursor === session.cursor && state.screen === "play");
 }
 async function continueCurrentRound() {
-  if (!(await canContinue(state.session, state.account))) { state.error = "ログインしてから続きを始めてください。"; render(); return; }
+  if (!isActiveVenueSession(state.session) && !(await canContinue(state.session, state.account))) { state.error = "ログインしてから続きを始めてください。"; render(); return; }
   state.continuePending = null;
   state.shareMenuOpen = false;
   state.shareStatus = "";
@@ -1225,9 +1257,11 @@ async function handleAction(event) {
     state.continuePending = null;
     state.sharedRequestId += 1;
     state.shared = null;
+    state.venue = null;
+    state.selectedVenueSetId = null;
     state.sharedLoading = false;
     state.busy = false;
-    if (location.search.includes("share=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
+    if (location.search.includes("share=") || location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
     state.adultConfirmed = false;
     state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null;
     state.shareStatus = "";
@@ -1589,7 +1623,9 @@ async function handleAction(event) {
     state.shareMenuOpen = false;
     state.shareStatus = "";
     state.shareFallbackText = "";
+    const leavingVenue = Boolean(state.venue || state.session?.venueSession);
     state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.screen = "decks";
+    if (leavingVenue) { state.venue = null; state.shared = null; state.selectedVenueSetId = null; state.session = null; if (location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`); }
     state.error = "";
     state.busy = false;
     render();
@@ -1663,6 +1699,7 @@ async function handleAction(event) {
   if (action === "previous-answer") { const previous = ensureSession(); state.session = previousAnswer(previous); persist(previous); render(); return; }
   if (action === "pass") { try { advanceGuarded(passAnswer); } catch (error) { state.error = error.message; render(); } return; }
   if (action === "continue") {
+    if (isActiveVenueSession(state.session)) { await continueCurrentRound(); return; }
     if (!state.account.authReady || !state.account.user) {
       if (!state.account.authReady) { state.error = "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; }
       if (!state.account.enabled) { state.error = "ログイン設定を利用できないため、続きを始められません。"; render(); return; }
@@ -1678,6 +1715,8 @@ async function handleAction(event) {
     state.resume = loadResumeForCurrentUser();
     state.screen = "participants";
     state.session = null;
+    state.venue = null; state.shared = null; state.selectedVenueSetId = null;
+    if (location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
     state.error = ""; state.includeChallenges = false; state.adultConfirmed = false; render(); }
 }
 
@@ -1754,7 +1793,7 @@ function registerWebMcp() {
     },
     {
       name: "continue_round",
-      description: "6枚区切りの続きを許可する", inputSchema: empty, annotations: { readOnlyHint: false, untrustedContentHint: true }, execute: async (_input, { signal } = {}) => { if (signal?.aborted) throw new Error("中止されました"); const previous = ensureSession(); if (!(await canContinue(state.session, state.account))) throw new Error("ログインしてから続きを始めてください。"); state.feedback = null; state.feedbackBusy = false; state.session = continueRound(state.session); persist(previous); render(); return { ok: true, unlockedUntil: state.session.unlockedUntil }; },
+      description: "6枚区切りの続きを許可する", inputSchema: empty, annotations: { readOnlyHint: false, untrustedContentHint: true }, execute: async (_input, { signal } = {}) => { if (signal?.aborted) throw new Error("中止されました"); const previous = ensureSession(); if (!isActiveVenueSession(state.session) && !(await canContinue(state.session, state.account))) throw new Error("ログインしてから続きを始めてください。"); state.feedback = null; state.feedbackBusy = false; state.session = continueRound(state.session); persist(previous); render(); return { ok: true, unlockedUntil: state.session.unlockedUntil }; },
     },
   ];
   tools.forEach(register);
@@ -1783,10 +1822,28 @@ async function loadSharedLink() {
     }
   }
 }
+async function loadVenueLink() {
+  const token = new URL(location.href).searchParams.get("venue");
+  if (!token) return;
+  const requestId = ++state.sharedRequestId;
+  state.sharedLoading = true;
+  try {
+    const result = await accountApi.venueInfo(token);
+    if (requestId !== state.sharedRequestId) return;
+    if (!Array.isArray(result.sets) || !result.sets.length) throw new Error("店舗テーマが見つかりません。");
+    state.venue = { token, venue: result.venue, table: result.table, sets: result.sets };
+    state.selectedVenueSetId = result.sets[0].id;
+    state.shared = { token, name: result.venue.name, cardCount: result.sets[0].cardCount, adultOnly: result.sets[0].adultOnly };
+    syncSelectedVenueSet();
+    state.error = "";
+  } catch { if (requestId === state.sharedRequestId) { state.venue = null; state.shared = null; state.error = "この店舗QRは無効か、停止されています。"; } }
+  finally { if (requestId === state.sharedRequestId) { state.sharedLoading = false; render(); } }
+}
 
 try { const saved = loadSession(); if (saved?.customSet && saved.ownerUserId) state.pendingCustomResume = saved; else state.resume = saved; } catch { state.resume = null; state.pendingCustomResume = null; }
 render();
 loadSharedLink();
+loadVenueLink();
 discoverAccountConfig().then(() => { state.account.enabled = accountConfig.enabled; state.account.google = accountConfig.google; if (!state.account.enabled && state.pendingCustomResume) { clearSession(); state.pendingCustomResume = null; } if (!state.account.enabled) state.account.authReady = true; if (state.account.enabled) { loadAccount(); accountApi.onAuthStateChange?.((event, session) => { setTimeout(() => { const nextUser = session?.user || null; const previousId = state.account.user?.id || null; const nextId = nextUser?.id || null; const identityChanged = Boolean(previousId && nextId && previousId !== nextId); if (event === "SIGNED_OUT" || identityChanged || (event === "SIGNED_IN" && !previousId)) state.account.authReady = false; if (event === "SIGNED_OUT" || identityChanged) {
             state.roundFavorite = null; state.continuePending = null;
             clearAccountShare({ close: true });
@@ -1794,6 +1851,8 @@ discoverAccountConfig().then(() => { state.account.enabled = accountConfig.enabl
             state.shareMenuOpen = false; state.shareFallbackText = "";
             state.sharedRequestId += 1;
             state.shared = null;
+            state.venue = null;
+            state.selectedVenueSetId = null;
             state.sharedLoading = false;
           }
           const privateResume = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (event === "SIGNED_OUT" || identityChanged) clearAccountParticipantName();

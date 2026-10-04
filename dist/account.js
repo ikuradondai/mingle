@@ -18,6 +18,12 @@ async function request(path, options = {}) {
   let data = null; try { data = await response.json(); } catch {}
   if (!response.ok) { const error = new Error(data?.error || 'account_request_failed'); error.status = response.status; throw error; } return data || {};
 }
+async function venueRequest(path, options = {}) {
+  const token = await sessionToken(); if (!token) throw authError();
+  const response = await fetcher(`/api/venue${path}`, { ...options, credentials: 'same-origin', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, ...(options.headers || {}) }, body: options.body === undefined ? undefined : JSON.stringify(options.body) });
+  let data = null; try { data = await response.json(); } catch {}
+  if (!response.ok) { const error = new Error(data?.error || 'venue_request_failed'); error.status = response.status; throw error; } return data || {};
+}
 function authClient() { if (!supabase) throw authError('account_unavailable', 503); return supabase.auth; }
 export const accountApi = {
   me: () => request('/me'),
@@ -45,9 +51,21 @@ export const accountApi = {
   revokeSetShare: (id) => request(`/sets/${encodeURIComponent(id)}/share`, { method: 'DELETE' }),
   sharedSet: async (token) => { const response = await fetcher(`/api/share/${encodeURIComponent(token)}`, { credentials: 'same-origin' }); let data = null; try { data = await response.json(); } catch {} if (!response.ok) { const error = new Error(data?.error || 'share_unavailable'); error.status = response.status; throw error; } return data || {}; },
   startSharedSet: async (token, participants, adultConfirmed) => { const tokenValue = await sessionToken(); const response = await fetcher(`/api/share/${encodeURIComponent(token)}/start`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json', ...(tokenValue ? { authorization: `Bearer ${tokenValue}` } : {}) }, body: JSON.stringify({ participants, adultConfirmed: adultConfirmed === true }) }); let data = null; try { data = await response.json(); } catch {} if (!response.ok) { const error = new Error(data?.error || 'share_start_failed'); error.status = response.status; throw error; } return data || {}; },
+  venueInfo: async (token) => { const response = await fetcher(`/api/venue/public/${encodeURIComponent(token)}`, { credentials: 'same-origin' }); const data = await response.json(); if (!response.ok) { const error = new Error(data?.error || 'venue_unavailable'); error.status = response.status; throw error; } return data || {}; },
+  startVenue: async (token, setId, participants, adultConfirmed) => { const response = await fetcher(`/api/venue/public/${encodeURIComponent(token)}/start`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ setId, participants, adultConfirmed: adultConfirmed === true }) }); const data = await response.json(); if (!response.ok) { const error = new Error(data?.error || 'venue_start_failed'); error.status = response.status; throw error; } return data || {}; },
+  venueEvent: async (token, payload) => { const response = await fetcher(`/api/venue/public/${encodeURIComponent(token)}/events`, { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) }); const data = await response.json(); if (!response.ok) { const error = new Error(data?.error || 'venue_event_failed'); error.status = response.status; throw error; } return data || {}; },
   createCard: (text, r18) => request('/cards', { method: 'POST', body: { text, r18: r18 === true } }),
   updateCard: (id, text, r18) => request(`/cards/${encodeURIComponent(id)}`, { method: 'PATCH', body: { text, r18: r18 === true } }),
   deleteCard: (id) => request(`/cards/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  listVenues: () => venueRequest(''),
+  createVenue: (payload) => venueRequest('', { method: 'POST', body: payload }),
+  updateVenue: (id, payload) => venueRequest(`/${encodeURIComponent(id)}`, { method: 'PATCH', body: payload }),
+  addVenueSet: (id, payload) => venueRequest(`/${encodeURIComponent(id)}/sets`, { method: 'POST', body: payload }),
+  updateVenueSet: (id, payload) => venueRequest(`/sets/${encodeURIComponent(id)}`, { method: 'PATCH', body: payload }),
+  issueVenueTable: (id, payload) => venueRequest(`/${encodeURIComponent(id)}/tables`, { method: 'POST', body: payload }),
+  revokeVenueTable: (id) => venueRequest(`/tables/${encodeURIComponent(id)}/revoke`, { method: 'POST', body: {} }),
+  rotateVenueTable: (id) => venueRequest(`/tables/${encodeURIComponent(id)}/rotate`, { method: 'POST', body: {} }),
+  venueStats: (id) => venueRequest(`/${encodeURIComponent(id)}/stats`),
 };
 export function cardPayload(card, deckId) { return { id: card.id, deckId: deckId || card.sourceDeckId || null }; }
 export function createAccountClientForTest({ fetchImpl, sdk, locationRef = { origin: 'http://localhost:5180', pathname: '/' } }) { sdkLoader = async () => sdk; fetcher = fetchImpl; globalThis.location ||= locationRef; return { config: accountConfig, discover: () => discoverAccountConfig({ fetchImpl }), api: accountApi }; }
