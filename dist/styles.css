@@ -488,7 +488,9 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 @media (max-width:680px) {
   .ad-slot { margin:16px 0 12px; }
   .ad-slot .ad-label { width:min(100%,320px); margin-bottom:6px; }
-  .ad-slot > a { display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"logo spacer cta" "copy copy copy"; align-items:center; width:min(100%,320px); min-height:100px; padding:10px 12px; border-radius:8px; }
+  .ad-slot > a { display:grid; grid-template-columns:auto minmax(0,1fr) auto; grid-template-areas:"logo spacer cta" "copy copy copy"; gap:4px 6px; align-items:center; width:min(100%,320px); min-height:100px; padding:7px 10px; border-radius:8px; }
+  .ad-slot > a .ad-logo { width:clamp(86px,32vw,120px); height:24px; }
+  .ad-slot > a .ad-cta { min-height:24px; padding:4px 6px; }
   .ad-slot-creative > a { display:block; min-height:0; padding:0; }
   .ad-slot-creative > a .ad-creative img { max-height:none; }
 }
