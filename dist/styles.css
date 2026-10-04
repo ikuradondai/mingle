@@ -245,3 +245,15 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 
 /* Card audio control: keep the 44px target clear of long question text. */
 .question-card { padding-bottom:78px; }
+
+.social-share-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.social-share-actions button,.social-share-actions a { min-height:44px; flex:1 1 110px; }
+
+.share-fallback-label { display:grid; gap:5px; margin-top:8px; color:var(--muted); font-size:12px; font-weight:800; }
+.share-fallback-label textarea { width:100%; min-height:86px; box-sizing:border-box; padding:9px 10px; border:1px solid var(--line); border-radius:12px; color:var(--ink); background:#fff; font:inherit; font-size:14px; line-height:1.45; resize:vertical; }
+
+/* Keep the expanded social menu on its own row so labels never stack vertically. */
+.round-break .break-actions { flex-wrap:wrap; }
+.round-break .break-actions > .social-share-actions { flex:0 0 100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.round-break .social-share-actions button,.round-break .social-share-actions a { display:flex; align-items:center; justify-content:center; min-height:52px; flex:unset; white-space:nowrap; text-decoration:none; }
+@media (min-width:681px) { .round-break .break-actions > .social-share-actions { grid-template-columns:repeat(4,minmax(0,1fr)); } }

@@ -8,6 +8,7 @@ import { buildFeedbackPayload, feedbackKey, submitFeedback } from "./feedback.js
 import { accountConfig, accountApi, cardPayload, discoverAccountConfig } from "./account.js";
 import { renderLibrary, canonicalCard } from "./account-library.js";
 import { renderAd } from "./ad-config.js";
+import { buildFacebookShareUrl, buildShareText, buildXShareUrl } from "./share-text.js";
 import { isCardAudioEnabled, toggleCardAudio, playFlipSound } from "./card-audio.js";
 const root = document.querySelector("#app");
 const state = {
@@ -15,6 +16,8 @@ const state = {
   sharedLoading: false,
   sharedRequestId: 0,
   shareStatus: "",
+  shareMenuOpen: false,
+  shareFallbackText: "",
   participantNameOrigin: null,
   participantNameAutoValue: "",
   participantNameUserEdited: false,
@@ -207,6 +210,8 @@ function render() {
   root.querySelector("[data-account-email]")?.addEventListener("input", (event) => { state.account.email = event.target.value; });
   root.querySelector("[data-profile-name]")?.addEventListener("input", (event) => { state.account.profileDraft = event.target.value; const button = root.querySelector('form[data-form="profile"] button[type="submit"]'); if (button) button.disabled = state.account.busy || !validDisplayName(state.account.profileDraft); });
   root.querySelector("[data-avatar-file]")?.addEventListener("change", prepareAvatar);
+  root.querySelector("[data-share-facebook]")?.addEventListener("click", copyFacebookShareText);
+  root.querySelector("[data-share-fallback]")?.addEventListener("focus", (event) => event.currentTarget.select());
   root.querySelectorAll("[data-action=\"audio-toggle\"]").forEach((button) => {
     const stop = (event) => event.stopPropagation();
     button.addEventListener("click", stop);
@@ -631,27 +636,16 @@ function roundFavoriteView(session) {
   return `<section class="round-favorites" aria-labelledby="round-favorites-title"><div class="round-section-head"><h2 id="round-favorites-title">気に入った質問を保存</h2><span class="round-section-count">${context.cards.length}件</span></div><button type="button" class="round-section-toggle" data-action="round-favorite-toggle" aria-expanded="${context.expanded}">${context.expanded ? "閉じる" : "質問を選ぶ"}</button>${list}<p class="form-error" role="alert">${esc(context.error || "")}</p></section>`;
 }
 async function shareRoundResult() {
-  const session = state.session;
-  if (!session) return;
-  const deck = decks.find((item) => item.id === session.deckId);
-  const title = session.sharedGuest
-    ? session.setName || "共有セット"
-    : session.customSet
-      ? session.setName || state.account.sets.find((set) => set.id === session.setId)?.name || "マイセット"
-      : session.mixed
-        ? session.deckIds
-            .map((id) => decks.find((item) => item.id === id)?.title)
-            .filter(Boolean)
-            .join("・") || "テーマミックス"
-        : deck?.title || "会話テーマ";
-  const url = "https://mingle.cards/";
-  const text = `ミングルで、「${title}」の会話やってみた！\n#ミングる #Minglecards #あたらしい会話のはじめかた\n${url}`;
+  if (!state.session) return;
+  const text = roundShareText();
   try {
     if (navigator.share) {
       await navigator.share({ title: "Mingle.Cards", text });
+      state.shareFallbackText = "";
       state.shareStatus = "共有しました。";
     } else if (navigator.clipboard) {
       await navigator.clipboard.writeText(text);
+      state.shareFallbackText = "";
       state.shareStatus = "共有文をコピーしました。";
     } else {
       state.shareStatus = "共有機能を利用できません。";
@@ -661,13 +655,40 @@ async function shareRoundResult() {
   }
   render();
 }
+function roundShareTitle(session) {
+  if (session.sharedGuest) return session.setName || "共有セット";
+  if (session.customSet) return session.setName || state.account.sets.find((set) => set.id === session.setId)?.name || "マイセット";
+  if (session.mixed) return session.deckIds.map((id) => decks.find((item) => item.id === id)?.title).filter(Boolean).join("・") || "テーマミックス";
+  return decks.find((item) => item.id === session.deckId)?.title || "会話テーマ";
+}
+function roundShareText() { return buildShareText(roundShareTitle(state.session)); }
+async function copyFacebookShareText() {
+  const text = roundShareText();
+  let copied = false;
+  try {
+    if (navigator.clipboard) { await navigator.clipboard.writeText(text); copied = true; }
+  } catch { copied = false; }
+  state.shareFallbackText = copied ? "" : text;
+  state.shareStatus = copied ? "投稿文をコピーしました。Facebookで貼り付けてください。" : "投稿文をコピーできませんでした。下の本文を選択してコピーできます。";
+  render();
+}
+async function copyRoundShare() {
+  const text = roundShareText();
+  try {
+    if (!navigator.clipboard) throw new Error("clipboard");
+    await navigator.clipboard.writeText(text);
+    state.shareFallbackText = "";
+    state.shareStatus = "共有文をコピーしました。";
+  } catch { state.shareFallbackText = text; state.shareStatus = "共有文をコピーできませんでした。下の本文を選択してコピーできます。"; }
+  render();
+}
 function roundView() {
   const session = state.session;
   const totalCards = session.questions.length; const isFinal = session.cursor >= totalCards; const feedback = feedbackState(session); const submitted = feedbackSubmitted(session);
   const favoriteContext = roundFavoriteContext(session); const favoriteBusy = Boolean(favoriteContext?.saving);
   const feedbackForm = submitted ? '<p class="feedback-success" role="status">フィードバック送信済み。ありがとう！</p>' : `<div class="feedback-box" aria-labelledby="feedback-title"><h2 id="feedback-title" class="feedback-heading-visually-hidden">今回のミングルはどうだった？</h2><div class="feedback-ratings" role="group" aria-label="評価"><button type="button" class="feedback-rating ${feedback.rating === "positive" ? "is-selected" : ""}" data-action="feedback-rating" data-rating="positive" aria-pressed="${feedback.rating === "positive"}" ${state.feedbackBusy ? "disabled" : ""}>いいね！</button><button type="button" class="feedback-rating ${feedback.rating === "needs_improvement" ? "is-selected" : ""}" data-action="feedback-rating" data-rating="needs_improvement" aria-pressed="${feedback.rating === "needs_improvement"}" ${state.feedbackBusy ? "disabled" : ""}>改善余地大きい！</button></div><label class="feedback-label" for="feedback-text">ひとこと（任意）</label><textarea id="feedback-text" data-feedback-text maxlength="1000" rows="3" placeholder="気づいたことがあれば" ${state.feedbackBusy ? "disabled" : ""}>${esc(feedback.text)}</textarea><p class="form-error" role="alert">${esc(feedback.error)}</p><button type="button" class="secondary-button feedback-submit" data-action="feedback-submit" ${state.feedbackBusy || (!feedback.rating && !feedback.text.trim()) ? "disabled" : ""}>${state.feedbackBusy ? "送信中…" : "送信する"}</button></div>`;
   const accountOverlay = state.account.open ? accountView({ overlayOnly: true }) : "";
-  return frame(`<div class="round-break">${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1>${likeTotalsView(session)}${roundFavoriteView(session)}${feedbackForm}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : "続きを遊ぶ"}</button>` : ""}<button class="secondary-button" data-action="finish" ${favoriteBusy ? "disabled" : ""}>今日はここまで</button><button class="secondary-button social-share-button" data-action="social-share" ${favoriteBusy ? "disabled" : ""}>SNSでシェア</button></div><button class="back-link" data-action="decks" ${favoriteBusy ? "disabled" : ""}>テーマを選び直す</button></div>${accountOverlay}`);
+  return frame(`<div class="round-break">${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1>${likeTotalsView(session)}${roundFavoriteView(session)}${feedbackForm}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : "続きを遊ぶ"}</button>` : ""}<button class="secondary-button" data-action="finish" ${favoriteBusy ? "disabled" : ""}>今日はここまで</button>${state.shareMenuOpen ? `<div class="social-share-actions" role="group" aria-label="SNSでシェア">${navigator.share ? `<button class="secondary-button" data-action="social-share-native">その他</button>` : ""}<a class="secondary-button" data-share-x href="${esc(buildXShareUrl(roundShareText()))}" target="_blank" rel="noopener noreferrer">X</a><a class="secondary-button" data-share-facebook href="${esc(buildFacebookShareUrl())}" target="_blank" rel="noopener noreferrer">Facebook</a><button class="secondary-button" data-action="social-share-copy" ${favoriteBusy ? "disabled" : ""}>コピー</button><button class="text-button muted" data-action="share-menu-close">閉じる</button></div>` : `<button class="secondary-button social-share-button" data-action="social-share" ${favoriteBusy ? "disabled" : ""}>SNSでシェア</button>`}</div><button class="back-link" data-action="decks" ${favoriteBusy ? "disabled" : ""}>テーマを選び直す</button></div>${accountOverlay}`);
 }
 
 function finishView() { return roundView(); }
@@ -768,6 +789,7 @@ async function deleteAccount() {
   const requestUserId = state.account.user?.id || null;
   clearAccountShare({ close: true });
   state.shareStatus = "";
+  state.shareMenuOpen = false; state.shareFallbackText = "";
   state.sharedRequestId += 1;
   state.shared = null;
   state.sharedLoading = false;
@@ -872,6 +894,7 @@ async function startSharedSet() {
     state.roundLikeKey = null;
     state.roundLikeExpanded = false;
     state.shareStatus = "";
+    state.shareMenuOpen = false; state.shareFallbackText = "";
     const session = createSharedSession({
       participants: result.participants || participants,
       cards,
@@ -983,6 +1006,7 @@ async function handleAction(event) {
     state.adultConfirmed = false;
     state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null;
     state.shareStatus = "";
+    state.shareMenuOpen = false; state.shareFallbackText = "";
     if (state.session && !isFinished(state.session)) saveCurrentSession(state.session);
     state.resume = loadResumeForCurrentUser();
     state.screen = "participants";
@@ -1101,6 +1125,7 @@ async function handleAction(event) {
   if (action === "logout") {
     clearAccountShare({ close: true });
     state.shareStatus = "";
+    state.shareMenuOpen = false; state.shareFallbackText = "";
     state.sharedRequestId += 1;
     state.shared = null;
     state.sharedLoading = false;
@@ -1290,9 +1315,14 @@ async function handleAction(event) {
     return;
   }
   if (action === "social-share") {
-    shareRoundResult();
+    state.shareMenuOpen = !state.shareMenuOpen;
+    if (state.shareMenuOpen) state.focusSelector = "[data-share-x]";
+    render();
     return;
   }
+  if (action === "share-menu-close") { state.shareMenuOpen = false; state.focusAction = "social-share"; render(); return; }
+  if (action === "social-share-native") { shareRoundResult(); return; }
+  if (action === "social-share-copy") { copyRoundShare(); return; }
   if (action === "round-like-toggle") {
     state.roundLikeExpanded = !state.roundLikeExpanded;
     render();
@@ -1324,7 +1354,9 @@ async function handleAction(event) {
   }
   if (action === "remove-person") { if (state.participants.length > 2) { state.participants.pop(); state.focusSelector = `input[data-index="${state.participants.length - 1}"]`; } render(); return; }
   if (action === "decks") {
+    state.shareMenuOpen = false;
     state.shareStatus = "";
+    state.shareFallbackText = "";
     state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.screen = "decks";
     state.error = "";
     state.busy = false;
@@ -1332,7 +1364,9 @@ async function handleAction(event) {
     return;
   }
   if (action === "choose-deck") {
+    state.shareMenuOpen = false;
     state.shareStatus = "";
+    state.shareFallbackText = "";
     const deck = decks.find((item) => item.id === event.currentTarget.dataset.deck); const adultConfirmed = state.adultConfirmed; const includeR18 = Boolean(state.themeMode !== "mixed" && deck?.r18Available && adultConfirmed);
     try {
       state.session =
@@ -1380,7 +1414,9 @@ async function handleAction(event) {
   if (action === "previous-answer") { const previous = ensureSession(); state.session = previousAnswer(previous); persist(previous); render(); return; }
   if (action === "pass") { try { advanceGuarded(passAnswer); } catch (error) { state.error = error.message; render(); } return; }
   if (action === "continue") {
+    state.shareMenuOpen = false;
     state.shareStatus = "";
+    state.shareFallbackText = "";
     state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.busy = true; state.error = ""; render(); try { const previous = ensureSession(); if (await canContinue(state.session)) { state.session = continueRound(state.session); persist(previous); } else state.error = "続きを始められませんでした。";
     } catch (error) {
       state.error = error.message || "続きを始められませんでした。";
@@ -1390,7 +1426,7 @@ async function handleAction(event) {
     }
     return;
   }
-  if (action === "finish") { state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
+  if (action === "finish") { state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
     state.resume = loadResumeForCurrentUser();
     state.screen = "participants";
     state.session = null;
@@ -1507,6 +1543,7 @@ discoverAccountConfig().then(() => { state.account.enabled = accountConfig.enabl
             state.roundFavorite = null;
             clearAccountShare({ close: true });
             state.shareStatus = "";
+            state.shareMenuOpen = false; state.shareFallbackText = "";
             state.sharedRequestId += 1;
             state.shared = null;
             state.sharedLoading = false;
