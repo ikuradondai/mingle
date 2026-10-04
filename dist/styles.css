@@ -472,6 +472,7 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
   .round-feedback-details > summary { padding:0 12px; }
   .round-feedback-details > summary span { font-size:11px; }
 }
+.ad-slot-creative{display:block;padding:8px 10px}.ad-slot-creative>a{display:block!important}.ad-slot-creative .ad-creative{display:block;width:min(100%,720px);height:auto;margin:0 auto}.ad-slot-creative .ad-creative[hidden]{display:none}.ad-slot-creative .ad-creative img{display:block;width:100%;height:auto;max-height:180px;object-fit:cover;object-position:center}.ad-slot-creative .ad-creative-fallback{display:none}.ad-slot-creative.ad-creative-failed .ad-creative-fallback{display:flex;align-items:center;justify-content:space-between;gap:10px;width:min(100%,720px);margin:0 auto}@media(max-width:540px){.ad-slot-creative{padding:7px}.ad-slot-creative .ad-creative{width:100%}.ad-slot-creative .ad-creative img{max-height:180px}.ad-slot-creative .ad-creative-fallback{display:none}.ad-slot-creative.ad-creative-failed .ad-creative-fallback{display:flex}}
 /* Separate house ads from the product UI while keeping the existing ad
    markup, sponsor link, and creative fallback compatible. */
 .ad-slot { display:block; width:100%; margin:24px 0 14px; padding:10px 0 0; border:0; border-top:1px solid rgba(23,105,232,.18); border-radius:0; background:transparent; font-size:14px; }
