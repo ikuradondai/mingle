@@ -27,7 +27,7 @@ const state = {
   session: null,
   continuePending: null,
   pendingCustomResume: null,
-  error: "", busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, lastAdvanceAt: 0, focusAction: null, focusSelector: null, selectedDeckId: "friends",
+  error: "", busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, lastAdvanceAt: 0, focusAction: null, focusSelector: null, shareDialogOpen: false, selectedDeckId: "friends",
   selectedDeckIds: ["friends"],
   themeMode: "single",
   filter: "all", adultConfirmed: false, includeChallenges: false, resume: null, account: { enabled: accountConfig.enabled, authReady: false, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false,
@@ -188,6 +188,7 @@ function render() {
   restoreAccountScroll(accountScroll);
   root.dataset.screen = state.screen;
   document.body.classList.toggle("account-open", state.account.open);
+  document.body.classList.toggle("share-open", state.shareDialogOpen);
   trackPage(state.screen);
   root.querySelectorAll("[data-action]").forEach((button) => button.addEventListener("click", handleAction));
   root.querySelectorAll('form[data-form="participants"],form[data-form="shared-participants"]').forEach((form) =>
@@ -285,6 +286,28 @@ function render() {
   root.querySelector('form[data-form="account"]')?.addEventListener("submit", (event) => { event.preventDefault(); loginWithOtp(); });
   root.querySelector('form[data-form="profile"]')?.addEventListener("submit", (event) => { event.preventDefault(); saveProfile(); });
   root.querySelector('form[data-form="custom-card"]')?.addEventListener("submit", (event) => { event.preventDefault(); saveCustomCard(); });
+  const shareOverlay = root.querySelector("[data-share-overlay]");
+  shareOverlay?.addEventListener("click", (event) => {
+    if (event.target !== event.currentTarget) return;
+    state.shareDialogOpen = false;
+    state.focusAction = "social-share";
+    render();
+  });
+  shareOverlay?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      state.shareDialogOpen = false;
+      state.focusAction = "social-share";
+      render();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...shareOverlay.querySelectorAll("button:not([disabled]), textarea, summary, a[href]")].filter((element) => element.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
   const accountOverlay = root.querySelector("[data-account-overlay]");
   accountOverlay?.addEventListener("click", (event) => { if (event.target === event.currentTarget && !state.account.busy) { state.account.profileRevision += 1;
       state.account.avatarDraft = "";
@@ -356,16 +379,22 @@ function render() {
   root.querySelector(".card-back")?.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === ' ') { event.preventDefault(); playFlipSound(); const previous = ensureSession(); state.session = revealCard(previous); persist(previous); render(); } });
   updateAdultButton();
+  const shareDialog = root.querySelector("[data-share-overlay]");
+  const background = root.querySelectorAll(".topbar, .round-break");
+  background.forEach((element) => { element.inert = Boolean(state.shareDialogOpen); });
   const pendingFocusSelector = state.focusSelector;
   const focusTarget = pendingFocusSelector ? root.querySelector(pendingFocusSelector) : state.focusAction ? root.querySelector(`[data-action="${state.focusAction}"]`) : null;
   const shouldScrollToInput = Boolean(pendingFocusSelector?.includes("participant") || pendingFocusSelector?.includes("data-index"));
   state.focusSelector = null;
   state.focusAction = null;
+  if (state.shareDialogOpen && state.shareFallbackText) root.querySelector(".share-dialog-details")?.setAttribute("open", "");
   const overlayFocus = root.querySelector(".account-overlay button:not([disabled]), .account-overlay input:not([disabled]), .account-overlay [href]");
-  const focusElement = focusTarget || overlayFocus || root.querySelector("[data-focus]");
+  const shareFocus = shareDialog?.querySelector("button:not([disabled]), textarea, summary, a[href]");
+  const focusElement = (state.shareDialogOpen ? (focusTarget || shareFocus) : focusTarget) || overlayFocus || root.querySelector("[data-focus]");
   focusElement?.focus({
     preventScroll: Boolean(focusTarget && !shouldScrollToInput),
   });
+  if (state.shareDialogOpen && focusTarget?.matches(".share-dialog [data-share-fallback]")) focusTarget.select();
   if (focusTarget && shouldScrollToInput) focusTarget.scrollIntoView({ block: "nearest" });
   registerWebMcp();
 }
@@ -379,11 +408,16 @@ function sharedView() {
   const consentControl = consent ? `<label class="adult-consent"><input type="checkbox" data-shared-adult ${state.adultConfirmed ? "checked" : ""} ${!registered ? "disabled" : ""} aria-disabled="${!registered}" /> ${registered ? "参加者全員が18歳以上で、R18の話題に同意します" : "登録後に参加者全員の同意を確認します"}</label>` : "";
   return frame(`<div class="shared-landing"><div class="shared-brand"><img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" /></div><p class="eyebrow">共有されたマイセット</p><h1 tabindex="-1" data-focus>${esc(shared.name || "共有セット")}</h1><p class="shared-meta">${Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p><p class="account-hint">質問内容は、参加者を入力して始めるまで表示されません。</p>${registrationNotice}<form class="panel form-panel" data-form="shared-participants"><div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="呼び名" aria-label="${index + 1}人目の呼び名" /></label>`).join("")}</div><div class="inline-actions"><button type="button" class="text-button add-person" data-action="add-person" ${state.participants.length >= MAX_PARTICIPANTS ? "disabled" : ""}>＋ 参加者を追加</button>${state.participants.length > 2 ? '<button type="button" class="text-button muted" data-action="remove-person">最後の人を削除</button>' : ""}</div>${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${state.busy || state.sharedLoading || (consent && (!registered || !state.adultConfirmed)) ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button></form><button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button>${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, "共有セット", false); }
 
-function participantsView() {
+function participantsViewLegacy() {
   syncAccountParticipantName();
   const atLimit = state.participants.length >= MAX_PARTICIPANTS;
   const resumeCard = state.resume ? `<aside class="resume-card" aria-label="前回の続き"><strong>前回の続き</strong><span title="${esc(state.resume.mixed ? "テーマミックス" : state.resume.customSet ? "マイセット" : decks.find((deck) => deck.id === state.resume.deckId)?.title || "会話カード")} · ${state.resume.cursor}/${state.resume.questions?.length || 40}">${esc(state.resume.mixed ? "テーマミックス" : state.resume.customSet ? "マイセット" : decks.find((deck) => deck.id === state.resume.deckId)?.title || "会話カード")} · ${state.resume.cursor}/${state.resume.questions?.length || 40}</span><small>このブラウザに24時間保存</small><div><button type="button" class="primary-button" data-action="resume">続きから</button><button type="button" class="text-button muted" data-action="discard-resume">削除</button></div></aside>` : "";
   return frame(`<div class="home-screen">${accountView()}<div class="masthead-slot"><img class="masthead-image" src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards。やっぱり人って面白い。" width="1493" height="1054" /><h1 class="visually-hidden" tabindex="-1" data-focus>Mingle.Cards</h1></div><img class="home-illustration" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たちのイラスト" width="1611" height="976" />${resumeCard}<form class="panel form-panel" data-form="participants"><div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="呼び名" aria-label="${index + 1}人目の呼び名" autocomplete="off" enterkeyhint="${index === state.participants.length - 1 ? "done" : "next"}" /></label>`).join("")}</div><div class="inline-actions"><button type="button" class="text-button add-person" data-action="add-person" ${atLimit ? "disabled" : ""}>＋ 参加者を追加</button>${state.participants.length > 2 ? '<button type="button" class="text-button muted" data-action="remove-person">最後の人を削除</button>' : ""}<span class="limit-note">${atLimit ? "8人まで" : ""}</span></div><p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button">質問テーマを選ぶ</button></form>${renderAd("top")}<footer class="home-footer"><p><span>α版</span><span>開発：株式会社ErudAite</span></p><nav aria-label="ご案内"><a href="/terms.html">利用規約</a><a href="/privacy.html">プライバシーポリシー</a><a href="/personal-information.html">個人情報保護法に基づく公表事項</a></nav></footer></div>`, "Mingle.Cards", false);
+}
+function participantsView() {
+  const atLimit = state.participants.length >= MAX_PARTICIPANTS;
+  const resumeCard = state.resume ? `<aside class="resume-card" aria-label="前回の続き"><strong>前回の続き</strong><span>${esc(state.resume.mixed ? "テーマミックス" : state.resume.customSet ? "マイセット" : decks.find((deck) => deck.id === state.resume.deckId)?.title || "会話カード")} · ${state.resume.cursor}/${state.resume.questions?.length || 40}</span><div><button type="button" class="primary-button" data-action="resume">続きから</button><button type="button" class="text-button muted" data-action="discard-resume">削除</button></div></aside>` : "";
+  return frame(`<div class="home-screen">${accountView()}<div class="masthead-slot"><img class="home-hero" src="/assets/mingle-og.png" alt="Mingle.Cards。会話を楽しむイメージ" width="934" height="559" /><h1 class="visually-hidden" tabindex="-1" data-focus>Mingle.Cards</h1></div>${resumeCard}<form class="panel form-panel" data-form="participants"><div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="呼び名" aria-label="${index + 1}人目の呼び名" autocomplete="off" /></label>`).join("")}</div><div class="inline-actions"><button type="button" class="text-button add-person" data-action="add-person" ${atLimit ? "disabled" : ""}>＋ 参加者を追加</button>${state.participants.length > 2 ? '<button type="button" class="text-button muted" data-action="remove-person">最後の人を削除</button>' : ""}<span class="limit-note">${atLimit ? "8人まで" : ""}</span></div><p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button">質問テーマを選ぶ</button></form>${renderAd("top")}<footer class="home-footer"><p><span>α版</span><span>開発：株式会社ErudAite</span></p><nav aria-label="ご案内"><a href="/terms.html">利用規約</a><a href="/privacy.html">プライバシーポリシー</a><a href="/personal-information.html">個人情報保護法に基づく公表事項</a></nav></footer></div>`, "Mingle.Cards", false);
 }
 function avatarImageSrc(value) {
   return typeof value === "string" && /^(?:data:image\/(?:png|jpe?g|webp);base64,|https?:\/\/)/i.test(value) && value.length <= 360000 ? value : "";
@@ -747,12 +781,18 @@ function roundShareTitle(session) {
   return decks.find((item) => item.id === session.deckId)?.title || "会話テーマ";
 }
 function roundShareText() { return buildShareText(roundShareTitle(state.session)); }
+function lineShareUrl(text) { const body = text.endsWith("https://mingle.cards/") ? text.slice(0, -"https://mingle.cards/".length).trimEnd() : text; return `https://social-plugins.line.me/lineit/share?url=${encodeURIComponent("https://mingle.cards/")}&text=${encodeURIComponent(body)}`; }
+function roundShareDialogView() {
+  const text = roundShareText();
+  return `<div class="share-overlay" data-share-overlay><section class="share-dialog" role="dialog" aria-modal="true" aria-labelledby="share-dialog-title" tabindex="-1"><button type="button" class="share-dialog-close" data-action="share-dialog-close" aria-label="共有ダイアログを閉じる">×</button><img class="share-dialog-image" src="/assets/mingle-og.png" alt="Mingle.Cardsで会話を楽しむイメージ" width="934" height="559" /><div class="share-dialog-body"><p class="eyebrow">Mingle.Cards</p><h2 id="share-dialog-title">会話をシェアしよう</h2><p class="share-dialog-lead">${esc(roundShareTitle(state.session))}</p><div class="share-dialog-links" role="group" aria-label="SNSでシェア"><a class="share-social share-social-x" data-share-x href="${esc(buildXShareUrl(text))}" target="_blank" rel="noopener noreferrer" aria-label="Xで共有"><span aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 2H22l-6.77 7.74L23.2 22h-6.24l-4.89-6.4L6.47 22H3.36l7.24-8.27L2.8 2h6.4l4.42 5.83L18.9 2Zm-1.1 17.8h1.73L8.27 4.1H6.41L17.8 19.8Z" fill="currentColor"/></svg></span><small>X</small></a><a class="share-social share-social-facebook" data-share-facebook href="${esc(buildFacebookShareUrl())}" target="_blank" rel="noopener noreferrer" aria-label="Facebookで共有"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 8h3V3h-3c-3.31 0-5 1.91-5 5v3H6v5h3v8h5v-8h3.5l.5-5H14V8c0-.67.33-1 1-1Z" fill="currentColor"/></svg></span><small>Facebook</small></a><a class="share-social share-social-line" data-share-line href="${esc(lineShareUrl(text))}" target="_blank" rel="noopener noreferrer" aria-label="LINEで共有"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21.5 11.5c0-4.14-4.04-7.5-9-7.5s-9 3.36-9 7.5c0 3.7 3.25 6.8 7.64 7.4l-.52 1.95c-.12.46.38.84.79.59l2.82-1.72c4.23-.7 7.27-3.85 7.27-7.72Z" fill="currentColor"/></svg></span><small>LINE</small></a><button type="button" class="share-social share-social-copy" data-action="social-share-copy" aria-label="共有文とURLをコピー"><span aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 8h11v12H8zM5 16H4V4h11v1" fill="none" stroke="currentColor" stroke-width="2"/></svg></span><small>コピー</small></button>${navigator.share ? `<button type="button" class="share-social share-social-more" data-action="social-share-native" aria-label="その他の共有方法"><span aria-hidden="true">•••</span><small>その他</small></button>` : ""}</div><p class="share-dialog-note">Facebookへ投稿する文章を確認できます。</p><details class="share-dialog-details"><summary>投稿文を確認</summary><textarea class="share-dialog-text" readonly aria-label="共有する本文とURL" data-share-fallback rows="4">${esc(text)}</textarea><p class="share-dialog-url"><span>リンク</span> https://mingle.cards/</p></details>${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}</div></section></div>`;
+}
 async function copyFacebookShareText() {
   const text = roundShareText();
   let copied = false;
   try {
     if (navigator.clipboard) { await navigator.clipboard.writeText(text); copied = true; }
   } catch { copied = false; }
+  if (!copied) { state.shareDialogOpen = true; state.focusSelector = ".share-dialog [data-share-fallback]"; }
   state.shareFallbackText = copied ? "" : text;
   state.shareStatus = copied ? "投稿文をコピーしました。Facebookで貼り付けてください。" : "投稿文をコピーできませんでした。下の本文を選択してコピーできます。";
   render();
@@ -764,7 +804,7 @@ async function copyRoundShare() {
     await navigator.clipboard.writeText(text);
     state.shareFallbackText = "";
     state.shareStatus = "共有文をコピーしました。";
-  } catch { state.shareFallbackText = text; state.shareStatus = "共有文をコピーできませんでした。下の本文を選択してコピーできます。"; }
+  } catch { state.shareFallbackText = text; state.shareDialogOpen = true; state.focusSelector = ".share-dialog [data-share-fallback]"; state.shareStatus = "共有文をコピーできませんでした。下の本文を選択してコピーできます。"; }
   render();
 }
 function roundView() {
@@ -773,7 +813,7 @@ function roundView() {
   const favoriteContext = roundFavoriteContext(session); const favoriteBusy = Boolean(favoriteContext?.saving);
   const feedbackForm = submitted ? '<p class="feedback-success" role="status">フィードバック送信済み。ありがとう！</p>' : `<div class="feedback-box" aria-labelledby="feedback-title"><h2 id="feedback-title" class="feedback-survey-title">α版アンケート</h2><p id="feedback-survey-description" class="feedback-survey-description">今回のミングルについて意見をきかせてください。どうすればもっと楽しめますか？</p><div class="feedback-ratings" role="group" aria-label="評価"><button type="button" class="feedback-rating ${feedback.rating === "positive" ? "is-selected" : ""}" data-action="feedback-rating" data-rating="positive" aria-pressed="${feedback.rating === "positive"}" ${state.feedbackBusy ? "disabled" : ""}>いいね！</button><button type="button" class="feedback-rating ${feedback.rating === "needs_improvement" ? "is-selected" : ""}" data-action="feedback-rating" data-rating="needs_improvement" aria-pressed="${feedback.rating === "needs_improvement"}" ${state.feedbackBusy ? "disabled" : ""}>改善余地大きい！</button></div><label class="feedback-label" for="feedback-text">ひとこと（任意）</label><textarea id="feedback-text" data-feedback-text maxlength="1000" rows="3" placeholder="気づいたことがあれば" ${state.feedbackBusy ? "disabled" : ""}>${esc(feedback.text)}</textarea><p class="form-error" role="alert">${esc(feedback.error)}</p><button type="button" class="secondary-button feedback-submit" data-action="feedback-submit" ${state.feedbackBusy || (!feedback.rating && !feedback.text.trim()) ? "disabled" : ""}>${state.feedbackBusy ? "送信中…" : "送信する"}</button></div>`;
   const accountOverlay = state.account.open ? accountView({ overlayOnly: true }) : "";
-  return frame(`<div class="round-break">${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1>${likeTotalsView(session)}${roundFavoriteView(session)}${feedbackForm}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : "続きを遊ぶ"}</button>` : ""}<button class="secondary-button" data-action="finish" ${favoriteBusy ? "disabled" : ""}>今日はここまで</button>${state.shareMenuOpen ? `<div class="social-share-actions" role="group" aria-label="SNSでシェア">${navigator.share ? `<button class="secondary-button" data-action="social-share-native">その他</button>` : ""}<a class="secondary-button" data-share-x href="${esc(buildXShareUrl(roundShareText()))}" target="_blank" rel="noopener noreferrer">X</a><a class="secondary-button" data-share-facebook href="${esc(buildFacebookShareUrl())}" target="_blank" rel="noopener noreferrer">Facebook</a><button class="secondary-button" data-action="social-share-copy" ${favoriteBusy ? "disabled" : ""}>コピー</button><button class="text-button muted" data-action="share-menu-close">閉じる</button></div>` : `<button class="secondary-button social-share-button" data-action="social-share" ${favoriteBusy ? "disabled" : ""}>SNSでシェア</button>`}</div><button class="back-link" data-action="decks" ${favoriteBusy ? "disabled" : ""}>テーマを選び直す</button></div>${accountOverlay}`);
+  return frame(`<div class="round-break">${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1>${likeTotalsView(session)}${roundFavoriteView(session)}${feedbackForm}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : "続きを遊ぶ"}</button>` : ""}<button class="secondary-button" data-action="finish" ${favoriteBusy ? "disabled" : ""}>今日はここまで</button><button class="secondary-button social-share-button" data-action="social-share" ${favoriteBusy ? "disabled" : ""}>SNSでシェア</button></div><button class="back-link" data-action="decks" ${favoriteBusy ? "disabled" : ""}>テーマを選び直す</button></div>${state.shareDialogOpen ? roundShareDialogView() : ""}${accountOverlay}`);
 }
 
 function finishView() { return roundView(); }
@@ -1489,11 +1529,13 @@ async function handleAction(event) {
     return;
   }
   if (action === "social-share") {
-    state.shareMenuOpen = !state.shareMenuOpen;
-    if (state.shareMenuOpen) state.focusSelector = "[data-share-x]";
+    state.shareDialogOpen = true;
+    state.shareMenuOpen = false;
+    state.focusSelector = "[data-share-x]";
     render();
     return;
   }
+  if (action === "share-dialog-close") { state.shareDialogOpen = false; state.focusAction = "social-share"; render(); return; }
   if (action === "share-menu-close") { state.shareMenuOpen = false; state.focusAction = "social-share"; render(); return; }
   if (action === "social-share-native") { shareRoundResult(); return; }
   if (action === "social-share-copy") { copyRoundShare(); return; }
