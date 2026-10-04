@@ -20,8 +20,8 @@ function answerCurrent(value, step = nextAnswer) {
 }
 
 test('contains complete decks with unique question ids', () => {
-  assert.equal(decks.length, 38);
-  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 1520);
+  assert.equal(decks.length, 40);
+  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 1600);
   for (const item of decks) {
     assert.equal(item.questions.length, 40, item.id);
     assert.equal(new Set(item.questions.map((card) => card.id)).size, 40, item.id);
@@ -30,7 +30,7 @@ test('contains complete decks with unique question ids', () => {
     assert.equal(item.questions.every((question) => question.r18 === true), true, item.id);
   }
   assert.equal(new Set(challenges.map((card) => card.id)).size, 29);
-  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 1549);
+  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 1629);
 });
 
 test('acquaintance date keeps independent 40-card and R18 sources', () => {

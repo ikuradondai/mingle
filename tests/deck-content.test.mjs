@@ -8,6 +8,7 @@ import { groupLabels, themeGroups } from '../dist/data/theme-groups.js';
 const NEW_DECK_IDS = [
   'ex-lovers', 'detective-and-phantom-thief', 'in-laws', 'same-oshi-fans', 'roommates',
   'grandparents-and-grandchildren', 'neighbors', 'travel-companions', 'late-night-diner', 'group-mixer',
+  'engaged-couple', 'classmates',
 ];
 const SHARED_QUESTION = 'これから、なんて呼んで欲しい？';
 const GENDERED = /彼氏|彼女|男性|女性|旦那|奥さん|嫁|姑|婿|舅|ママ|パパ|おじいちゃん|おばあちゃん/;
@@ -47,6 +48,8 @@ test('new decks use the agreed theme groups', () => {
     'travel-companions': ['friends', 'first-meeting'],
     'late-night-diner': ['friends'],
     'group-mixer': ['first-meeting', 'relationship'],
+    'engaged-couple': ['relationship'],
+    classmates: ['friends'],
   };
   for (const [id, groups] of Object.entries(expected)) assert.deepEqual([...themeGroups[id]].sort(), [...groups].sort(), id);
 });

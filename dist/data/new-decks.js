@@ -23,6 +23,8 @@ import { neighbors } from './neighbors.js';
 import { travelCompanions } from './travel-companions.js';
 import { lateNightDiner } from './late-night-diner.js';
 import { groupMixer } from './group-mixer.js';
+import { engagedCouple } from './engaged-couple.js';
+import { classmates } from './classmates.js';
 
 export const newDecks = [
   {
@@ -649,4 +651,6 @@ newDecks.push(
   travelCompanions,
   lateNightDiner,
   groupMixer,
+  engagedCouple,
+  classmates,
 );
