@@ -322,6 +322,30 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 @media (min-width:681px) and (max-height:760px) {
   .content { padding-bottom:max(42px,env(safe-area-inset-bottom)); }
 }
+/* Desktop home: keep the transparent illustration substantial by pairing it
+   with the participant form while leaving the mobile flow untouched. */
+@media (min-width:900px) {
+  .content:has(.home-screen) { width:calc(100% - 32px); max-width:1000px; box-sizing:border-box; }
+  .home-screen { width:100%; max-width:940px; display:grid; grid-template-columns:minmax(400px,1fr) minmax(350px,.9fr); align-items:center; column-gap:20px; row-gap:8px; text-align:center; }
+  .home-screen .masthead-slot { grid-column:1 / -1; grid-row:1; width:min(100%,180px); margin:0 auto 2px; }
+  .home-screen .form-panel { grid-column:1; grid-row:2; width:100%; max-width:none; margin:0; align-self:center; }
+  .home-screen .home-illustration { grid-column:2; grid-row:2; width:100%; max-width:none; height:auto; max-height:280px; margin:0; object-fit:contain; object-position:center; }
+  .home-screen .ad-slot { grid-column:1 / -1; grid-row:3; width:100%; margin:4px 0 8px; }
+  .home-screen .home-footer { grid-column:1 / -1; grid-row:4; width:100%; margin-top:0; }
+}
+@media (min-width:900px) and (max-height:650px) {
+  .home-screen { column-gap:16px; row-gap:4px; }
+  .home-screen .masthead-slot { width:min(100%,150px); }
+  .home-screen .home-illustration { max-height:230px; }
+  .home-screen .ad-slot { margin-top:2px; margin-bottom:5px; }
+}
+@media (min-width:900px) {
+  .home-screen:has(.resume-card) .resume-card { grid-column:1 / -1; grid-row:2; width:100%; box-sizing:border-box; margin:0; }
+  .home-screen:has(.resume-card) .form-panel { grid-column:1; grid-row:3; }
+  .home-screen:has(.resume-card) .home-illustration { grid-column:2; grid-row:3; }
+  .home-screen:has(.resume-card) .ad-slot { grid-row:4; }
+  .home-screen:has(.resume-card) .home-footer { grid-row:5; }
+}
 @media (min-width:681px) and (max-height:760px) {
   .app-shell[data-screen="play"] .question-card { min-height:clamp(220px,40dvh,360px); padding:clamp(22px,4vw,42px); }
   .app-shell[data-screen="play"] .question-card p { font-size:clamp(25px,4.5vw,42px); line-height:1.3; }
