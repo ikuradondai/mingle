@@ -13,7 +13,9 @@ export function playableSavedSet(set, customCards = []) {
   if (cards.some((card) => !card)) return null;
   const normalizedIds = cards.map((card) => card.id);
   if (new Set(normalizedIds).size !== normalizedIds.length) return null;
-  return { ...set, card_ids: normalizedIds, cards, cardCount: cards.length, hasR18: cards.some((card) => card.r18 === true) };
+  const audience = ['group', 'solo', 'both'].includes(set?.audience) ? set.audience : 'group';
+  const questionOrder = ['shuffle', 'fixed'].includes(set?.questionOrder || set?.question_order) ? (set.questionOrder || set.question_order) : 'shuffle';
+  return { ...set, audience, questionOrder, card_ids: normalizedIds, cards, cardCount: cards.length, hasR18: cards.some((card) => card.r18 === true) };
 }
 
 export function playableSavedSets(sets = [], customCards = []) {

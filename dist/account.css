@@ -34,6 +34,7 @@ body.account-open{overflow:hidden}
 .account-dialog-menu { padding:18px; }
 .account-dialog-menu .account-panel-head strong { font-size:1.2rem; letter-spacing:-.04em; }
 .account-dialog-menu .account-menu-action { border-radius:15px; }
+.account-menu-action{display:flex;align-items:center;justify-content:center;box-sizing:border-box;text-decoration:none;min-height:44px}
 .account-dialog-menu .secondary-button { border:1px solid #d8e4fb; background:#edf4ff; }
 .account-dialog-menu .text-button { min-height:44px; }
 .account-dialog-library,.account-dialog-settings,.account-dialog-delete { background:#fffaf0; }

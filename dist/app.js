@@ -1,8 +1,9 @@
 import { decks } from "./data/decks.js";
+import { soloDecks } from "./data/solo-decks.js";
 import { trackPage, trackThemeStart, trackSessionProgress } from "./analytics.js";
 import { loadSession, saveSession, clearSession } from "./session-storage.js";
 import { canContinue } from "./access-policy.js";
-import { ROUND_SIZE, createSession, createMixedSession, createSavedSession, createSharedSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer, previousAnswer, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS, summarizeLikes, completedRoundFavoriteCards } from "./engine.js";
+import { ROUND_SIZE, createSession, createMixedSession, createSavedSession, createSharedSession, createSoloSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer, previousAnswer, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS, summarizeLikes, completedRoundFavoriteCards } from "./engine.js";
 import { themeGroups, groupLabels } from "./data/theme-groups.js";
 import { buildFeedbackPayload, feedbackKey, submitFeedback } from "./feedback.js";
 import { accountConfig, accountApi, cardPayload, discoverAccountConfig } from "./account.js";
@@ -12,7 +13,7 @@ import { playableSavedSets } from "./my-set.js";
 import { resetStudioEntryState } from "./studio-state.js";
 import { buildFacebookShareUrl, buildShareText, buildXShareUrl } from "./share-text.js";
 import { isCardAudioEnabled, toggleCardAudio, playFlipSound } from "./card-audio.js";
-import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref } from "./theme-access.js";
+import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 const root = document.querySelector("#app");
 const state = {
   shared: null,
@@ -26,12 +27,13 @@ const state = {
   participantNameOrigin: null,
   participantNameAutoValue: "",
   participantNameUserEdited: false,
+  groupParticipants: ["", ""],
   screen: "participants",
   participants: ["", ""],
   session: null,
   continuePending: null,
   pendingCustomResume: null,
-  error: "", busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, lastAdvanceAt: 0, focusAction: null, focusSelector: null, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null,
+  error: "", busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, lastAdvanceAt: 0, focusAction: null, focusSelector: null, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null, soloNoteDraft: "", soloNoteStatus: "", soloNoteError: "", soloSummaryDraft: "", soloSummaryStatus: "", soloDraftOwner: null, soloDraftRevision: 0, soloMemoOpen: false, soloHistoryOpen: false, soloHistory: [], soloHistoryCursor: null, soloHistoryHasMore: false, soloHistoryLoading: false, soloHistoryError: "", soloHistoryEditing: null, soloNoteDrafts: Object.create(null), soloNoteStatuses: Object.create(null), soloNoteErrors: Object.create(null), soloSummaryDrafts: Object.create(null), soloSummaryStatuses: Object.create(null), soloSummaryErrors: Object.create(null),
   selectedDeckIds: ["friends"],
   themeMode: "single",
   filter: "all", adultConfirmed: false, includeChallenges: false, resume: null, account: { enabled: accountConfig.enabled, authReady: false, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false,
@@ -51,8 +53,8 @@ const state = {
     email: "",
     otp: "", otpSent: false, pendingSet: null, selectedCards: new Set(), editingSetId: null, setName: undefined, customEditorOpen: false, editingCardId: null, customDraft: "",
     customDraftR18: false,
-    drafts: [], draftsAvailable: false, completionAvailable: false, aiGenerationAvailable: false, studioMode: "list", studioAiReturnMode: "list", editingDraftId: null, studioItems: [], studioRequestId: 0, studioReplaceIndex: null, aiQuestions: [], aiName: "", aiTheme: "", aiTone: "", aiCount: 6, aiR18: false,
-    revealAdult: false,
+    drafts: [], draftsAvailable: false, completionAvailable: false, aiGenerationAvailable: false, studioMode: "list", studioAiReturnMode: "list", studioAudience: "group", studioQuestionOrder: "shuffle", editingDraftId: null, studioItems: [], studioRequestId: 0, studioReplaceIndex: null, aiQuestions: [], aiName: "", aiTheme: "", aiTone: "", aiCount: 6, aiR18: false,
+    revealAdult: false, r18DisplayEnabled: false, r18DisplayHydrated: false,
     ageConfirmedAt: null, adultConfirmationAvailable: false, adultIntent: false, ageConfirmChecked: false, ageRevokeOpen: false, ageBusy: false,
     status: "", returnAfterAuth: false,
     error: "",
@@ -64,6 +66,21 @@ const state = {
 };
 const AUTH_RETURN_KEY = "mingle.cards.auth-return.v1";
 function saveAuthReturnIntent() {
+  if (state.screen === "play" && state.session?.mode === "solo") {
+    const sessionId = state.session.sessionId;
+    const card = currentCard(state.session);
+    const noteKey = card ? `${sessionId}:${card.id}` : "";
+    const summaryDrafts = Object.fromEntries(Object.entries(state.soloSummaryDrafts).filter(([key]) => key.startsWith(`${sessionId}:`)));
+    const noteDrafts = Object.fromEntries(Object.entries(state.soloNoteDrafts).filter(([key]) => key.startsWith(`${sessionId}:`)));
+    const createdAt = Date.now();
+    try { sessionStorage.setItem(AUTH_RETURN_KEY, JSON.stringify({ createdAt, expiresAt: createdAt + 30 * 60 * 1000, screen: "play", session: state.session, draftOwnerUserId: state.account.user?.id || null, soloMemoOpen: state.soloMemoOpen, noteDrafts, summaryDrafts, noteKey })); } catch {}
+    return;
+  }
+  if (state.screen === "decks" && state.themeMode === "solo") {
+    const createdAt = Date.now();
+    try { sessionStorage.setItem(AUTH_RETURN_KEY, JSON.stringify({ createdAt, expiresAt: createdAt + 30 * 60 * 1000, screen: "decks", themeMode: "solo", selectedDeckId: state.selectedDeckId, selectedMySetId: state.selectedMySetId, soloHistoryOpen: state.soloHistoryOpen === true })); } catch {}
+    return;
+  }
   if (state.screen !== "decks" && state.screen !== "participants") return;
   const createdAt = Date.now();
   try { sessionStorage.setItem(AUTH_RETURN_KEY, JSON.stringify({ createdAt, expiresAt: createdAt + 30 * 60 * 1000, screen: state.screen, participants: state.participants.slice(0, 8), selectedDeckId: state.selectedDeckId, selectedDeckIds: state.selectedDeckIds.slice(0, 3), themeMode: state.themeMode, filter: state.filter })); } catch {}
@@ -71,9 +88,21 @@ function saveAuthReturnIntent() {
 function restoreAuthReturnIntent() {
   let intent = null;
   try { intent = JSON.parse(sessionStorage.getItem(AUTH_RETURN_KEY) || "null"); sessionStorage.removeItem(AUTH_RETURN_KEY); } catch { return; }
-  if (!intent || !["decks", "participants"].includes(intent.screen)) return;
+  if (!intent || !["decks", "participants", "play"].includes(intent.screen)) return;
   const now = Date.now();
   if (!Number.isFinite(intent.createdAt) || !Number.isFinite(intent.expiresAt) || intent.expiresAt < now || intent.createdAt > now || intent.expiresAt - intent.createdAt > 30 * 60 * 1000) return;
+  if (intent.screen === "play") {
+    if (!intent.session || intent.session.mode !== "solo" || !intent.session.sessionId || !Array.isArray(intent.session.questions)) return;
+    if (intent.draftOwnerUserId && intent.draftOwnerUserId !== state.account.user?.id) return;
+    const memory = { value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; }, removeItem() { this.value = null; } };
+    try { saveSession(intent.session, { storage: memory, now, allowCompleted: true }); } catch { return; }
+    const validated = loadSession({ storage: memory, now, allowCompleted: true }); if (!validated || validated.mode !== "solo") return;
+    const ids = new Set(validated.questions.map((card) => card.id)); const prefix = `${validated.sessionId}:`; const validDraft = (value) => typeof value === "string" && Array.from(value).length <= 2000; const noteDrafts = Object.fromEntries(Object.entries(intent.noteDrafts || {}).filter(([key, value]) => { const cardId = key.startsWith(prefix) ? key.slice(prefix.length) : ""; return ids.has(cardId) && validDraft(value); })); const summaryDrafts = Object.fromEntries(Object.entries(intent.summaryDrafts || {}).filter(([key, value]) => { const suffix = key.startsWith(prefix) ? key.slice(prefix.length) : ""; return /^\d+$/.test(suffix) && Number(suffix) >= 1 && Number(suffix) <= Math.ceil(validated.questions.length / ROUND_SIZE) && validDraft(value); }));
+    state.session = validated; state.resume = null; state.screen = "play"; state.themeMode = "solo"; state.participants = [...state.session.participants]; state.selectedDeckId = state.session.deckId; state.selectedDeckIds = [...(state.session.deckIds || [state.session.deckId])]; state.soloMemoOpen = intent.soloMemoOpen === true; state.soloNoteDrafts = Object.assign(Object.create(null), noteDrafts); state.soloSummaryDrafts = Object.assign(Object.create(null), summaryDrafts); state.soloNoteStatuses = Object.create(null); state.soloNoteErrors = Object.create(null); state.soloSummaryStatuses = Object.create(null); state.soloSummaryErrors = Object.create(null); return;
+  }
+  if (intent.screen === "decks" && intent.themeMode === "solo") {
+    state.screen = "decks"; state.themeMode = "solo"; state.selectedDeckId = typeof intent.selectedDeckId === "string" ? intent.selectedDeckId : state.selectedDeckId; state.selectedDeckIds = [state.selectedDeckId]; state.selectedMySetId = typeof intent.selectedMySetId === "string" ? intent.selectedMySetId : null; state.soloHistoryOpen = intent.soloHistoryOpen === true; if (state.soloHistoryOpen && state.account.user) loadSoloHistory(false); return;
+  }
   if (!Array.isArray(intent.participants) || intent.participants.length < 2 || intent.participants.length > 8 || !intent.participants.every((name) => typeof name === "string" && name.length <= MAX_NAME_LENGTH && !/[\u0000-\u001f\u007f]/u.test(name))) return;
   state.participants = intent.participants;
   if (intent.screen === "participants") { state.screen = "participants"; return; }
@@ -93,6 +122,33 @@ function accountAccessReady() { return state.account.enabled && state.account.au
 function isRegisteredUser() { return Boolean(accountAccessReady() && state.account.user?.id); }
 function canUseDeck(deck) { return canUseThemeForAccount(deck, state.account); }
 function ageConfirmed() { return isAgeConfirmed(state.account); }
+function r18DisplayVisible() { return state.account.r18DisplayEnabled === true && ageConfirmed(); }
+function r18Storage() { try { return globalThis.sessionStorage; } catch { return null; } }
+function setR18DisplayVisible(visible) {
+  state.account.r18DisplayEnabled = setR18Visible(state.account, visible === true, r18Storage());
+  if (!state.account.r18DisplayEnabled) {
+    if (state.venue) state.venue.displayR18 = false;
+    if (state.filter === "adult") state.filter = "all";
+    const hadAdultAi = state.account.aiR18 === true || (Array.isArray(state.account.aiQuestions) && state.account.aiQuestions.some((question) => question?.r18 === true));
+    state.account.aiR18 = false;
+    if (hadAdultAi) { state.account.aiTheme = ""; state.account.aiTone = ""; }
+    if (state.account.customDraftR18 === true) { state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ""; }
+    state.account.aiQuestions = Array.isArray(state.account.aiQuestions) ? state.account.aiQuestions.filter((question) => question.r18 !== true) : [];
+    const hasAdultStudioItem = Array.isArray(state.account.studioItems) && state.account.studioItems.some((item) => item?.r18 === true || (item?.kind === "saved" && canonicalCard(item.cardId, state.account.customCards)?.r18 === true));
+    if (hasAdultStudioItem || state.account.editingSetId && playableSavedSets(state.account.sets, state.account.customCards).some((set) => set.id === state.account.editingSetId && set.hasR18)) {
+      state.account.studioMode = "list"; state.account.editingSetId = null; state.account.editingDraftId = null; state.account.studioItems = []; state.account.selectedCards = new Set(); state.account.setName = undefined;
+    }
+    if (state.selectedMySetId) {
+      const selected = playableSavedSets(state.account.sets, state.account.customCards).find((set) => set.id === state.selectedMySetId);
+      if (selected?.hasR18) state.selectedMySetId = null;
+    }
+  }
+  render();
+  if (state.account.r18DisplayEnabled && state.soloHistoryOpen && state.account.user) loadSoloHistory(false);
+}
+function r18DisplayToggle() { return ageConfirmed() ? `<label class="r18-display-toggle"><input type="checkbox" data-r18-display ${r18DisplayVisible() ? "checked" : ""}/> <span>R18を表示する</span></label>` : ""; }
+function venueR18Hidden(session = state.session) { return Boolean(state.venue && session?.venueSession && sessionHasR18(session) && !(state.venue.ageTapped === true && state.venue.displayR18 === true)); }
+function venueR18Gate(session) { return `<div class="venue-r18-display-gate"><p>R18を表示するまで、店舗テーマの名前と質問を非表示にしています。</p><label class="adult-consent"><input type="checkbox" data-venue-play-r18 ${state.venue?.displayR18 ? "checked" : ""}/> <span>R18を表示する</span></label></div>${state.account.open ? accountView({ overlayOnly: true }) : ""}`; }
 function canSeeDeck(deck) { return canSeeTheme(deck, state.account); }
 function canOfferR18(deck) { return canOfferR18Option(deck, state.account); }
 const AGE_REQUIRED_MESSAGE = "R18は、アカウント設定で18歳以上の確認をすると利用できます。";
@@ -110,6 +166,7 @@ function adultErrorMessage(error, fallback) {
 // and only while the venue context (state.venue) is still loaded: logout / account switch clears state.venue first.
 // Clears R18 play state (memory and the stored resume) on logout, identity change and revocation.
 function purgeAdultSessions() {
+  try { if (!state.account.user || state.account.authReady === false) sessionStorage.removeItem(AUTH_RETURN_KEY); } catch {}
   let touched = false;
   if (sessionHasR18(state.session) && !isActiveVenueSession(state.session)) { state.session = null; touched = true; if (state.screen === "play") state.screen = "participants"; }
   if (sessionHasR18(state.resume) && !isActiveVenueSession(state.resume)) { state.resume = null; touched = true; }
@@ -117,19 +174,35 @@ function purgeAdultSessions() {
   let stored = null; try { stored = loadSession(); } catch { stored = null; }
   if (touched || sessionHasR18(stored)) clearSession();
   state.feedback = null; state.roundFavorite = null; state.shareDialogOpen = false; state.adultConfirmed = false;
+  if (!state.account.user) { state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryHasMore = false; state.soloHistoryLoading = false; state.soloHistoryError = ""; state.soloHistoryEditing = null; state.soloHistoryOpen = false; state.soloMemoOpen = false; }
 }
 // Runs at the top of every render: while the account is not age-confirmed, nothing R18 may stay selected or visible.
 function enforceAgeGate() {
   if (state.venue) return;
-  if (ageConfirmed()) return;
+  if (ageConfirmed()) {
+    if (!state.account.r18DisplayEnabled && state.filter === "adult") state.filter = "all";
+    if (!state.account.r18DisplayEnabled && !state.venue) {
+      const catalog = state.themeMode === "solo" || state.session?.mode === "solo" ? soloDecks : decks;
+      state.selectedDeckIds = state.selectedDeckIds.filter((id) => { const deck = catalog.find((item) => item.id === id); return deck && canSeeDeck(deck); });
+      if (!state.selectedDeckIds.length) state.selectedDeckIds = [catalog.find((deck) => canSeeDeck(deck))?.id || catalog[0]?.id];
+      if (!catalog.some((deck) => deck.id === state.selectedDeckId && canSeeDeck(deck))) state.selectedDeckId = state.selectedDeckIds[0];
+      if (state.account.customDraftR18 === true) { state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ""; }
+      state.account.aiQuestions = Array.isArray(state.account.aiQuestions) ? state.account.aiQuestions.filter((question) => question.r18 !== true) : [];
+      if (sessionHasR18(state.session) && !isActiveVenueSession(state.session)) { if (!state.session.sharedGuest) state.resume = state.session; state.session = null; if (state.screen === "play") state.screen = "participants"; }
+      const pendingAdult = state.account.pendingSet?.set?.hasR18 === true || (Array.isArray(state.account.pendingSet?.set?.card_ids) && state.account.pendingSet.set.card_ids.some((id) => canonicalCard(id, state.account.customCards)?.r18 === true));
+      if (pendingAdult && !r18DisplayVisible()) state.account.pendingSet = null;
+    }
+    return;
+  }
   if (state.filter === "adult") state.filter = "all";
-  const fallback = decks.find((deck) => canUseDeck(deck) && canSeeDeck(deck)) ?? decks.find((deck) => canSeeDeck(deck)) ?? decks[0];
-  const visibleIds = state.selectedDeckIds.filter((id) => canSeeDeck(decks.find((deck) => deck.id === id)));
+  const catalog = state.themeMode === "solo" || state.session?.mode === "solo" ? soloDecks : decks;
+  const fallback = catalog.find((deck) => canUseDeck(deck) && canSeeDeck(deck)) ?? catalog.find((deck) => canSeeDeck(deck)) ?? catalog[0];
+  const visibleIds = state.selectedDeckIds.filter((id) => { const deck = catalog.find((item) => item.id === id); return deck && canSeeDeck(deck); });
   state.selectedDeckIds = visibleIds.length ? visibleIds : [fallback.id];
-  if (!canSeeDeck(decks.find((deck) => deck.id === state.selectedDeckId))) state.selectedDeckId = state.selectedDeckIds[0];
+  if (!catalog.some((deck) => deck.id === state.selectedDeckId && canSeeDeck(deck))) state.selectedDeckId = state.selectedDeckIds[0];
   if (state.selectedMySetId) { const set = playableSavedSets(state.account.sets, state.account.customCards).find((item) => item.id === state.selectedMySetId); if (!set || set.hasR18) state.selectedMySetId = null; }
   state.adultConfirmed = false;
-  state.account.revealAdult = false; state.account.aiR18 = false; state.account.customDraftR18 = false;
+  state.account.revealAdult = false; state.account.r18DisplayEnabled = false; state.account.aiR18 = false; state.account.customDraftR18 = false;
   if (state.account.pendingSet) state.account.pendingSet = null;
   if (state.account.authReady && state.session && sessionHasR18(state.session) && !isActiveVenueSession(state.session)) {
     state.session = null; state.feedback = null; state.roundFavorite = null; state.shareDialogOpen = false;
@@ -181,9 +254,9 @@ function sharedBlocked() {
 }
 function sharedSubmitDisabled() {
   if (state.sharedLoading || state.busy) return true;
-  if (state.venue) { const set = selectedVenueSet(); return set?.adultOnly === true && !(state.venue.ageTapped === true && state.adultConfirmed === true); }
+  if (state.venue) { const set = selectedVenueSet(); return set?.adultOnly === true && !(state.venue.ageTapped === true && state.venue.displayR18 === true && state.adultConfirmed === true); }
   if (sharedBlocked()) return true;
-  return state.shared?.adultOnly === true && !state.adultConfirmed;
+  return state.shared?.adultOnly === true && (!state.adultConfirmed || !r18DisplayVisible());
 }
 function sessionNeedsRegistration(session) {
   if (isActiveVenueSession(session)) return false;
@@ -240,11 +313,12 @@ function clearAccountParticipantName() {
   state.participantNameAutoValue = "";
 }
 function participantAvatar(name) { const first = Array.from(name.trim())[0]; if (first) return esc(first); return `<svg viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="21" fill="var(--participant-bg)"/><circle cx="16" cy="19" r="2" fill="var(--participant-fg)"/><circle cx="28" cy="19" r="2" fill="var(--participant-fg)"/><path d="M15 27c2.2 3.4 11.8 3.4 14 0" fill="none" stroke="var(--participant-fg)" stroke-width="2" stroke-linecap="round"/></svg>`; }
-function isPrivateCustomSession(session) { return Boolean(session?.ownerUserId && Array.isArray(session.customQuestions) && session.customQuestions.length); }
+function isPrivateCustomSession(session) { return Boolean(session?.customSet === true && session?.ownerUserId); }
 function loadResumeForCurrentUser() {
   const candidate = loadSession();
   if (!isPrivateCustomSession(candidate)) return candidate;
-  if (state.account.user?.id && state.account.customCardsAvailable && candidate.ownerUserId === state.account.user.id) return candidate;
+  const needsCustomCards = Array.isArray(candidate.customQuestions) && candidate.customQuestions.length > 0;
+  if (state.account.user?.id && (!needsCustomCards || state.account.customCardsAvailable) && candidate.ownerUserId === state.account.user.id) return candidate;
   clearSession(); return null;
 }
 
@@ -276,7 +350,9 @@ function restoreAccountScroll(snapshot) {
 }
 function render() {
   enforceAgeGate();
-  if (state.account.authReady && !state.account.user && state.account.guestNormalizedGeneration !== state.account.generation) {
+  if (state.session?.mode === "solo") state.themeMode = "solo";
+  if (state.screen === "play" && state.session?.customSet && state.session.setId) state.selectedMySetId = state.session.setId;
+  if (state.account.authReady && !state.account.user && state.themeMode !== "solo" && state.account.guestNormalizedGeneration !== state.account.generation) {
     const preserveMixed = state.themeMode === "mixed";
     const guestDecks = state.selectedDeckIds.filter((id) => GUEST_THEME_IDS.has(id));
     state.selectedDeckIds = guestDecks.length ? guestDecks : ["date"];
@@ -304,8 +380,15 @@ function render() {
   root.dataset.screen = state.screen;
   document.body.classList.toggle("account-open", state.account.open);
   document.body.classList.toggle("share-open", state.shareDialogOpen);
+  document.body.classList.toggle("solo-play", state.session?.mode === "solo" && state.screen === "play");
   trackPage(state.screen);
   root.querySelectorAll("[data-action]").forEach((button) => button.addEventListener("click", handleAction));
+  root.querySelectorAll('[data-action="studio-edit-set"]').forEach((button) => button.addEventListener("click", () => {
+    const row = state.account.sets.find((item) => item.id === button.dataset.setId); if (row) setStudioMetadata(row);
+  }, { capture: true }));
+  root.querySelectorAll('[data-action="studio-edit-draft"]').forEach((button) => button.addEventListener("click", () => {
+    const row = state.account.drafts.find((item) => item.id === button.dataset.draftId); if (row) setStudioMetadata(row);
+  }, { capture: true }));
   root.querySelectorAll('form[data-form="participants"],form[data-form="shared-participants"]').forEach((form) =>
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -339,6 +422,10 @@ function render() {
     });
   });
   root.querySelector("[data-feedback-text]")?.addEventListener("input", (event) => { const current = feedbackState(state.session); if (current) { current.text = event.target.value; const button = root.querySelector('[data-action="feedback-submit"]'); if (button) button.disabled = state.feedbackBusy || (!current.rating && !current.text.trim()); } });
+  root.querySelector(".solo-memo")?.addEventListener("toggle", (event) => { state.soloMemoOpen = event.currentTarget.open; });
+  root.querySelector("[data-solo-note]")?.addEventListener("input", (event) => { const card = currentCard(state.session); if (card) { const key = `${state.session.sessionId}:${card.id}`; state.soloDraftRevision += 1; state.soloNoteDrafts[key] = event.target.value; state.soloNoteStatuses[key] = ""; state.soloNoteErrors[key] = ""; event.currentTarget.closest('.solo-memo')?.querySelectorAll('.account-status,.form-error').forEach((node) => node.remove()); } });
+  root.querySelector("[data-solo-summary]")?.addEventListener("input", (event) => { if (state.session) { state.soloDraftRevision += 1; const key = `${state.session.sessionId}:${Math.floor((state.session.roundStart ?? state.session.cursor) / ROUND_SIZE) + 1}`; state.soloSummaryDrafts[key] = event.target.value; state.soloSummaryStatuses[key] = ""; state.soloSummaryErrors[key] = ""; event.currentTarget.closest('.solo-memo')?.querySelectorAll('.account-status,.form-error').forEach((node) => node.remove()); } });
+  root.querySelector("[data-history-edit]")?.addEventListener("input", (event) => { if (state.soloHistoryEditing) state.soloHistoryEditing.note = event.target.value; });
   root.querySelector("[data-round-feedback]")?.addEventListener("toggle", (event) => { state.roundFeedbackExpanded = event.currentTarget.open; });
   root.querySelectorAll("[data-adult]").forEach((input) =>
     input.addEventListener("change", (event) => {
@@ -364,6 +451,8 @@ function render() {
       render();
     }),
   );
+  root.querySelectorAll("[data-solo-deck]").forEach((input) => input.addEventListener("change", (event) => { state.selectedDeckId = event.currentTarget.value; state.selectedMySetId = null; state.error = ""; render(); }));
+  root.querySelectorAll("[data-solo-set]").forEach((input) => input.addEventListener("change", (event) => { state.selectedMySetId = event.currentTarget.value.replace(/^set:/, ""); state.selectedDeckId = ""; state.error = ""; render(); }));
   root.querySelectorAll("[data-mode]").forEach((input) =>
     input.addEventListener("change", (event) => { state.themeMode = event.target.value; state.adultConfirmed = false; if (state.themeMode === "mixed") { const regular = new Set(decks.filter((deck) => !deck.adultOnly).map((deck) => deck.id)); state.selectedDeckIds = state.selectedDeckIds.filter((id) => regular.has(id)); if (!state.selectedDeckIds.length && regular.has(state.selectedDeckId)) state.selectedDeckIds = [state.selectedDeckId]; if (state.filter === "adult") state.filter = "all";
       }
@@ -403,7 +492,10 @@ function render() {
   root.querySelector("[data-account-otp]")?.addEventListener("input", (event) => { state.account.otp = event.target.value; });
   root.querySelector("[data-adult-intent]")?.addEventListener("change", (event) => { state.account.adultIntent = event.currentTarget.checked; });
   root.querySelector("[data-age-confirm]")?.addEventListener("change", (event) => { state.account.ageConfirmChecked = event.currentTarget.checked; const button = root.querySelector('[data-action="age-confirm"]'); if (button) button.disabled = state.account.ageBusy || !state.account.ageConfirmChecked; });
-  root.querySelector("[data-venue-age]")?.addEventListener("change", (event) => { if (state.venue) state.venue.ageTapped = event.currentTarget.checked; const submit = event.currentTarget.form?.querySelector("button[type=submit]"); if (submit) submit.disabled = sharedSubmitDisabled(); });
+  root.querySelectorAll("[data-r18-display]").forEach((input) => input.addEventListener("change", (event) => setR18DisplayVisible(event.currentTarget.checked === true)));
+  root.querySelector("[data-venue-age]")?.addEventListener("change", (event) => { if (state.venue) { state.venue.ageTapped = event.currentTarget.checked; if (!state.venue.ageTapped) state.venue.displayR18 = false; } render(); });
+  root.querySelector("[data-venue-r18]")?.addEventListener("change", (event) => { if (state.venue) state.venue.displayR18 = event.currentTarget.checked === true; render(); });
+  root.querySelector("[data-venue-play-r18]")?.addEventListener("change", (event) => { if (state.venue) state.venue.displayR18 = event.currentTarget.checked === true; render(); });
   root.querySelector('form[data-form="account"]')?.addEventListener("submit", (event) => { event.preventDefault(); loginWithOtp(); });
   root.querySelector('form[data-form="profile"]')?.addEventListener("submit", (event) => { event.preventDefault(); saveProfile(); });
   root.querySelector('form[data-form="custom-card"]')?.addEventListener("submit", (event) => { event.preventDefault(); saveCustomCard(); });
@@ -475,15 +567,12 @@ function render() {
     render();
   }),
   );
-  root.querySelector("[data-library-adult]")?.addEventListener("change", (event) => {
-    state.account.revealAdult = event.currentTarget.checked;
-    state.focusSelector = "[data-library-adult]";
-    render();
-  });
   root.querySelector("[data-delete-confirm]")?.addEventListener("change", (event) => { state.account.deleteConfirmed = event.currentTarget.checked; const button = root.querySelector('[data-action="account-delete-confirm"]'); if (button) button.disabled = state.account.busy || !state.account.deletionAvailable || !state.account.deleteConfirmed; });
   const setNameInput = root.querySelector("[data-set-name]");
   const updateSetValidity = () => {
     const form = setNameInput?.closest("form"); const button = form?.querySelector('button[type=\"submit\"]') || root.querySelector('.studio-save-footer button[type=\"submit\"]'); if (!button || !setNameInput) return; const count = state.account.studioItems.length; button.disabled = state.account.busy || !setNameInput.value.trim() || Array.from(setNameInput.value.trim()).length > 80 || count > 40 || state.account.draftsAvailable === false; }; setNameInput?.addEventListener("input", (event) => { state.account.setName = event.currentTarget.value; if (!event.isComposing) updateSetValidity(); }); setNameInput?.addEventListener("compositionend", updateSetValidity);
+  root.querySelector('[data-studio-audience]')?.addEventListener('change', (event) => { state.account.studioAudience = event.currentTarget.value; });
+  root.querySelector('[data-studio-order]')?.addEventListener('change', (event) => { state.account.studioQuestionOrder = event.currentTarget.value; });
   root.querySelectorAll('[data-action="studio-back"]').forEach((button) => button.addEventListener('click', () => { const mode = state.account.studioMode; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; state.account.busy = false; if (mode === 'picker') state.account.studioMode = 'editor'; else if (mode === 'ai') state.account.studioMode = state.account.studioAiReturnMode === 'editor' ? 'editor' : 'list'; else { state.account.studioMode = 'list'; state.account.studioItems = []; state.account.selectedCards = new Set(); state.account.setName = undefined; state.account.editingDraftId = null; state.account.editingSetId = null; } if (mode !== 'ai' || state.account.studioMode === 'list') { state.account.aiQuestions = []; state.account.aiName = ''; state.account.aiTheme = ''; state.account.aiTone = ''; } render(); }));
   root.querySelector('[data-action="studio-picker"]')?.addEventListener('click', () => { state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; state.account.studioMode = 'picker'; render(); });
   root.querySelectorAll('[data-action="studio-remove-card"]').forEach((button) => button.addEventListener('click', () => { state.account.selectedCards.delete(button.dataset.cardId); state.account.studioItems = state.account.studioItems.filter((item) => item.cardId !== button.dataset.cardId); state.focusAction = 'studio-picker'; render(); }));
@@ -526,12 +615,15 @@ function sharedView() {
   const shared = state.shared || {};
   const venueSet = syncSelectedVenueSet();
   const blocked = sharedBlocked();
-  const consent = !blocked && (state.venue ? venueSet?.adultOnly === true : shared.adultOnly === true);
+  const displayAllowed = state.venue ? state.venue.displayR18 === true : (!shared.adultOnly || r18DisplayVisible());
+  const consent = !blocked && displayAllowed && (state.venue ? venueSet?.adultOnly === true : shared.adultOnly === true);
   const blockedActions = !state.account.enabled ? "" : isRegisteredUser() ? '<button type="button" class="primary-button" data-action="age-settings-open">アカウント設定を開く</button>' : '<button type="button" class="primary-button" data-action="account" data-auth-return="true">ログイン / 新規登録</button>';
   const blockedPanel = blocked ? `<section class="panel form-panel shared-age-blocked"><p class="guest-theme-note">このセットは、18歳以上であることを確認したアカウントでのみ表示できます。</p>${blockedActions}</section>` : "";
-  const venueAgeTap = state.venue && consent ? `<label class="adult-consent venue-age-confirm"><input type="checkbox" data-venue-age ${state.venue.ageTapped ? "checked" : ""} /> <span><strong>この端末で遊ぶ参加者は全員18歳以上です</strong><br><small>このお店はR18のテーマを提供しています。店舗が参加者の年齢を確認する責任を負います。</small></span></label>` : "";
+  const venueDisplayToggle = state.venue && venueSet?.adultOnly && state.venue.ageTapped ? `<label class="adult-consent"><input type="checkbox" data-venue-r18 ${state.venue.displayR18 ? "checked" : ""} /> R18を表示する</label>` : "";
+  const sharedDisplayToggle = !state.venue && shared.adultOnly && ageConfirmed() ? r18DisplayToggle() : "";
+  const venueAgeTap = state.venue && venueSet?.adultOnly ? `<label class="adult-consent venue-age-confirm"><input type="checkbox" data-venue-age ${state.venue.ageTapped ? "checked" : ""} /> <span><strong>この端末で遊ぶ参加者は全員18歳以上です</strong><br><small>このお店はR18のテーマを提供しています。店舗が参加者の年齢を確認する責任を負います。</small></span></label>${venueDisplayToggle}` : "";
   const consentControl = consent ? `${venueAgeTap}<label class="adult-consent"><input type="checkbox" data-shared-adult ${state.adultConfirmed ? "checked" : ""} /> ${state.venue ? "参加者全員がR18の話題に同意しています" : "参加者全員が18歳以上で、R18の話題に同意します"}</label>` : "";
-  const venuePicker = state.venue ? `<label class="venue-picker"><span>店舗のおすすめテーマ</span><select data-venue-set aria-label="店舗のおすすめテーマ">${state.venue.sets.map((set) => `<option value="${esc(set.id)}" ${set.id === (venueSet?.id || '') ? 'selected' : ''}>${esc(set.name)}（${set.cardCount}枚${set.adultOnly ? '・R18' : ''}）</option>`).join('')}</select></label>` : '';
+  const venuePicker = state.venue ? `<label class="venue-picker"><span>店舗のおすすめテーマ</span><select data-venue-set aria-label="店舗のおすすめテーマ">${state.venue.sets.map((set) => `<option value="${esc(set.id)}" ${set.id === (venueSet?.id || '') ? 'selected' : ''}>${esc(set.adultOnly && !displayAllowed ? 'R18を含むテーマ' : set.name)}（${set.cardCount}枚${set.adultOnly ? '・R18' : ''}）</option>`).join('')}</select></label>` : '';
   const participantFields = `<div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="${state.venue ? '呼び名（任意）' : '呼び名'}" aria-label="${index + 1}人目の呼び名" /></label>`).join("")}</div>`;
   const participantInput = state.venue ? `<label class="venue-count"><span>参加人数</span><select data-venue-count aria-label="参加人数">${Array.from({ length: MAX_PARTICIPANTS - 1 }, (_, index) => index + 2).map((count) => `<option value="${count}" ${count === state.participants.length ? "selected" : ""}>${count}人</option>`).join("")}</select></label><details class="venue-names"><summary>呼び名をつける（任意）</summary>${participantFields}</details>` : `${participantFields}<div class="inline-actions"><button type="button" class="text-button add-person" data-action="add-person" ${state.participants.length >= MAX_PARTICIPANTS ? "disabled" : ""}>＋ 参加者を追加</button>${state.participants.length > 2 ? '<button type="button" class="text-button muted" data-action="remove-person">最後の人を削除</button>' : ""}</div>`;
   const title = state.venue ? state.venue.venue.name : '共有されたマイセット';
@@ -539,13 +631,15 @@ function sharedView() {
   const store = state.venue?.venue.storeUrl ? `<a class="text-button venue-store-link" href="${esc(state.venue.venue.storeUrl)}" target="_blank" rel="noopener noreferrer">店舗の公式サイト</a>` : "";
   const footer = state.venue ? `<div class="venue-footer-links">${store}<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button></div>` : `<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button>`;
   const landingHint = state.venue ? "テーマと人数を選んで、会話をはじめましょう。" : "質問内容は、参加者を入力して始めるまで表示されません。";
-  return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? title : (blocked ? "共有セット" : (shared.name || "共有セット")))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${!blocked && Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}${blocked ? "" : `<p class="account-hint">${landingHint}</p>`}${blockedPanel}${blocked ? "" : `<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${sharedSubmitDisabled() ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button></form>`}${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
+  return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? (venueSet?.adultOnly && !displayAllowed ? "R18を含むテーマ" : title) : (blocked || (shared.adultOnly && !displayAllowed) ? "共有セット" : (shared.name || "共有セット")))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${!blocked && Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}${blocked ? "" : `<p class="account-hint">${landingHint}</p>`}${blockedPanel}${blocked ? "" : `<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${sharedDisplayToggle}${venueAgeTap}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${sharedSubmitDisabled() ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button></form>`}${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
 
 function participantsView() {
   syncAccountParticipantName();
   const atLimit = state.participants.length >= MAX_PARTICIPANTS;
-  const resumeCard = state.resume && canAccessSessionContent(state.resume, state.account) ? `<aside class="resume-card" aria-label="前回の続き"><strong>前回の続き</strong><span>${esc(state.resume.mixed ? "テーマミックス" : state.resume.customSet ? "マイセット" : decks.find((deck) => deck.id === state.resume.deckId)?.title || "会話カード")} · ${state.resume.cursor}/${state.resume.questions?.length || 40}</span><div><button type="button" class="primary-button" data-action="resume">続きから</button><button type="button" class="text-button muted" data-action="discard-resume">削除</button></div></aside>` : "";
-  return frame(`<div class="home-screen">${accountView()}<div class="masthead-slot"><img class="masthead-image" src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards。やっぱり人って面白い。" width="1493" height="1054" /><h1 class="visually-hidden" tabindex="-1" data-focus>Mingle.Cards</h1></div>${resumeCard}<form class="panel form-panel" data-form="participants"><div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="呼び名" aria-label="${index + 1}人目の呼び名" autocomplete="off" enterkeyhint="${index === state.participants.length - 1 ? "done" : "next"}" /></label>`).join("")}</div><div class="inline-actions"><button type="button" class="text-button add-person" data-action="add-person" ${atLimit ? "disabled" : ""}>＋ 参加者を追加</button>${state.participants.length > 2 ? '<button type="button" class="text-button muted" data-action="remove-person">最後の人を削除</button>' : ""}<span class="limit-note">${atLimit ? "8人まで" : ""}</span></div><p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button">質問テーマを選ぶ</button></form><img class="home-illustration" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たちのイラスト" width="1611" height="976" loading="eager" />${renderAd("top")}<footer class="home-footer"><p><span>α版</span><span>開発：株式会社ErudAite</span></p><nav aria-label="ご案内"><a href="/terms.html">利用規約</a><a href="/privacy.html">プライバシーポリシー</a><a href="/personal-information.html">個人情報保護法に基づく公表事項</a></nav></footer></div>`, "Mingle.Cards", false);
+  const resumeCard = state.resume && canAccessSessionContent(state.resume, state.account, { activeVenue: isActiveVenueSession(state.resume), venueDisplay: state.venue?.displayR18 === true }) ? `<aside class="resume-card" aria-label="前回の続き"><strong>前回の続き</strong><span>${esc(state.resume.mixed ? "テーマミックス" : state.resume.customSet ? "マイセット" : decks.find((deck) => deck.id === state.resume.deckId)?.title || "会話カード")} · ${state.resume.cursor}/${state.resume.questions?.length || 40}</span><div><button type="button" class="primary-button" data-action="resume">続きから</button><button type="button" class="text-button muted" data-action="discard-resume">削除</button></div></aside>` : "";
+  const soloActive = state.themeMode === "solo";
+  const modeSwitch = `<div class="mode-switch home-mode-switch" role="group" aria-label="遊び方"><button type="button" class="secondary-button" data-action="group-mode" aria-pressed="${!soloActive}">みんなとミングる</button><button type="button" class="secondary-button" data-action="solo-mode" aria-pressed="${soloActive}">自分とミングる</button></div>`;
+  return frame(`<div class="home-screen">${accountView()}<div class="masthead-slot"><img class="masthead-image" src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards。やっぱり人って面白い。" width="1493" height="1054" /><h1 class="visually-hidden" tabindex="-1" data-focus>Mingle.Cards</h1></div>${resumeCard}${modeSwitch}<form class="panel form-panel" data-form="participants"><div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="呼び名" aria-label="${index + 1}人目の呼び名" autocomplete="off" enterkeyhint="${index === state.participants.length - 1 ? "done" : "next"}" /></label>`).join("")}</div><div class="inline-actions"><button type="button" class="text-button add-person" data-action="add-person" ${atLimit ? "disabled" : ""}>＋ 参加者を追加</button>${state.participants.length > 2 ? '<button type="button" class="text-button muted" data-action="remove-person">最後の人を削除</button>' : ""}<span class="limit-note">${atLimit ? "8人まで" : ""}</span></div><p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button">質問テーマを選ぶ</button></form><img class="home-illustration" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たちのイラスト" width="1611" height="976" loading="eager" />${renderAd("top")}<footer class="home-footer"><p><span>α版</span><span>開発：株式会社ErudAite</span></p><nav aria-label="ご案内"><a href="/terms.html">利用規約</a><a href="/privacy.html">プライバシーポリシー</a><a href="/personal-information.html">個人情報保護法に基づく公表事項</a></nav></footer></div>`, "Mingle.Cards", false);
 }
 function avatarImageSrc(value) {
   return typeof value === "string" && /^(?:data:image\/(?:png|jpe?g|webp);base64,|https?:\/\/)/i.test(value) && value.length <= 360000 ? value : "";
@@ -712,16 +806,19 @@ async function generateShareQr(url, generation, requestId) {
 }
 function shareDialogView(a) {
   const share = a.share || {};
+  const soloOnly = share.audience === 'solo';
+  const displayName = share.adultOnly === true && !r18DisplayVisible() ? "R18を含む共有セット" : (share.name || "マイセット");
   const url = typeof share.url === "string" ? share.url : "";
-  const qr = a.qrBusy ? '<p class="account-hint" role="status">QRコードを作成中…</p>' : share.active === false ? '<p class="account-hint" role="status">この共有は停止中です。リンクを作り直してください。</p>' : typeof share.qrDataUrl === "string" && share.qrDataUrl.startsWith("data:image/") ? `<img class="share-qr" src="${esc(share.qrDataUrl)}" alt="共有リンクのQRコード" />` : `<p class="account-hint" role="status">${esc(a.qrError || "QRコードを作成できませんでした。リンクをコピーして共有できます。")}</p>`;
-  return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button account-back" data-action="share-close">戻る</button><strong id="account-dialog-title">セットを共有</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><p class="account-share-title">${esc(share.name || "マイセット")}</p><p class="account-hint">${Number.isFinite(share.cardCount) ? `${share.cardCount}枚` : ""}${share.adultOnly === true ? " · R18を含む" : ""}。リンクを知っている人は、最初の6枚を登録なしで遊べます。</p>${url ? `<label class="account-share-url">共有リンク<input readonly value="${esc(url)}" data-share-url /></label>${share.active === false ? "" : `<div class="share-actions"><button type="button" class="primary-button" data-action="share-copy">リンクをコピー</button><button type="button" class="secondary-button" data-action="share-native">端末で共有</button></div>`}${qr}` : '<p class="account-hint">共有リンクはまだ発行されていません。</p>'}<div class="share-actions"><button type="button" class="secondary-button" data-action="share-rotate" ${a.shareBusy ? "disabled" : ""}>${url ? "リンクを作り直す" : "リンクを発行"}</button>${url && share.active !== false ? `<button type="button" class="text-button" data-action="share-stop" ${a.shareBusy ? "disabled" : ""}>共有を停止</button>` : ""}</div>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ""}`, "account-dialog-share");
+  const qr = a.qrBusy ? '<p class="account-hint" role="status">QRコードを作成中…</p>' : share.active === false ? `<p class="account-hint" role="status">${soloOnly ? "この共有は停止中です。" : "この共有は停止中です。リンクを作り直してください。"}</p>` : typeof share.qrDataUrl === "string" && share.qrDataUrl.startsWith("data:image/") ? `<img class="share-qr" src="${esc(share.qrDataUrl)}" alt="共有リンクのQRコード" />` : `<p class="account-hint" role="status">${esc(a.qrError || "QRコードを作成できませんでした。リンクをコピーして共有できます。")}</p>`;
+  const controls = soloOnly ? (url && share.active !== false ? `<span class="account-hint">以前に発行した共有リンクを管理できます。新しいリンクは発行できません。</span><button type="button" class="text-button" data-action="share-stop" ${a.shareBusy ? "disabled" : ""}>共有を停止</button>` : '<span class="account-hint">以前に発行した共有リンクを管理できます。新しいリンクは発行できません。</span>') : `<button type="button" class="secondary-button" data-action="share-rotate" ${a.shareBusy ? "disabled" : ""}>${url ? "リンクを作り直す" : "リンクを発行"}</button>${url && share.active !== false ? `<button type="button" class="text-button" data-action="share-stop" ${a.shareBusy ? "disabled" : ""}>共有を停止</button>` : ""}`;
+  return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button account-back" data-action="share-close">戻る</button><strong id="account-dialog-title">セットを共有</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><p class="account-share-title">${esc(displayName)}</p><p class="account-hint">${Number.isFinite(share.cardCount) ? `${share.cardCount}枚` : ""}${share.adultOnly === true ? " · R18を含む" : ""}${soloOnly ? "。以前に発行した共有リンクを管理できます。" : "。リンクを知っている人は、最初の6枚を登録なしで遊べます。"}</p>${url ? `<label class="account-share-url">共有リンク<input readonly value="${esc(url)}" data-share-url /></label>${share.active === false ? "" : `<div class="share-actions"><button type="button" class="primary-button" data-action="share-copy">リンクをコピー</button><button type="button" class="secondary-button" data-action="share-native">端末で共有</button></div>`}${qr}` : '<p class="account-hint">共有リンクはまだ発行されていません。</p>'}<div class="share-actions">${controls}</div>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ""}`, "account-dialog-share");
 }
 function ageSettingsView(a) {
   const section = (inner) => `<section class="account-age-section" aria-labelledby="account-age-title"><h2 id="account-age-title">年齢の確認</h2>${inner}</section>`;
   if (a.ageConfirmedAt) {
     if (a.ageRevokeOpen) return section(`<p class="account-hint">取り消すと、R18のテーマ、R18を含むマイセットや途中のセッションが表示されなくなります。保存したカードやセットは削除されません。</p><div class="account-age-actions"><button type="button" class="danger-button" data-action="age-revoke-confirm" ${a.ageBusy ? "disabled" : ""}>${a.ageBusy ? "取り消し中…" : "取り消す"}</button><button type="button" class="text-button" data-action="age-revoke-cancel" ${a.ageBusy ? "disabled" : ""}>キャンセル</button></div>`);
     const date = formatConfirmedDate(a.ageConfirmedAt);
-    return section(`<p>18歳以上であることを確認済みです${date ? `（${esc(date)}）` : ""}。</p><div class="account-age-actions"><button type="button" class="text-button" data-action="age-revoke-open" ${a.ageBusy ? "disabled" : ""}>確認を取り消す</button></div>`);
+    return section(`<p>18歳以上であることを確認済みです${date ? `（${esc(date)}）` : ""}。</p><label class="account-age-check"><input type="checkbox" data-r18-display ${a.r18DisplayEnabled ? "checked" : ""}/> <span>R18を表示する</span></label><p class="account-hint">年齢確認済みでも、選ぶまでR18のテーマ・質問・保存内容は表示しません。いつでもオフにできます。</p><div class="account-age-actions"><button type="button" class="text-button" data-action="age-revoke-open" ${a.ageBusy ? "disabled" : ""}>確認を取り消す</button></div>`);
   }
   if (a.adultConfirmationAvailable !== true) return section('<p class="account-hint">年齢の確認は現在利用できません。</p>');
   return section(`<p class="account-hint">R18のテーマは、18歳以上であることを確認したアカウントにだけ表示されます。</p><label class="account-age-check"><input type="checkbox" data-age-confirm ${a.ageConfirmChecked ? "checked" : ""} ${a.ageBusy ? "disabled" : ""}/> <span>私は18歳以上です</span></label><div class="account-age-actions"><button type="button" class="primary-button" data-action="age-confirm" ${a.ageBusy || !a.ageConfirmChecked ? "disabled" : ""}>${a.ageBusy ? "保存中…" : "確認して保存"}</button></div>`);
@@ -742,7 +839,7 @@ function accountView(options = {}) {
   if (a.user && a.settingsOpen) return wrap(accountSettingsView(a));
   if (a.user && a.libraryOpen) return wrap(libraryAccountView(a));
   if (a.user) return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">アカウント</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-menu-avatar"><span class="account-avatar">${accountAvatar(a.user)}</span></div>${a.user.displayName ? `<p class="account-display-name">${esc(a.user.displayName)}</p>` : ""}<p class="account-email">${esc(a.user.email || a.user.name || "ログイン中")}</p><button type="button" class="secondary-button account-menu-action" data-action="account-settings-open">アカウント設定</button>${!a.ageConfirmedAt && a.adultConfirmationAvailable ? '<p class="account-hint">R18テーマを表示するには、アカウント設定で年齢の確認が必要です。</p>' : ""}<button type="button" class="secondary-button account-menu-action" data-action="account-library-open">保存したカード・マイセット</button><a class="secondary-button account-menu-action" href="/venue.html">店舗管理</a><button type="button" class="text-button account-menu-action" data-action="logout">ログアウト</button>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}`, "account-dialog-menu"));
-  return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">${state.continuePending ? "ログイン / 新規登録" : "ログインする"}</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.google ? '<button type="button" class="secondary-button account-provider" data-action="google-login">Googleで続ける</button>' : ""}<label class="account-adult-intent"><input type="checkbox" data-adult-intent ${a.adultIntent ? "checked" : ""} /> <span>私は18歳以上です（任意）</span><small>チェックすると、R18のテーマが表示されるようになります。あとからアカウント設定で確認・取り消しできます。</small></label><form class="account-otp" data-form="account"><label>メールアドレス<input type="email" data-account-email value="${esc(a.email)}" required autocomplete="email" /></label>${a.otpSent ? '<label>確認コード<input inputmode="numeric" data-account-otp value="' + esc(a.otp) + '" required autocomplete="one-time-code" /></label><button type="button" class="text-button muted" data-action="reset-otp"' + (a.busy ? " disabled" : "") + ">メールアドレスを変更／コードを再送</button>" : ""}<button type="submit" class="primary-button">${a.busy ? "処理中…" : a.otpSent ? "ログインする" : "確認コードを送る"}</button></form><p class="account-status" role="status">${esc(a.status || "ログインすると質問を保存できます")}</p><p class="form-error" role="alert">${esc(a.error)}</p>`, "account-dialog-login"));
+  return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">${state.continuePending ? "ログイン / 新規登録" : "ログインする"}</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.google ? '<button type="button" class="secondary-button account-provider" data-action="google-login">Googleで続ける</button>' : ""}<label class="account-adult-intent"><input type="checkbox" data-adult-intent ${a.adultIntent ? "checked" : ""} /> <span>私は18歳以上です（任意）</span><small>チェックすると、ログイン後に年齢確認を設定できます。表示はアカウント設定で「R18を表示する」を選んだ場合だけです。</small></label><form class="account-otp" data-form="account"><label>メールアドレス<input type="email" data-account-email value="${esc(a.email)}" required autocomplete="email" /></label>${a.otpSent ? '<label>確認コード<input inputmode="numeric" data-account-otp value="' + esc(a.otp) + '" required autocomplete="one-time-code" /></label><button type="button" class="text-button muted" data-action="reset-otp"' + (a.busy ? " disabled" : "") + ">メールアドレスを変更／コードを再送</button>" : ""}<button type="submit" class="primary-button">${a.busy ? "処理中…" : a.otpSent ? "ログインする" : "確認コードを送る"}</button></form><p class="account-status" role="status">${esc(a.status || "ログインすると質問を保存できます")}</p><p class="form-error" role="alert">${esc(a.error)}</p>`, "account-dialog-login"));
 }
 function topicIcon(deck) {
   const paths = {
@@ -783,13 +880,34 @@ function topicIcon(deck) {
   paths["classmates"] = '<rect x="3" y="4" width="18" height="12" rx="1"/><path d="M7 20l2-4M17 20l-2-4M7 9h6M7 12h4"/>';
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[deck.id] ?? paths.team}</svg>`;
 }
+function soloHistoryView() {
+  if (!state.soloHistoryOpen) return `<button type="button" class="secondary-button solo-history-open" data-action="solo-history-open">保存したメモを見る</button>`;
+  if (!state.account.user) return `<section class="solo-history"><h2>保存したメモ</h2><p>保存済みメモを見るにはログインしてください。</p><button type="button" class="secondary-button" data-action="account">ログインする</button><button type="button" class="text-button" data-action="solo-history-close">閉じる</button></section>`;
+  const rows = state.soloHistory.map((note) => { const editing = state.soloHistoryEditing?.id === note.id; const label = note.slotKind === "summary" ? `第${note.roundNumber}ラウンドまとめ` : (note.questionText || "質問メモ"); const disabled = state.busy ? "disabled" : ""; const locked = note.locked === true || (note.r18 === true && (!ageConfirmed() || !r18DisplayVisible())); const title = locked ? "R18のメモ" : (note.sourceTitle || "自分とミングる"); const lockedMessage = note.r18 === true && r18DisplayVisible() === false && ageConfirmed() ? "「R18を表示する」を選ぶと表示できます。" : "年齢確認後に表示できます。"; return `<article class="solo-history-row"><time>${esc(new Date(note.createdAt || note.created_at).toLocaleString("ja-JP"))}</time><strong>${esc(title)}</strong><span>${esc(locked ? "R18のメモ" : label)}</span>${locked ? `<p class="account-hint">${lockedMessage}</p>` : editing ? `<textarea data-history-edit maxlength="2000" ${disabled}>${esc(state.soloHistoryEditing.note)}</textarea><div><button class="secondary-button" data-action="solo-history-save" data-note-id="${esc(note.id)}" ${disabled}>保存</button><button class="text-button" data-action="solo-history-cancel" ${disabled}>キャンセル</button></div>` : `<p class="solo-history-note">${esc(note.note)}</p><button class="text-button" data-action="solo-history-edit" data-note-id="${esc(note.id)}" ${disabled}>編集</button>`}<button class="text-button" data-action="solo-history-delete" data-note-id="${esc(note.id)}" ${disabled}>削除</button></article>`; }).join("");
+  const retry = state.soloHistoryError ? `<button type="button" class="secondary-button" data-action="solo-history-retry" ${state.soloHistoryLoading || state.busy ? "disabled" : ""}>再試行</button>` : "";
+  return `<section class="solo-history"><div class="solo-history-head"><h2>保存したメモ</h2><button type="button" class="text-button" data-action="solo-history-close">閉じる</button></div>${state.soloHistoryLoading ? "<p>読み込み中…</p>" : ""}${state.soloHistoryError ? `<p class="form-error">${esc(state.soloHistoryError)}</p>${retry}` : ""}${rows || (!state.soloHistoryLoading && !state.soloHistoryError ? "<p>保存済みメモはありません。</p>" : "")}${state.soloHistoryHasMore ? `<button class="secondary-button" data-action="solo-history-more" ${state.busy ? "disabled" : ""}>もっと見る</button>` : ""}</section>`;
+}
+async function loadSoloHistory(append = false) {
+  if (!state.account.user || state.soloHistoryLoading || state.busy) return;
+  const generation = state.account.generation; const ownerId = state.account.user.id; state.soloHistoryLoading = true; state.soloHistoryError = ""; render();
+  try { const query = new URLSearchParams({ limit: "20" }); if (append && state.soloHistoryCursor) query.set("cursor", state.soloHistoryCursor); const result = await accountApi.listSoloNotes(query.toString()); if (generation !== state.account.generation || state.account.user?.id !== ownerId) return; const rows = Array.isArray(result.notes) ? result.notes : Array.isArray(result) ? result : []; state.soloHistory = append ? [...state.soloHistory, ...rows] : rows; state.soloHistoryCursor = result.nextCursor || result.next_cursor || null; state.soloHistoryHasMore = Boolean(state.soloHistoryCursor); }
+  catch { if (generation === state.account.generation) state.soloHistoryError = "履歴を読み込めませんでした。"; }
+  finally { if (generation === state.account.generation && state.account.user?.id === ownerId) { state.soloHistoryLoading = false; render(); } }
+}
+function soloDecksView() {
+  const selected = state.selectedMySetId ? { id: null } : (soloDecks.find((deck) => deck.id === state.selectedDeckId) || soloDecks[0]);
+  const options = soloDecks.map((deck) => `<label class="deck-option solo-deck-option ${deck.id === selected.id ? "is-selected" : ""}"><input type="radio" name="solo-deck" value="${esc(deck.id)}" data-solo-deck ${deck.id === selected.id ? "checked" : ""}/><span class="deck-option-copy"><strong>${esc(deck.title)}</strong><small>${esc(deck.subtitle)}</small></span><span class="deck-count">12問</span></label>`).join("");
+  const sets = playableSavedSets(state.account.sets, state.account.customCards).filter((set) => ['solo', 'both'].includes(set.audience) && (!set.hasR18 || (ageConfirmed() && r18DisplayVisible()))); const setOptions = sets.map((set) => `<label class="deck-option solo-deck-option ${state.selectedMySetId === set.id ? "is-selected" : ""}"><input type="radio" name="solo-deck" value="set:${esc(set.id)}" data-solo-set ${state.selectedMySetId === set.id ? "checked" : ""}/><span class="deck-option-copy"><strong>${esc(set.name || "マイセット")}</strong><small>${set.cardCount}問 · ${set.questionOrder === "fixed" ? "固定順" : "シャッフル"}</small></span></label>`).join("");
+  return frame(`<div class="theme-screen solo-theme-screen"><div class="screen-brand"><button class="back-link" data-action="home" aria-label="戻る">‹</button><strong>自分とミングる</strong><button type="button" class="text-button" data-action="group-mode">みんなとミングる</button></div><div class="intro compact"><h1 tabindex="-1" data-focus>自分とミングる</h1><p>ひとりで問いをめくりながら、自分の考えを振り返ります。</p></div>${r18DisplayToggle()}<div class="deck-list solo-deck-list">${options}${setOptions}</div><p class="form-error" role="alert">${esc(state.error)}</p><button type="button" class="primary-button" data-action="solo-start">このテーマで始める</button>${soloHistoryView()}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, "自分とミングる", false);
+}
 function decksView() {
+  if (state.themeMode === "solo") return soloDecksView();
   const mixed = state.themeMode === "mixed";
-  const mySets = !mixed && isRegisteredUser() ? playableSavedSets(state.account.sets, state.account.customCards).filter((set) => !set.hasR18 || ageConfirmed()) : [];
+  const mySets = !mixed && isRegisteredUser() ? playableSavedSets(state.account.sets, state.account.customCards).filter((set) => ['group', 'both'].includes(set.audience) && (!set.hasR18 || (ageConfirmed() && r18DisplayVisible()))) : [];
   const selectedMySet = mySets.find((set) => set.id === state.selectedMySetId) || null;
   const selected = (decks.find((deck) => deck.id === state.selectedDeckId && canUseDeck(deck)) ?? decks.find((deck) => canUseDeck(deck)) ?? decks.find((deck) => canSeeDeck(deck)) ?? decks[0]);
-  const regularDecks = decks.filter((deck) => !deck.adultOnly), r18Decks = decks.filter((deck) => deck.adultOnly && canSeeDeck(deck));
-  const visible = (deck) => state.filter === "all" || (state.filter === "adult" ? ageConfirmed() && (deck.adultOnly || deck.r18Available) : !deck.adultOnly && themeGroups[deck.id]?.includes(state.filter));
+  const regularDecks = decks.filter((deck) => !deck.adultOnly), r18Decks = decks.filter((deck) => deck.adultOnly && canSeeDeck(deck) && r18DisplayVisible());
+  const visible = (deck) => state.filter === "all" || (state.filter === "adult" ? ageConfirmed() && r18DisplayVisible() && (deck.adultOnly || deck.r18Available) : !deck.adultOnly && themeGroups[deck.id]?.includes(state.filter));
   const option = (deck) => { const checked = mixed ? state.selectedDeckIds.includes(deck.id) : !selectedMySet && deck.id === selected.id; const available = canUseDeck(deck); const locked = !available; const control = mixed ? `<input type="checkbox" name="deck" value="${esc(deck.id)}" data-deck-select ${checked ? "checked" : ""} ${locked ? "disabled" : ""} aria-disabled="${locked}" />` : `<input type="radio" name="deck" value="${esc(deck.id)}" data-deck-select ${checked ? "checked" : ""} ${locked ? "disabled" : ""} aria-disabled="${locked}" />`;
     return `<label class="deck-option theme-card-${esc(deck.id)} ${checked ? "is-selected" : ""} ${locked ? "is-locked" : ""}" aria-disabled="${locked}">${control}<span class="topic-icon topic-${esc(deck.id)}">${topicIcon(deck)}</span><span class="deck-option-copy"><strong>${esc(deck.title)}</strong><small>${esc(deck.subtitle)}</small></span><span class="deck-count">${locked ? '🔒 登録で解放' : '40枚'}</span></label>`; };
   const allowedFilters = visibleFilterIds(groupLabels, state.account, mixed);
@@ -819,7 +937,7 @@ function decksView() {
     : `${groupLabel}${availablePool.map(option).join("") || '<p class="limit-note">この絞り込みに合うテーマはありません。</p>'}`;
   const guestLockedMarkup = !isRegisteredUser() && lockedPool.length ? `<div class="deck-list guest-locked-list" role="group" aria-label="登録で使える質問テーマ">${lockedSection}${adultMarkup}</div>` : "";
   const mySetsMarkup = mySets.length ? `<section class="my-set-section" aria-labelledby="my-set-heading"><div class="my-set-section-head"><h2 id="my-set-heading">マイセット</h2><span>${mySets.length}件</span></div><div class="my-set-grid">${mySets.map((set) => `<article class="my-set-option ${selectedMySet?.id === set.id ? "is-selected" : ""}"><div><strong>${esc(set.name || "名前のないセット")}</strong><small>${set.cardCount}枚${set.hasR18 ? " · R18を含む" : ""}</small></div><button type="button" class="secondary-button" data-action="choose-myset" data-set-id="${esc(set.id)}">${selectedMySet?.id === set.id ? "選択中" : "選択"}</button></article>`).join("")}</div></section>` : "";
-  return frame(`<div class="theme-screen"><div class="screen-brand"><button class="back-link" data-action="home" aria-label="参加者を変更する">‹</button><strong>Mingle.Cards</strong></div><div class="intro compact"><h1 tabindex="-1" data-focus>質問テーマを選ぶ</h1></div>${registrationNotice}<div class="mode-switch" role="radiogroup" aria-label="テーマモード"><label><input type="radio" name="theme-mode" value="single" data-mode ${!mixed ? "checked" : ""}/> 1つのテーマ</label><label><input type="radio" name="theme-mode" value="mixed" data-mode ${mixed ? "checked" : ""}/> テーマミックス</label></div>${mixed ? `<p class="mode-hint">通常テーマから2〜3個を選びます。${state.selectedDeckIds.length}/3</p><div class="selected-theme-chips">${chips || '<span class="limit-note">テーマを2つ選んでください</span>'}</div>` : `<p class="selected-single-theme">選択中：${esc(selectedMySet ? selectedMySet.name || "マイセット" : selected.title)}</p>`}${mySetsMarkup}${selectedMySet ? themeControls : ""}<div class="filter-chips" role="toolbar" aria-label="テーマを絞り込む">${filters}</div><div class="deck-list" role="group" aria-label="質問テーマ">${deckMarkup}</div>${!isRegisteredUser() && !selectedMySet ? themeControls : ""}${guestLockedMarkup}${isRegisteredUser() && !selectedMySet ? themeControls : ""}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, "Mingle.Cards", false);
+  return frame(`<div class="theme-screen"><div class="screen-brand"><button class="back-link" data-action="home" aria-label="参加者を変更する">‹</button><strong>Mingle.Cards</strong></div><div class="intro compact"><h1 tabindex="-1" data-focus>質問テーマを選ぶ</h1></div>${registrationNotice}<div class="mode-switch" role="radiogroup" aria-label="テーマモード"><label><input type="radio" name="theme-mode" value="single" data-mode ${!mixed ? "checked" : ""}/> 1つのテーマ</label><label><input type="radio" name="theme-mode" value="mixed" data-mode ${mixed ? "checked" : ""}/> テーマミックス</label></div>${mixed ? `<p class="mode-hint">通常テーマから2〜3個を選びます。${state.selectedDeckIds.length}/3</p><div class="selected-theme-chips">${chips || '<span class="limit-note">テーマを2つ選んでください</span>'}</div>` : `<p class="selected-single-theme">選択中：${esc(selectedMySet ? selectedMySet.name || "マイセット" : selected.title)}</p>`}${mySetsMarkup}${selectedMySet ? themeControls : ""}${r18DisplayToggle()}<div class="filter-chips" role="toolbar" aria-label="テーマを絞り込む">${filters}</div><div class="deck-list" role="group" aria-label="質問テーマ">${deckMarkup}</div>${!isRegisteredUser() && !selectedMySet ? themeControls : ""}${guestLockedMarkup}${isRegisteredUser() && !selectedMySet ? themeControls : ""}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, "Mingle.Cards", false);
 }
 
 function participantChips(session) { return session.participants.map((name, index) => { const initial = Array.from(name.trim())[0] ?? '・'; return `<span class="participant-chip participant-color-${index} ${index === currentParticipantIndex(session) ? "is-current" : ""}"><i aria-hidden="true">${esc(initial)}</i>${esc(name)}</span>`;
@@ -829,6 +947,7 @@ function cardAudioButton() { return `<button type="button" class="card-audio-tog
 
 function playView() {
   const session = state.session;
+  if (venueR18Hidden(session)) return frame(venueR18Gate(session), "店舗カード", true);
   if (isFinished(session)) return finishView();
   if (isRoundComplete(session) && !session.revealed) return roundView();
   if (!session.revealed) return backView(session);
@@ -845,15 +964,21 @@ function playView() {
       ? "マイセット"
       : session.mixed
         ? `テーマミックス · ${session.deckIds
-            .map((id) => decks.find((deck) => deck.id === id)?.title)
+            .map((id) => [...decks, ...soloDecks].find((deck) => deck.id === id)?.title)
             .filter(Boolean)
             .join("・")}`
-        : (decks.find((deck) => deck.id === session.deckId)?.title ?? "会話カード");
+        : ([...decks, ...soloDecks].find((deck) => deck.id === session.deckId)?.title ?? "会話カード");
   const favorite = state.account.user && state.account.enabled && card.kind !== "challenge" && !card.custom ? `<button type="button" class="favorite-card-button ${state.account.favorites.has(card.id) ? "is-saved" : ""}" data-action="favorite-card" aria-pressed="${state.account.favorites.has(card.id)}" ${state.account.busy ? "disabled" : ""}>${state.account.favorites.has(card.id) ? "★ 保存済み" : "☆ 保存"}</button>` : "";
-  return frame(`<div class="play-head"><div><p class="play-deck">${esc(playTitle)}</p><p class="progress-copy" aria-label="全${session.questions.length}枚中${session.cursor + 1}枚目">${roundPosition + 1} / ${roundTotal}</p></div><button class="quiet-button" data-action="decks">テーマを変える</button></div><div class="round-progress" aria-label="今回の進み具合">${segments}</div><article class="question-card active-card ${isChallenge ? "challenge-card" : ""}" aria-live="polite">${isChallenge ? '<span class="challenge-badge">やってみて</span>' : ""}${favorite}${cardAudioButton()}<p>${esc(card.text)}</p></article><div class="speaker-pill"><strong>${esc(currentSpeaker(session))}の番</strong><span>${session.answerIndex + 1} / ${session.participants.length}</span></div><div class="participant-strip" aria-label="参加者">${participantChips(session)}</div><div class="answer-actions" role="group" aria-label="回答操作"><button class="secondary-button" data-action="previous-answer" ${session.answerIndex === 0 || state.busy ? "disabled" : ""}>前の人へ</button><button class="like-button" data-action="like" ${state.busy ? "disabled" : ""}>♡ <span>${esc(currentSpeaker(session))}${isChallenge ? "にいいね！" : "の回答にいいね！"}</span> <strong>${currentAnswerLikes(session)}</strong></button><button class="primary-button" data-action="next-answer" ${state.busy ? "disabled" : ""}>${session.answerIndex === session.participants.length - 1 ? "次のカードへ" : "次の人へ"}</button><button class="pass-button" data-action="pass" ${state.busy ? "disabled" : ""}>パスする</button></div><p class="form-error" role="alert">${esc(state.error)}</p>`);
+  const solo = session.mode === "solo";
+  const noteKey = `${session.sessionId}:${card.id}`; const noteDraft = state.soloNoteDrafts[noteKey] ?? ""; const noteStatus = state.soloNoteStatuses[noteKey] || ""; const noteError = state.soloNoteErrors[noteKey] || "";
+  const memo = solo ? `<details class="solo-memo" ${state.soloMemoOpen ? "open" : ""}><summary>メモ（任意）</summary><label for="solo-note">この問いについて残すメモ</label><textarea id="solo-note" data-solo-note maxlength="2000" rows="4" placeholder="保存したいときだけ入力してください">${esc(noteDraft)}</textarea><button type="button" class="secondary-button" data-action="solo-note-save" ${state.busy ? "disabled" : ""}>${state.busy ? "保存中…" : "保存する"}</button>${noteStatus ? `<p class="account-status" role="status">${esc(noteStatus)}</p>` : ""}${noteError ? `<p class="form-error" role="alert">${esc(noteError)}</p>` : ""}</details>` : "";
+  const soloActions = `<div class="answer-actions" role="group" aria-label="操作"><button class="primary-button" data-action="next-answer" ${state.busy ? "disabled" : ""}>次の問いへ</button><button class="pass-button" data-action="pass" ${state.busy ? "disabled" : ""}>スキップ</button></div>`;
+  const groupActions = `<div class="speaker-pill"><strong>${esc(currentSpeaker(session))}の番</strong><span>${session.answerIndex + 1} / ${session.participants.length}</span></div><div class="participant-strip" aria-label="参加者">${participantChips(session)}</div><div class="answer-actions" role="group" aria-label="回答操作"><button class="secondary-button" data-action="previous-answer" ${session.answerIndex === 0 || state.busy ? "disabled" : ""}>前の人へ</button><button class="like-button" data-action="like" ${state.busy ? "disabled" : ""}>♡ <span>${esc(currentSpeaker(session))}${isChallenge ? "にいいね！" : "の回答にいいね！"}</span> <strong>${currentAnswerLikes(session)}</strong></button><button class="primary-button" data-action="next-answer" ${state.busy ? "disabled" : ""}>${session.answerIndex === session.participants.length - 1 ? "次のカードへ" : "次の人へ"}</button><button class="pass-button" data-action="pass" ${state.busy ? "disabled" : ""}>パスする</button></div>`;
+  const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(state.session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
+  return frame(`<div class="play-head"><div><p class="play-deck">${esc(playTitle)}</p><p class="progress-copy" aria-label="全${session.questions.length}枚中${session.cursor + 1}枚目">${roundPosition + 1} / ${roundTotal}</p></div><button class="quiet-button" data-action="decks">テーマを変える</button></div><div class="round-progress" aria-label="今回の進み具合">${segments}</div><article class="question-card active-card ${isChallenge ? "challenge-card" : ""}" aria-live="polite">${isChallenge ? '<span class="challenge-badge">やってみて</span>' : ""}${solo ? "" : favorite}${cardAudioButton()}<p>${esc(card.text)}</p></article>${solo ? soloActions : groupActions}${memo}<p class="form-error" role="alert">${esc(state.error)}</p>${accountOverlay}`);
 }
 
-function backView(session) { const roundPosition = session.cursor % ROUND_SIZE; const roundTotal = Math.min(ROUND_SIZE, remaining(session) + roundPosition); return frame(`<div class="card-back-wrap"><div class="card-back" data-action="reveal" role="button" tabindex="0" aria-label="カードをめくる"><span class="round-badge">${roundPosition + 1} / ${roundTotal}</span><div class="back-brand"><span class="back-brand-mark" aria-hidden="true"><svg viewBox="0 0 56 56"><path d="M9 12A6 6 0 0 1 15 6h16a6 6 0 0 1 6 6v13a6 6 0 0 1-6 6H24L14 35v-4h-1a6 6 0 0 1-6-6V12Z" fill="currentColor"/><path d="M23 28a6 6 0 0 1 6-6h10a6 6 0 0 1 6 6v9a6 6 0 0 1-6 6h-4l-6 6v-6h-0a6 6 0 0 1-6-6v-9Z" fill="var(--coral)"/></svg></span><strong>Mingle.Cards</strong></div><h1 tabindex="-1" data-focus>タップしてめくる</h1></div>${cardAudioButton()}</div>`); }
+function backView(session) { if (venueR18Hidden(session)) return frame(venueR18Gate(session), "店舗カード", true); const roundPosition = session.cursor % ROUND_SIZE; const roundTotal = Math.min(ROUND_SIZE, remaining(session) + roundPosition); const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(state.session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : ""); return frame(`<div class="card-back-wrap"><div class="card-back" data-action="reveal" role="button" tabindex="0" aria-label="カードをめくる"><span class="round-badge">${roundPosition + 1} / ${roundTotal}</span><div class="back-brand"><span class="back-brand-mark" aria-hidden="true"><svg viewBox="0 0 56 56"><path d="M9 12A6 6 0 0 1 15 6h16a6 6 0 0 1 6 6v13a6 6 0 0 1-6 6H24L14 35v-4h-1a6 6 0 0 1-6-6V12Z" fill="currentColor"/><path d="M23 28a6 6 0 0 1 6-6h10a6 6 0 0 1 6 6v9a6 6 0 0 1-6 6h-4l-6 6v-6h-0a6 6 0 0 1-6-6v-9Z" fill="var(--coral)"/></svg></span><strong>Mingle.Cards</strong></div><h1 tabindex="-1" data-focus>タップしてめくる</h1></div>${cardAudioButton()}</div>${accountOverlay}`); }
 
 function feedbackState(session) {
   if (!session) return null;
@@ -931,10 +1056,10 @@ async function shareRoundResult() {
   render();
 }
 function roundShareTitle(session) {
-  if (session.sharedGuest) return session.setName || "共有セット";
+  if (session.sharedGuest) return sessionHasR18(session) && ((state.venue && state.venue.displayR18 !== true) || (!state.venue && !r18DisplayVisible())) ? "R18を含むテーマ" : (session.setName || "共有セット");
   if (session.customSet) return session.setName || state.account.sets.find((set) => set.id === session.setId)?.name || "マイセット";
   if (session.mixed) return session.deckIds.map((id) => decks.find((item) => item.id === id)?.title).filter(Boolean).join("・") || "テーマミックス";
-  return decks.find((item) => item.id === session.deckId)?.title || "会話テーマ";
+  return [...decks, ...soloDecks].find((item) => item.id === session.deckId)?.title || "会話テーマ";
 }
 function roundShareText() { return buildShareText(roundShareTitle(state.session)); }
 function lineShareUrl(text) { const body = text.endsWith("https://mingle.cards/") ? text.slice(0, -"https://mingle.cards/".length).trimEnd() : text; return `https://social-plugins.line.me/lineit/share?url=${encodeURIComponent("https://mingle.cards/")}&text=${encodeURIComponent(body)}`; }
@@ -965,12 +1090,15 @@ async function copyRoundShare() {
 }
 function roundView() {
   const session = state.session;
+  if (venueR18Hidden(session)) return frame(venueR18Gate(session), "店舗カード", true);
+  if (session.mode === "solo") return soloRoundView(session);
   const totalCards = session.questions.length; const isFinal = session.cursor >= totalCards; const feedback = feedbackState(session); const submitted = feedbackSubmitted(session);
   const favoriteContext = roundFavoriteContext(session); const favoriteBusy = Boolean(favoriteContext?.saving);
+  const summaryKey = `${session.sessionId}:${Math.floor((session.roundStart ?? session.cursor) / ROUND_SIZE) + 1}`; const soloSummary = session.mode === "solo" ? `<details class="solo-memo" ${state.soloMemoOpen ? "open" : ""}><summary>このラウンドのまとめ（任意）</summary><label for="solo-summary">ひとことまとめ</label><textarea id="solo-summary" data-solo-summary maxlength="2000" rows="4" placeholder="保存したいときだけ入力してください">${esc(state.soloSummaryDrafts[summaryKey] || "")}</textarea><button type="button" class="secondary-button" data-action="solo-summary-save">保存する</button>${state.soloSummaryStatuses[summaryKey] ? `<p class="account-status" role="status">${esc(state.soloSummaryStatuses[summaryKey])}</p>` : ""}${state.soloSummaryErrors[summaryKey] ? `<p class="form-error" role="alert">${esc(state.soloSummaryErrors[summaryKey])}</p>` : ""}</details>` : "";
   const endingLink = isActiveVenueSession() && state.venue?.venue.endingUrl ? `<a class="venue-ending-link" href="${esc(state.venue.venue.endingUrl)}" target="_blank" rel="noopener noreferrer">店舗の公式SNS/サイトを見る</a>` : "";
   const feedbackForm = submitted ? '<p class="feedback-success" role="status">フィードバック送信済み。ありがとう！</p>' : `<details class="round-feedback-details" data-round-feedback ${state.roundFeedbackExpanded ? "open" : ""}><summary>α版アンケート <span>ご意見をお聞かせください</span></summary><div class="feedback-box" aria-labelledby="feedback-title"><h2 id="feedback-title" class="feedback-survey-title">α版アンケート</h2><p id="feedback-survey-description" class="feedback-survey-description">今回のミングルについて意見をきかせてください。どうすればもっと楽しめますか？</p><div class="feedback-ratings" role="group" aria-label="評価"><button type="button" class="feedback-rating ${feedback.rating === "positive" ? "is-selected" : ""}" data-action="feedback-rating" data-rating="positive" aria-pressed="${feedback.rating === "positive"}" ${state.feedbackBusy ? "disabled" : ""}>いいね！</button><button type="button" class="feedback-rating ${feedback.rating === "needs_improvement" ? "is-selected" : ""}" data-action="feedback-rating" data-rating="needs_improvement" aria-pressed="${feedback.rating === "needs_improvement"}" ${state.feedbackBusy ? "disabled" : ""}>改善余地大きい！</button></div><label class="feedback-label" for="feedback-text">ひとこと（任意）</label><textarea id="feedback-text" data-feedback-text maxlength="1000" rows="3" placeholder="気づいたことがあれば" ${state.feedbackBusy ? "disabled" : ""}>${esc(feedback.text)}</textarea><p class="form-error" role="alert">${esc(feedback.error)}</p><button type="button" class="secondary-button feedback-submit" data-action="feedback-submit" ${state.feedbackBusy || (!feedback.rating && !feedback.text.trim()) ? "disabled" : ""}>${state.feedbackBusy ? "送信中…" : "送信する"}</button></div></details>`;
-  const accountOverlay = state.account.open ? accountView({ overlayOnly: true }) : "";
-  return frame(`<div class="round-break">${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : "続きを遊ぶ"}</button>` : ""}<button class="secondary-button" data-action="finish" ${favoriteBusy ? "disabled" : ""}>今日はここまで</button><button class="secondary-button social-share-button" data-action="social-share" ${favoriteBusy ? "disabled" : ""}>SNSでシェア</button></div>${likeTotalsView(session)}${roundFavoriteView(session)}${feedbackForm}${endingLink}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" ${favoriteBusy ? "disabled" : ""}>テーマを選び直す</button></div>${state.shareDialogOpen ? roundShareDialogView() : ""}${accountOverlay}`);
+  const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(state.session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
+  return frame(`<div class="round-break">${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : "続きを遊ぶ"}</button>` : ""}<button class="secondary-button" data-action="finish" ${favoriteBusy ? "disabled" : ""}>今日はここまで</button><button class="secondary-button social-share-button" data-action="social-share" ${favoriteBusy ? "disabled" : ""}>SNSでシェア</button></div>${soloSummary}${likeTotalsView(session)}${roundFavoriteView(session)}${feedbackForm}${endingLink}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" ${favoriteBusy ? "disabled" : ""}>テーマを選び直す</button></div>${state.shareDialogOpen ? roundShareDialogView() : ""}${accountOverlay}`);
 }
 
 function finishView() { return roundView(); }
@@ -988,6 +1116,8 @@ function normalizeAccountUser(user, previous = null) { if (!user) return null; c
 async function loadAccount() {
   if (!state.account.enabled) return;
   const generation = state.account.generation; const profileRevision = state.account.profileRevision; const avatarRevision = state.account.avatarRevision;
+  const localDraftSnapshot = { drafts: state.account.drafts, sets: state.account.sets, customCards: state.account.customCards, soloNoteDrafts: state.soloNoteDrafts, soloSummaryDrafts: state.soloSummaryDrafts, soloHistory: state.soloHistory };
+  const previousUser = state.account.user; let transientFailure = false;
   let continueAfterLogin = false;
   let resumeAfterLogin = null;
   let intentFailed = false;
@@ -997,12 +1127,16 @@ async function loadAccount() {
     if (!current()) return;
     const previousUserId = state.account.user?.id || null, previousAgeConfirmedAt = state.account.ageConfirmedAt;
     state.account.user = normalizeAccountUser(me.user || null, state.account.user);
+    if (previousUserId && previousUserId !== state.account.user?.id) { try { sessionStorage.removeItem(AUTH_RETURN_KEY); } catch {} state.soloNoteDrafts = Object.create(null); state.soloNoteStatuses = Object.create(null); state.soloNoteErrors = Object.create(null); state.soloSummaryDrafts = Object.create(null); state.soloSummaryStatuses = Object.create(null); state.soloSummaryErrors = Object.create(null); state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryHasMore = false; state.soloHistoryError = ""; }
     state.account.avatarUrl = avatarImageSrc(state.account.user?.avatarUrl);
     if (!state.account.avatarBusy && !state.account.avatarDraft) state.account.avatarError = "";
     state.account.deletionAvailable = me.account?.deletionAvailable === true;
     state.account.adultConfirmationAvailable = me.account?.adultConfirmationAvailable === true;
     // When the server could not read the status (available:false), keep the last known value for the same account only.
     state.account.ageConfirmedAt = nextAgeConfirmedAt({ previous: previousAgeConfirmedAt, sameAccount: Boolean(previousUserId && previousUserId === state.account.user?.id), confirmedAt: me.account?.adultConfirmedAt, available: me.account?.adultConfirmationAvailable });
+    const serverAgeConfirmed = Boolean(state.account.user?.id && typeof state.account.ageConfirmedAt === "string" && state.account.ageConfirmedAt);
+    if ((previousUserId && previousUserId !== state.account.user?.id) || (state.account.user && !serverAgeConfirmed)) { clearR18Visible(state.account, r18Storage()); state.account.r18DisplayHydrated = false; }
+    else if (state.account.user && !state.account.r18DisplayHydrated) { const wasAuthReady = state.account.authReady; state.account.authReady = true; readR18Visible(state.account, r18Storage()); state.account.authReady = wasAuthReady; state.account.r18DisplayHydrated = true; }
     state.account.customCardsAvailable = me.customCardsAvailable === true;
     state.account.draftsAvailable = me.draftsAvailable === true; state.account.completionAvailable = me.account?.completionAvailable === true; state.account.aiGenerationAvailable = me.aiGenerationAvailable === true; state.account.drafts = Array.isArray(me.drafts) ? me.drafts : [];
     state.account.customCards = state.account.customCardsAvailable && Array.isArray(me.customCards) ? me.customCards.map((card) => ({ ...card, id: typeof card.id === "string" && card.id.startsWith("custom:") ? card.id : `custom:${card.id}`,
@@ -1022,17 +1156,21 @@ async function loadAccount() {
       if (loginContext?.loginPending && state.session && isCurrentRoundFavorite(loginContext, state.session, loginContext.key)) { loginContext.loginPending = false; state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.focusAction = "round-favorite-save"; }
       if (isContinuePendingCurrent()) { continueAfterLogin = true; state.continuePending = null; state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.status = ""; state.focusAction = "continue"; }
       if (state.account.returnAfterAuth) { state.account.returnAfterAuth = false; state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.status = ""; }
+      if (state.soloHistoryOpen && !state.soloHistoryLoading) loadSoloHistory(false);
       if (state.continuePending?.kind === "resume" && state.continuePending.sessionId === state.resume?.sessionId) { resumeAfterLogin = state.continuePending.snapshot; state.continuePending = null; state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.status = ""; state.focusAction = "resume"; }
       const pending = state.pendingCustomResume;
       if (pending) {
-        if (state.account.customCardsAvailable && pending.ownerUserId === state.account.user.id) state.resume = pending;
+        if ((!pending.customQuestions?.length || state.account.customCardsAvailable) && pending.ownerUserId === state.account.user.id) state.resume = pending;
         else clearSession();
         state.pendingCustomResume = null;
       }
     }
-  } catch { if (!current()) return; state.account.user = null; state.account.ageConfirmedAt = null; state.account.adultConfirmationAvailable = false; state.account.authReady = true; if (state.continuePending) { state.account.status = ""; state.account.error = "ログイン状態を確認できませんでした。時間をおいて、もう一度お試しください。"; } }
+  } catch { transientFailure = true; if (!current()) return; state.account.user = previousUser; state.account.ageConfirmedAt = previousUser ? state.account.ageConfirmedAt : null; state.account.adultConfirmationAvailable = previousUser ? state.account.adultConfirmationAvailable : false; state.account.authReady = true; if (state.continuePending) { state.account.status = ""; state.account.error = "ログイン状態を確認できませんでした。時間をおいて、もう一度お試しください。"; } }
+  if (transientFailure && previousUser && state.account.user?.id === previousUser.id) { state.account.drafts = localDraftSnapshot.drafts; state.account.sets = localDraftSnapshot.sets; state.account.customCards = localDraftSnapshot.customCards; state.soloNoteDrafts = localDraftSnapshot.soloNoteDrafts; state.soloSummaryDrafts = localDraftSnapshot.soloSummaryDrafts; state.soloHistory = localDraftSnapshot.soloHistory; state.soloNoteStatuses = Object.create(null); state.soloNoteErrors = Object.create(null); state.soloSummaryStatuses = Object.create(null); state.soloSummaryErrors = Object.create(null); }
+  if (!transientFailure && !state.account.user && previousUser) { state.account.drafts = []; state.account.sets = []; state.account.customCards = []; state.soloNoteDrafts = Object.create(null); state.soloNoteStatuses = Object.create(null); state.soloNoteErrors = Object.create(null); state.soloSummaryDrafts = Object.create(null); state.soloSummaryStatuses = Object.create(null); state.soloSummaryErrors = Object.create(null); state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryHasMore = false; state.soloHistoryError = ""; }
   if (!current()) return;
   state.account.authReady = true;
+  if (!transientFailure && !state.account.user) { clearR18Visible(state.account, r18Storage()); state.account.r18DisplayHydrated = false; }
   if (intentFailed) state.account.status = "年齢の確認を保存できませんでした。アカウント設定からもう一度お試しください。";
   if (state.account.user && !state.venue && state.shared?.ageConfirmationRequired === true) refreshSharedAfterAccountChange();
   if (resumeAfterLogin) resumeSaved(resumeAfterLogin);
@@ -1073,7 +1211,7 @@ async function saveStudioDraft() {
   if (!name || items.length > 40) { state.account.error = 'セット名とカード数（0〜40枚）を確認してください。'; render(); return; }
   const generation = state.account.generation; const requestId = ++state.account.studioRequestId; state.account.busy = true; state.account.error = ''; render();
   try {
-    const payload = { name, items, ...(!state.account.editingDraftId && state.account.editingSetId ? { sourceSetId: state.account.editingSetId } : {}) };
+    const payload = { name, items, audience: state.account.studioAudience || 'group', questionOrder: state.account.studioQuestionOrder || 'shuffle', ...(!state.account.editingDraftId && state.account.editingSetId ? { sourceSetId: state.account.editingSetId } : {}) };
     const result = state.account.editingDraftId ? await accountApi.updateDraft(state.account.editingDraftId, payload) : await accountApi.createDraft(payload);
     if (generation !== state.account.generation || requestId !== state.account.studioRequestId) return;
     const row = result.draft || result;
@@ -1097,12 +1235,13 @@ async function saveStudioDraft() {
 async function generateStudioQuestions() {
   if (state.account.busy || state.account.aiGenerationAvailable !== true) return;
   state.account.busy = true; state.account.error = ''; render(); const generation = state.account.generation; const requestId = ++state.account.studioRequestId;
-  try { const result = await accountApi.generateAiQuestions({ theme: (state.account.aiTheme || '').trim(), tone: (state.account.aiTone || '').trim() || '自然であたたかい', count: state.account.aiCount === 12 ? 12 : 6, r18: state.account.aiR18 === true && ageConfirmed() }); if (generation !== state.account.generation || requestId !== state.account.studioRequestId) return; state.account.aiName = typeof result.name === 'string' ? result.name.trim() : ''; state.account.aiQuestions = (result.questions || []).map((question) => ({ text: question.text || '', r18: question.r18 === true, selected: true })); state.account.status = ''; }
+  try { const result = await accountApi.generateAiQuestions({ theme: (state.account.aiTheme || '').trim(), tone: (state.account.aiTone || '').trim() || '自然であたたかい', count: state.account.aiCount === 12 ? 12 : 6, r18: state.account.aiR18 === true && ageConfirmed() && r18DisplayVisible() }); if (generation !== state.account.generation || requestId !== state.account.studioRequestId) return; state.account.aiName = typeof result.name === 'string' ? result.name.trim() : ''; state.account.aiQuestions = (result.questions || []).map((question) => ({ text: question.text || '', r18: question.r18 === true, selected: true })); state.account.status = ''; }
   catch (error) { if (generation === state.account.generation && requestId === state.account.studioRequestId) state.account.error = error?.status === 404 ? 'AIセット作成は現在利用できません。' : adultErrorMessage(error, 'AI案を作成できませんでした。'); }
   finally { if (generation === state.account.generation && requestId === state.account.studioRequestId) { state.account.busy = false; render(); } }
 }
 async function adoptStudioQuestions() {
   if (state.account.busy) return;
+  if (state.account.aiQuestions.some((question) => question.selected !== false && question.r18 === true) && !r18DisplayVisible()) { state.account.error = "R18の質問を採用するには「R18を表示する」を選んでください。"; render(); return; }
   const selected = state.account.aiQuestions.filter((question) => question.selected !== false && typeof question.text === 'string' && question.text.trim());
   if (!selected.length) return;
   const generation = state.account.generation; state.account.busy = true; state.account.error = ''; render();
@@ -1113,7 +1252,7 @@ async function adoptStudioQuestions() {
   if (state.account.busy || !state.account.customCardsAvailable) return;
   if (!validCustomText(state.account.customDraft)) { state.account.error = "質問は1〜300文字で、改行せずに入力してください。";
     state.account.status = ""; render(); return; }
-  const generation = state.account.generation; const id = state.account.editingCardId; const text = state.account.customDraft.trim(); const r18 = state.account.customDraftR18 === true && ageConfirmed();
+  const generation = state.account.generation; const id = state.account.editingCardId; const text = state.account.customDraft.trim(); const r18 = state.account.customDraftR18 === true && ageConfirmed() && r18DisplayVisible();
   state.account.busy = true; state.account.error = "";
   state.account.status = ""; render();
   try {
@@ -1157,6 +1296,7 @@ async function deleteAccount() {
     state.feedbackBusy = false;
     state.pendingCustomResume = null;
     state.account.user = null;
+    state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryEditing = null; state.soloHistoryOpen = false;
     state.account.ageConfirmedAt = null; state.account.adultConfirmationAvailable = false; state.account.ageRevokeOpen = false; state.account.ageConfirmChecked = false;
     state.account.favorites = new Set();
     state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.completionAvailable = false; state.account.studioRequestId += 1; state.account.studioItems = []; state.account.aiTheme = ""; state.account.aiTone = ""; state.account.aiR18 = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = [];
@@ -1180,7 +1320,7 @@ async function deleteAccount() {
     state.account.error = "";
     state.account.otpSent = false;
     state.account.otp = ""; state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.deleteConfirmed = false; state.account.busy = false; state.account.profileRevision += 1; state.account.email = "";
-    state.account.revealAdult = false;
+    state.account.revealAdult = false; state.account.r18DisplayEnabled = false;
     state.participantNameOrigin = null;
     state.participantNameAutoValue = "";
     state.participantNameUserEdited = false;
@@ -1192,9 +1332,12 @@ async function deleteAccount() {
 function playSavedSet(set) {
   const ids = (Array.isArray(set?.card_ids) ? set.card_ids : Array.isArray(set?.cards) ? set.cards.map((entry) => entry.cardId || entry.card_id || entry) : []).filter((id) => typeof id === "string");
   const hasR18 = ids.some((id) => canonicalCard(id, state.account.customCards)?.r18 === true);
-  if (hasR18 && !ageConfirmed()) { state.account.pendingSet = null; state.error = "R18を含むセットは、アカウント設定で18歳以上の確認をすると遊べます。"; state.account.error = state.error; render(); return; }
+  if (hasR18 && (!ageConfirmed() || !r18DisplayVisible())) { state.account.pendingSet = null; state.error = !ageConfirmed() ? "R18を含むセットは、アカウント設定で18歳以上の確認をすると遊べます。" : "R18を表示するを選んでから遊べます。"; state.account.error = state.error; render(); return; }
   if (hasR18 && !state.account.pendingSet?.consented) { state.account.pendingSet = { set, consented: false }; state.account.open = true; state.account.libraryOpen = true; state.account.error = ""; render(); return; }
-  state.session = createSavedSession({ participants: state.participants, cardIds: ids, customCards: state.account.customCards, ownerUserId: state.account.user?.id || null, adultConfirmed: state.account.pendingSet?.consented === true,
+  const solo = set?.audience === 'solo' || (set?.audience === 'both' && state.themeMode === 'solo');
+  if (solo) { if (state.participants.length >= 2) state.groupParticipants = [...state.participants]; state.participants = ['自分']; state.themeMode = 'solo'; }
+  else { if (state.themeMode === 'solo' || state.participants.length < 2) state.participants = state.groupParticipants?.length >= 2 ? [...state.groupParticipants] : ['', '']; else state.groupParticipants = [...state.participants]; state.themeMode = 'single'; }
+  state.session = createSavedSession({ mode: solo ? 'solo' : 'group', participants: solo ? ['自分'] : state.participants, cardIds: ids, setId: set?.id || null, setName: set?.name || 'マイセット', customCards: state.account.customCards, ownerUserId: state.account.user?.id || null, adultConfirmed: state.account.pendingSet?.consented === true, questionOrder: set?.questionOrder || set?.question_order || 'shuffle',
   });
   state.session.setName = set?.name || "マイセット";
   state.account.pendingSet = null;
@@ -1229,6 +1372,11 @@ async function startSharedSet() {
     render();
     return;
   }
+  if (shared.adultOnly === true && ((venueMode && state.venue.displayR18 !== true) || (!venueMode && !r18DisplayVisible()))) {
+    state.error = "R18を表示するを選んでから開始してください。";
+    render();
+    return;
+  }
   if (shared.adultOnly === true && !adultConfirmed) {
     state.error = "R18の話題には参加者全員の同意が必要です。";
     render();
@@ -1241,6 +1389,7 @@ async function startSharedSet() {
   render();
   try {
     const result = venueMode ? await accountApi.startVenue(token, state.selectedVenueSetId, participants, adultConfirmed, state.venue?.ageTapped === true) : await accountApi.startSharedSet(token, participants, adultConfirmed);
+    if (shared.adultOnly === true && ((venueMode && state.venue?.displayR18 !== true) || (!venueMode && !r18DisplayVisible()))) { state.busy = false; state.error = "R18を表示するを選んでから開始してください。"; render(); return; }
     const cards = Array.isArray(result.cards) ? result.cards : [];
     const customCards = cards.filter((card) => card.id?.startsWith("custom:"));
     if (requestId !== state.sharedRequestId || !state.shared || state.shared.token !== token) {
@@ -1260,6 +1409,7 @@ async function startSharedSet() {
       cards,
       customCards,
       adultConfirmed,
+      questionOrder: result.share?.questionOrder || shared.questionOrder || 'shuffle',
     });
     session.setName = sharedName;
     if (venueMode) { session.venueSession = result.session; session.venueSetId = state.selectedVenueSetId; session.sharedGuest = true; }
@@ -1286,11 +1436,24 @@ function submitParticipants() {
     state.participants = normalizeParticipants(state.participants);
     state.screen = "decks";
     state.error = ""; render(); } catch (error) { state.error = error.message; const invalidIndex = state.participants.findIndex((name) => typeof name !== "string" || !name.trim() || Array.from(name.trim()).length > MAX_NAME_LENGTH); state.focusSelector = `input[data-index="${Math.max(0, invalidIndex)}"]`; render(); } }
-function groupRoomArgs(deck, mySet) { return { deckId: deck?.id, adultOnly: deck?.adultOnly === true, setId: mySet?.id || null, setHasR18: mySet?.hasR18 === true, offerR18: canOfferR18(deck), adultConfirmed: state.adultConfirmed }; }
+function groupRoomArgs(deck, mySet) { return { deckId: deck?.id, adultOnly: deck?.adultOnly === true, setId: mySet?.id || null, setHasR18: mySet?.hasR18 === true, offerR18: canOfferR18(deck), adultConfirmed: state.adultConfirmed, plannedParticipantCount: state.participants.length }; }
 function updateGroupLink() {
   const link = root.querySelector(".group-room-link"); if (!link) return;
   const mySet = playableSavedSets(state.account.sets, state.account.customCards).find((set) => set.id === state.selectedMySetId && (!set.hasR18 || ageConfirmed())) || null;
   link.setAttribute("href", groupRoomHref(groupRoomArgs(decks.find((deck) => deck.id === state.selectedDeckId && canUseDeck(deck)) ?? decks.find((deck) => canUseDeck(deck)) ?? decks[0], mySet)));
+}
+
+function soloRoundView(session) {
+  const totalCards = session.questions.length;
+  const isFinal = session.cursor >= totalCards;
+  const summaryKey = `${session.sessionId}:${Math.floor((session.roundStart ?? session.cursor) / ROUND_SIZE) + 1}`;
+  const start = Math.max(0, session.roundStart ?? session.cursor);
+  const seen = new Set(Array.isArray(session.revealedQuestionIds) ? session.revealedQuestionIds : []);
+  const seenCards = session.questions.slice(start, Math.min(session.cursor, totalCards)).filter((card) => seen.has(card.id));
+  const seenMarkup = seenCards.length ? `<details class="solo-seen-questions"><summary>このラウンドで見た質問（${seenCards.length}）</summary><ul>${seenCards.map((card) => `<li>${esc(card.text)}</li>`).join("")}</ul></details>` : "";
+  const summary = `<details class="solo-memo" ${state.soloMemoOpen ? "open" : ""}><summary>このラウンドのまとめ（任意）</summary><label for="solo-summary">ひとことまとめ</label><textarea id="solo-summary" data-solo-summary maxlength="2000" rows="4" placeholder="保存したいときだけ入力してください">${esc(state.soloSummaryDrafts[summaryKey] || "")}</textarea><button type="button" class="secondary-button" data-action="solo-summary-save">保存する</button>${state.soloSummaryStatuses[summaryKey] ? `<p class="account-status" role="status">${esc(state.soloSummaryStatuses[summaryKey])}</p>` : ""}${state.soloSummaryErrors[summaryKey] ? `<p class="form-error" role="alert">${esc(state.soloSummaryErrors[summaryKey])}</p>` : ""}</details>`;
+  const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(state.session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
+  return frame(`<div class="round-break solo-round-break"><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>${isFinal ? "振り返りを終えました" : "ここまでの振り返り"}</h1><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy ? "disabled" : ""}>${state.busy ? "確認中…" : "次の問いへ"}</button>` : ""}<button class="secondary-button" data-action="finish">今日はここまで</button></div>${seenMarkup}${summary}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks">テーマを選び直す</button></div>${accountOverlay}`);
 }
 function updateAdultButton() { updateGroupLink(); if (state.themeMode === "mixed") return;
   const button = root.querySelector(".selected-start"); const selected = decks.find((deck) => deck.id === state.selectedDeckId); const selectedMySet = playableSavedSets(state.account.sets, state.account.customCards).find((set) => set.id === state.selectedMySetId); if (button && (selected?.adultOnly || selectedMySet?.hasR18)) button.disabled = !state.adultConfirmed || state.busy; }
@@ -1304,7 +1467,7 @@ function persist(previous = null) { if (!state.session) return; if (previous) tr
   if (state.session.cursor >= state.session.questions.length) clearSession();
   else saveCurrentSession(state.session); }
 function advanceGuarded(action) { ensureSession(); const now = Date.now(); if (now - state.lastAdvanceAt < 300) return false; state.lastAdvanceAt = now; const previous = state.session; state.busy = true; render(); state.session = action(state.session); state.busy = false; persist(previous); if (isActiveVenueSession() && previous.cursor < state.session.cursor && state.session.cursor > 0 && state.session.cursor % ROUND_SIZE === 0) accountApi.venueEvent(state.venue.token, { eventType: "completed_round", setId: state.session.venueSetId, session: state.session.venueSession, roundIndex: state.session.cursor / ROUND_SIZE }).catch(() => {}); render(); return true; }
-function resumeSaved(snapshot = null) { const fresh = snapshot || loadResumeForCurrentUser(); if (!fresh) { state.resume = null; state.error = "保存期限が切れています。"; render(); return; } if (!canAccessSessionContent(fresh, state.account)) { state.error = state.account.authReady ? "続きを再開できません。" : "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; } const needsAuth = fresh.cursor >= 6 && fresh.unlockedUntil > 6; const lockedTheme = sessionNeedsRegistration(fresh); if ((needsAuth || lockedTheme) && !state.account.authReady) { state.resume = fresh; state.error = "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; } if ((needsAuth || lockedTheme) && !state.account.user) { state.resume = fresh; if (!state.account.enabled) { state.error = "ログイン設定を利用できないため、続きを再開できません。"; render(); return; } state.continuePending = { kind: "resume", sessionId: fresh.sessionId, snapshot: fresh }; state.account.open = true; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.error = ""; state.account.status = lockedTheme ? "このテーマは無料登録で使えます。ログインまたは新規登録してください。" : "ログインまたは新規登録で、続きを無料で楽しめます。"; state.focusSelector = "[data-account-email]"; render(); return; } state.resume = fresh; state.session = fresh; state.participantNameOrigin = null; state.participantNameAutoValue = ""; state.participantNameUserEdited = true; state.participants = [...state.session.participants]; state.selectedDeckIds = [...(state.session.deckIds || [state.session.deckId])]; state.selectedDeckId = state.session.mixed ? state.selectedDeckIds[0] : state.session.deckId; state.themeMode = state.session.mixed ? "mixed" : "single"; state.includeChallenges = state.session.includeChallenges === true; state.adultConfirmed = state.session.adultConfirmed === true; state.screen = "play";
+function resumeSaved(snapshot = null) { const fresh = snapshot || loadResumeForCurrentUser(); if (!fresh) { state.resume = null; state.error = "保存期限が切れています。"; render(); return; } if (!canAccessSessionContent(fresh, state.account, { activeVenue: isActiveVenueSession(fresh), venueDisplay: state.venue?.displayR18 === true })) { state.error = state.account.authReady ? "続きを再開できません。" : "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; } const needsAuth = fresh.cursor >= 6 && fresh.unlockedUntil > 6; const lockedTheme = sessionNeedsRegistration(fresh); if ((needsAuth || lockedTheme) && !state.account.authReady) { state.resume = fresh; state.error = "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; } if ((needsAuth || lockedTheme) && !state.account.user) { state.resume = fresh; if (!state.account.enabled) { state.error = "ログイン設定を利用できないため、続きを再開できません。"; render(); return; } state.continuePending = { kind: "resume", sessionId: fresh.sessionId, snapshot: fresh }; state.account.open = true; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.error = ""; state.account.status = lockedTheme ? "このテーマは無料登録で使えます。ログインまたは新規登録してください。" : "ログインまたは新規登録で、続きを無料で楽しめます。"; state.focusSelector = "[data-account-email]"; render(); return; } state.resume = fresh; state.session = fresh; state.participantNameOrigin = null; state.participantNameAutoValue = ""; state.participantNameUserEdited = true; state.participants = [...state.session.participants]; state.selectedDeckIds = [...(state.session.deckIds || [state.session.deckId])]; state.selectedDeckId = state.session.mixed ? state.selectedDeckIds[0] : state.session.deckId; state.themeMode = state.session.mixed ? "mixed" : "single"; state.includeChallenges = state.session.includeChallenges === true; state.adultConfirmed = state.session.adultConfirmed === true; state.screen = "play";
   state.resume = null;
   state.error = ""; render(); }
 
@@ -1405,12 +1568,18 @@ async function revokeAge() {
     state.account.ageConfirmedAt = null; state.account.ageRevokeOpen = false; state.account.ageConfirmChecked = false;
     clearAccountShare({ close: true });
     state.account.libraryOpen = false;
-    state.account.revealAdult = false; state.account.aiR18 = false; state.account.customDraftR18 = false; state.account.pendingSet = null;
+    clearR18Visible(state.account, r18Storage()); state.account.r18DisplayHydrated = false; state.account.revealAdult = false; state.account.aiR18 = false; state.account.customDraftR18 = false; state.account.pendingSet = null;
     state.account.aiQuestions = state.account.aiQuestions.filter((question) => question.r18 !== true);
     purgeAdultSessions();
     state.account.status = "年齢の確認を取り消しました。";
   } catch { if (generation === state.account.generation) state.account.error = "確認を取り消せませんでした。"; }
   finally { if (generation === state.account.generation) { state.account.ageBusy = false; render(); } }
+}
+function restoreGroupHomeState() {
+  const restoreStored = state.themeMode === "solo" || state.participants.length < 2;
+  if (restoreStored) state.participants = state.groupParticipants?.length >= 2 ? [...state.groupParticipants] : ["", ""];
+  else state.groupParticipants = [...state.participants];
+  state.themeMode = "single"; state.selectedDeckId = "friends"; state.selectedDeckIds = ["friends"]; state.selectedMySetId = null; state.session = null;
 }
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
@@ -1432,9 +1601,9 @@ async function handleAction(event) {
     state.shareStatus = "";
     state.shareMenuOpen = false; state.shareFallbackText = "";
     if (state.session && !isFinished(state.session)) saveCurrentSession(state.session);
+    restoreGroupHomeState();
     state.resume = loadResumeForCurrentUser();
     state.screen = "participants";
-    state.session = null;
     state.error = ""; state.includeChallenges = false; state.adultConfirmed = false; render(); return; }
   if (action === "account") { state.account.returnAfterAuth = event.currentTarget.dataset.authReturn === "true"; state.account.open = true; state.account.libraryOpen = false; state.focusAction = state.account.user ? "account-library-open" : "account-close";
     render();
@@ -1558,6 +1727,7 @@ async function handleAction(event) {
     return;
   }
   if (action === "logout") {
+    try { sessionStorage.removeItem(AUTH_RETURN_KEY); } catch {}
     state.continuePending = null;
     clearAccountShare({ close: true });
     state.shareStatus = "";
@@ -1573,7 +1743,7 @@ async function handleAction(event) {
       state.account.avatarDraft = "";
       state.account.avatarBusy = false;
       state.account.avatarError = "";
-      state.account.revealAdult = false;
+      clearR18Visible(state.account, r18Storage()); state.account.r18DisplayHydrated = false; state.account.revealAdult = false;
       state.account.status = "";
       state.account.error = "";
       state.account.otpSent = false;
@@ -1589,11 +1759,11 @@ async function handleAction(event) {
     render();
     return;
   }
-  if (action === "custom-card-edit") { if (state.account.busy) return; const id = String(event.currentTarget.dataset.cardId || ""); const card = state.account.customCards.find((item) => item.id === id); if (!card) return; if (card.r18 === true && !ageConfirmed()) { state.account.error = "R18の質問は、アカウント設定で18歳以上の確認をすると編集できます。"; render(); return; } state.account.customEditorOpen = true; state.account.editingCardId = id; state.account.customDraft = card.text; state.account.customDraftR18 = card.r18 === true; state.focusSelector = "[data-custom-text]";
+  if (action === "custom-card-edit") { if (state.account.busy) return; const id = String(event.currentTarget.dataset.cardId || ""); const card = state.account.customCards.find((item) => item.id === id); if (!card) return; if (card.r18 === true && (!ageConfirmed() || !r18DisplayVisible())) { state.account.error = "R18の質問を編集するには「R18を表示する」を選んでください。"; render(); return; } state.account.customEditorOpen = true; state.account.editingCardId = id; state.account.customDraft = card.text; state.account.customDraftR18 = card.r18 === true; state.focusSelector = "[data-custom-text]";
     render();
     return;
   }
-  if (action === "custom-card-delete") { if (state.account.busy) return; const id = String(event.currentTarget.dataset.cardId || ""); const generation = state.account.generation; state.account.busy = true; state.account.error = ""; render(); try { await accountApi.deleteCard(id); if (generation !== state.account.generation) return; state.account.customCards = state.account.customCards.filter((card) => card.id !== id); state.account.selectedCards.delete(id); state.account.status = "質問カードを削除しました。"; } catch (error) { if (generation === state.account.generation) { const names = state.account.sets.filter((set) => Array.isArray(set.card_ids) && set.card_ids.includes(id)).map((set) => set.name).filter(Boolean); state.account.error = error?.code === "CARD_IN_USE" || error?.message === "CARD_IN_USE" ? `この質問カードは「${names.join("」「") || "マイセット"}」で使用中です。先にセットから外してください。` : "質問カードを削除できませんでした。"; } } finally { if (generation === state.account.generation) { state.account.busy = false; render(); } } return; }
+  if (action === "custom-card-delete") { if (state.account.busy) return; const id = String(event.currentTarget.dataset.cardId || ""); const generation = state.account.generation; state.account.busy = true; state.account.error = ""; render(); try { await accountApi.deleteCard(id); if (generation !== state.account.generation) return; state.account.customCards = state.account.customCards.filter((card) => card.id !== id); state.account.selectedCards.delete(id); state.account.status = "質問カードを削除しました。"; } catch (error) { if (generation === state.account.generation) { const names = state.account.sets.filter((set) => Array.isArray(set.card_ids) && set.card_ids.includes(id)).map((set) => (set.hasR18 === true || set.card_ids.some((cardId) => canonicalCard(cardId, state.account.customCards)?.r18 === true)) && !r18DisplayVisible() ? "R18を含むマイセット" : set.name).filter(Boolean); state.account.error = error?.code === "CARD_IN_USE" || error?.message === "CARD_IN_USE" ? `この質問カードは「${names.join("」「") || "マイセット"}」で使用中です。先にセットから外してください。` : "質問カードを削除できませんでした。"; } } finally { if (generation === state.account.generation) { state.account.busy = false; render(); } } return; }
   if (action === "set-share") {
     if (state.account.busy || state.account.shareBusy) return;
     const id = event.currentTarget.dataset.setId;
@@ -1614,10 +1784,11 @@ async function handleAction(event) {
     try {
       let result = await accountApi.getSetShare(id);
       if (generation !== state.account.generation || requestId !== state.account.shareRequestId || !state.account.shareOpen) return;
-      if (result?.share === null) {
+      if (result?.share === null && set.audience !== 'solo') {
         result = await accountApi.createSetShare(id);
       }
       if (generation !== state.account.generation || requestId !== state.account.shareRequestId || !state.account.shareOpen) return;
+      if (result?.share === null && set.audience === 'solo') { state.account.share = { setId: id, ...set, audience: 'solo', active: false }; return; }
       if (!result?.share && !result?.token && !result?.url) throw new Error("share_unavailable");
       if (generation !== state.account.generation || requestId !== state.account.shareRequestId) return;
       state.account.share = { setId: id, ...set, ...(result.share || result) };
@@ -1651,7 +1822,7 @@ async function handleAction(event) {
     try {
       if (navigator.share)
         await navigator.share({
-          title: state.account.share.name || "Mingle.Cards",
+          title: state.account.share.adultOnly === true && !r18DisplayVisible() ? "R18を含む共有セット" : (state.account.share.name || "Mingle.Cards"),
           url,
         });
       else await navigator.clipboard.writeText(url);
@@ -1721,16 +1892,16 @@ async function handleAction(event) {
     render();
     return;
   }
-  if (action === "studio-from-favorites") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; state.account.studioMode = "picker"; state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = []; state.account.selectedCards = new Set(); state.account.error = ""; render(); return; }
-  if (action === "studio-write") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; if (state.account.studioMode === "editor") { state.account.studioItems.push({ kind: "custom", text: "", r18: false, origin: "user" }); state.focusSelector = `[data-studio-item-text][data-item-index="${state.account.studioItems.length - 1}"]`; } else { state.account.studioMode = "editor"; state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = [{ kind: "custom", text: "", r18: false, origin: "user" }]; state.account.selectedCards = new Set(); state.account.error = ""; state.focusSelector = '[data-studio-item-text][data-item-index="0"]'; } render(); return; }
-  if (action === "studio-ai") { if (state.account.busy || state.account.aiGenerationAvailable === false) return; state.account.studioRequestId += 1; state.account.aiName = ''; state.account.aiR18 = false; state.account.studioAiReturnMode = state.account.studioMode === "editor" ? "editor" : "list"; if (state.account.studioMode !== "editor") { state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = []; state.account.selectedCards = new Set(); } state.account.studioMode = "ai"; state.account.aiQuestions = []; state.account.error = ""; render(); return; }
+  if (action === "studio-from-favorites") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; state.account.studioMode = "picker"; state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = []; state.account.selectedCards = new Set(); setStudioNewMetadata(); state.account.error = ""; render(); return; }
+  if (action === "studio-write") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; if (state.account.studioMode === "editor") { state.account.studioItems.push({ kind: "custom", text: "", r18: false, origin: "user" }); state.focusSelector = `[data-studio-item-text][data-item-index="${state.account.studioItems.length - 1}"]`; } else { state.account.studioMode = "editor"; state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = [{ kind: "custom", text: "", r18: false, origin: "user" }]; state.account.selectedCards = new Set(); setStudioNewMetadata(); state.account.error = ""; state.focusSelector = '[data-studio-item-text][data-item-index="0"]'; } render(); return; }
+  if (action === "studio-ai") { if (state.account.busy || state.account.aiGenerationAvailable === false) return; state.account.studioRequestId += 1; state.account.aiName = ''; state.account.aiR18 = false; state.account.studioAiReturnMode = state.account.studioMode === "editor" ? "editor" : "list"; if (state.account.studioMode !== "editor") { state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = []; state.account.selectedCards = new Set(); setStudioNewMetadata(); } state.account.studioMode = "ai"; state.account.aiQuestions = []; state.account.error = ""; render(); return; }
   if (action === "studio-favorites") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioMode = "favorites"; state.account.error = ""; render(); return; }
   if (action === "studio-custom-library") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioMode = "custom"; state.account.error = ""; render(); return; }
   if (action === "studio-picker") { state.account.studioMode = "picker"; render(); return; }
   if (action === "studio-edit-set") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; const set = state.account.sets.find((row) => row.id === event.currentTarget.dataset.setId); if (!set) return; state.account.studioMode = "editor"; state.account.editingSetId = set.id; state.account.editingDraftId = null; state.account.setName = set.name || ""; state.account.studioItems = (set.card_ids || []).map((cardId) => ({ kind: "saved", cardId })); state.account.selectedCards = new Set(set.card_ids || []); render(); return; }
   if (action === "studio-edit-draft") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; const draft = state.account.drafts.find((row) => row.id === event.currentTarget.dataset.draftId); if (!draft) return; state.account.studioMode = "editor"; state.account.editingDraftId = draft.id; state.account.editingSetId = draft.sourceSetId || null; state.account.setName = draft.name || ""; state.account.studioItems = (draft.items || []).map((item) => ({ ...item })); state.account.selectedCards = new Set((draft.items || []).filter((item) => item.kind === "saved").map((item) => item.cardId)); render(); return; }
   if (action === "studio-delete-draft") { if (state.account.busy) return; const id = event.currentTarget.dataset.draftId; const generation = state.account.generation; state.account.busy = true; render(); try { await accountApi.deleteDraft(id); if (generation !== state.account.generation) return; state.account.drafts = state.account.drafts.filter((row) => row.id !== id); state.account.status = "下書きを破棄しました。"; } catch { if (generation === state.account.generation) state.account.error = "下書きを破棄できませんでした。"; } finally { if (generation === state.account.generation) { state.account.busy = false; render(); } } return; }
-  if (action === "set-new") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; state.account.studioMode = "editor"; state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = []; state.account.selectedCards = new Set(); state.account.error = ""; state.focusSelector = "[data-set-name]"; render(); return; }
+  if (action === "set-new") { if (state.account.busy) return; state.account.studioRequestId += 1; state.account.studioReplaceIndex = null; state.account.studioMode = "editor"; state.account.editingDraftId = null; state.account.editingSetId = null; state.account.setName = ""; state.account.studioItems = []; state.account.selectedCards = new Set(); setStudioNewMetadata(); state.account.error = ""; state.focusSelector = "[data-set-name]"; render(); return; }
   if (action === "set-cancel") { state.account.editingSetId = null; state.account.setName = undefined; state.account.selectedCards = new Set(); render(); return; }
   if (action === "set-edit") { if (state.account.busy) return; const set = state.account.sets.find((item) => item.id === event.currentTarget.dataset.setId); state.account.editingSetId = set?.id || null; state.account.setName = set?.name || ""; state.account.selectedCards = new Set(set?.card_ids || []); render(); return; }
   if (action === "set-delete") { if (state.account.busy) return; const id = event.currentTarget.dataset.setId; const generation = state.account.generation; state.account.busy = true; render(); try { await accountApi.deleteSet(id); if (generation !== state.account.generation) return; state.account.sets = state.account.sets.filter((set) => set.id !== id); state.account.status = "削除しました。";
@@ -1789,6 +1960,8 @@ async function handleAction(event) {
     return;
   }
   if (action === "remove-person") { if (state.participants.length > 2) { state.participants.pop(); state.focusSelector = `input[data-index="${state.participants.length - 1}"]`; } render(); return; }
+  if (action === "solo-mode") { if (state.session && !isFinished(state.session)) saveCurrentSession(state.session); if (state.participants.length >= 2) state.groupParticipants = [...state.participants]; state.session = null; state.participants = ["自分"]; state.themeMode = "solo"; state.selectedDeckId = "self-values"; state.selectedDeckIds = ["self-values"]; state.selectedMySetId = null; state.screen = "decks"; state.error = ""; render(); return; }
+  if (action === "group-mode") { if (state.session && !isFinished(state.session)) saveCurrentSession(state.session); const restoreGroup = state.themeMode === "solo" || state.participants.length < 2; if (restoreGroup) state.participants = state.groupParticipants?.length >= 2 ? [...state.groupParticipants] : ["", ""]; else state.groupParticipants = [...state.participants]; state.session = null; state.themeMode = "single"; state.selectedDeckId = "friends"; state.selectedDeckIds = ["friends"]; state.selectedMySetId = null; state.screen = "participants"; state.error = ""; render(); return; }
   if (action === "decks") {
     state.continuePending = null;
     state.shareMenuOpen = false;
@@ -1824,6 +1997,58 @@ async function handleAction(event) {
       saveCurrentSession(state.session);
       state.screen = "play";
       state.error = ""; render(); } catch (error) { state.error = error.message; render(); } return; }
+  if (action === "solo-start") {
+    if (state.selectedMySetId) { const set = playableSavedSets(state.account.sets, state.account.customCards).find((item) => item.id === state.selectedMySetId && ['solo', 'both'].includes(item.audience)); if (!set) { state.error = "このマイセットは一人用では利用できません。"; render(); return; } try { playSavedSet(set); } catch (error) { state.error = error.message; render(); } return; }
+    const deck = soloDecks.find((item) => item.id === state.selectedDeckId) || soloDecks[0];
+    try { state.session = createSoloSession({ deck }); state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null; state.soloNoteDraft = ""; state.soloNoteStatus = ""; state.soloNoteError = ""; state.soloSummaryDraft = ""; trackThemeStart(state.session.deckId); saveCurrentSession(state.session); state.screen = "play"; state.error = ""; render(); } catch (error) { state.error = error.message; render(); }
+    return;
+  }
+  if (action === "solo-history-open") { state.soloHistoryOpen = true; state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryHasMore = false; if (state.account.user) loadSoloHistory(false); else { state.account.returnAfterAuth = true; state.account.open = state.account.enabled; state.account.status = "ログイン後に保存したメモを読み込みます。"; render(); } return; }
+  if (action === "solo-history-close") { state.soloHistoryOpen = false; state.soloHistoryEditing = null; render(); return; }
+  if (action === "solo-history-more") { loadSoloHistory(true); return; }
+  if (action === "solo-history-retry") { loadSoloHistory(false); return; }
+  if (action === "solo-history-edit") { const note = state.soloHistory.find((item) => item.id === event.currentTarget.dataset.noteId); if (note) state.soloHistoryEditing = { id: note.id, note: note.note || "", generation: state.account.generation }; render(); return; }
+  if (action === "solo-history-cancel") { state.soloHistoryEditing = null; render(); return; }
+  if (action === "solo-history-save") {
+    if (state.busy) return; const editing = state.soloHistoryEditing; const value = root.querySelector("[data-history-edit]")?.value ?? editing?.note ?? ""; if (!editing || !value.trim()) return; const generation = state.account.generation; const ownerId = state.account.user?.id; state.busy = true; state.soloHistoryError = ""; render();
+    try { const result = await accountApi.updateSoloNote(editing.id, value); if (generation === state.account.generation && state.account.user?.id === ownerId) { const updated = result?.note || result || {}; state.soloHistory = state.soloHistory.map((item) => item.id === editing.id ? { ...item, ...updated, note: updated.note || value } : item); state.soloHistoryEditing = null; state.soloHistoryError = ""; } }
+    catch { if (generation === state.account.generation) state.soloHistoryError = "メモを更新できませんでした。入力内容は保持されています。"; }
+    finally { if (generation === state.account.generation && state.account.user?.id === ownerId) { state.busy = false; render(); } }
+    return;
+  }
+  if (action === "solo-history-delete") {
+    if (state.busy) return; const id = event.currentTarget.dataset.noteId; if (!id || !window.confirm("このメモを削除しますか？")) return; const generation = state.account.generation; const ownerId = state.account.user?.id; state.busy = true; render();
+    try { await accountApi.deleteSoloNote(id); if (generation === state.account.generation && state.account.user?.id === ownerId) state.soloHistory = state.soloHistory.filter((item) => item.id !== id); }
+    catch { if (generation === state.account.generation) state.soloHistoryError = "メモを削除できませんでした。"; }
+    finally { if (generation === state.account.generation && state.account.user?.id === ownerId) { state.busy = false; render(); } }
+    return;
+  }
+  if (action === "solo-note-save") {
+    const session = state.session; const card = session && currentCard(session); const key = session && card ? `${session.sessionId}:${card.id}` : ""; const note = key ? (state.soloNoteDrafts[key] || "") : ""; const generation = state.account.generation; const revision = state.soloDraftRevision;
+    if (state.busy) return;
+    if (!session || session.mode !== "solo" || !card || !note.trim()) { if (key) { state.soloNoteErrors[key] = note.trim() ? "保存できる質問がありません。" : "メモを入力してください。"; state.soloNoteStatuses[key] = ""; } render(); return; }
+    if (!state.account.user) { state.soloNoteErrors[key] = "保存するにはログインしてください。入力内容は保持されます。"; state.soloNoteStatuses[key] = ""; state.account.open = state.account.enabled; state.account.returnAfterAuth = true; state.account.error = "入力内容は保持されています。ログイン後に保存できます。"; render(); return; }
+    const ownerId = state.account.user.id;
+    state.busy = true; state.soloNoteErrors[key] = ""; state.soloNoteStatuses[key] = ""; render();
+    try {
+      await accountApi.saveSoloNote({ sessionId: session.sessionId, sourceType: session.customSet ? "set" : "deck", sourceId: session.customSet ? session.setId : session.deckId, roundNumber: Math.floor((session.roundStart ?? session.cursor) / ROUND_SIZE) + 1, slotKind: "question", questionId: card.id, note });
+      if (generation === state.account.generation && state.account.user?.id === ownerId && state.session?.sessionId === session.sessionId && state.soloDraftRevision === revision) state.soloNoteStatuses[key] = "保存しました。";
+    } catch (error) { if (generation === state.account.generation && state.account.user?.id === ownerId && state.session?.sessionId === session.sessionId && state.soloDraftRevision === revision) state.soloNoteErrors[key] = error?.status === 503 ? "メモ保存は現在利用できません。もう一度お試しください。" : "保存できませんでした。入力内容は保持されています。"; }
+    finally { if (generation === state.account.generation && state.account.user?.id === ownerId && state.session?.sessionId === session.sessionId) { state.busy = false; render(); } }
+    return;
+  }
+  if (action === "solo-summary-save") {
+    const session = state.session; const roundNumber = session ? Math.floor((session.roundStart ?? session.cursor) / ROUND_SIZE) + 1 : 0; const key = session ? `${session.sessionId}:${roundNumber}` : ""; const note = key ? (state.soloSummaryDrafts[key] || "") : ""; const generation = state.account.generation; const revision = state.soloDraftRevision;
+    if (state.busy) return;
+    if (!session || session.mode !== "solo" || !note.trim()) { if (key) state.soloSummaryErrors[key] = "まとめを入力してください。"; render(); return; }
+    if (!state.account.user) { state.soloSummaryErrors[key] = "保存するにはログインしてください。入力内容は保持されています。"; state.account.open = state.account.enabled; state.account.returnAfterAuth = true; state.account.error = "入力内容は保持されています。ログイン後に保存できます。"; render(); return; }
+    const ownerId = state.account.user.id;
+    state.busy = true; state.soloSummaryErrors[key] = ""; state.soloSummaryStatuses[key] = ""; render();
+    try { await accountApi.saveSoloNote({ sessionId: session.sessionId, sourceType: session.customSet ? "set" : "deck", sourceId: session.customSet ? session.setId : session.deckId, roundNumber, slotKind: "summary", note }); if (generation === state.account.generation && state.account.user?.id === ownerId && state.session?.sessionId === session.sessionId && state.soloDraftRevision === revision) state.soloSummaryStatuses[key] = "保存しました。"; }
+    catch (error) { if (generation === state.account.generation && state.account.user?.id === ownerId && state.session?.sessionId === session.sessionId && state.soloDraftRevision === revision) state.soloSummaryErrors[key] = error?.status === 503 ? "メモ保存は現在利用できません。もう一度お試しください。" : "保存できませんでした。入力内容は保持されています。"; }
+    finally { if (generation === state.account.generation && state.account.user?.id === ownerId && state.session?.sessionId === session.sessionId) { state.busy = false; render(); } }
+    return;
+  }
   if (action === "choose-myset") {
     if (!isRegisteredUser()) return;
     const set = playableSavedSets(state.account.sets, state.account.customCards).find((item) => item.id === event.currentTarget.dataset.setId);
@@ -1835,7 +2060,8 @@ async function handleAction(event) {
     if (!isRegisteredUser()) return;
     const set = playableSavedSets(state.account.sets, state.account.customCards).find((item) => item.id === event.currentTarget.dataset.setId);
     if (!set) { state.error = "このマイセットは利用できません。"; render(); return; }
-    state.error = ""; state.account.pendingSet = set.hasR18 ? { set, consented: state.adultConfirmed === true } : null;
+    const pendingHasR18 = set.hasR18 === true || (Array.isArray(set.card_ids) && set.card_ids.some((id) => canonicalCard(id, state.account.customCards)?.r18 === true));
+    state.error = ""; state.account.pendingSet = pendingHasR18 ? { set: { ...set, hasR18: true }, consented: state.adultConfirmed === true } : null;
     try { playSavedSet(set); } catch (error) { state.error = error.message; render(); }
     return;
   }
@@ -1884,8 +2110,8 @@ async function handleAction(event) {
   }
   if (action === "finish") { state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
     state.resume = loadResumeForCurrentUser();
+    restoreGroupHomeState();
     state.screen = "participants";
-    state.session = null;
     state.venue = null; state.shared = null; state.selectedVenueSetId = null;
     if (location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
     state.error = ""; state.includeChallenges = false; state.adultConfirmed = false; render(); }
@@ -1995,6 +2221,13 @@ async function loadSharedLink() {
     }
   }
 }
+function setStudioNewMetadata() {
+  setStudioMetadata(state.themeMode === 'solo' ? { audience: 'solo', questionOrder: 'fixed' } : {});
+}
+function setStudioMetadata(row) {
+  state.account.studioAudience = ['group', 'solo', 'both'].includes(row?.audience) ? row.audience : 'group';
+  state.account.studioQuestionOrder = ['shuffle', 'fixed'].includes(row?.questionOrder || row?.question_order) ? (row.questionOrder || row.question_order) : 'shuffle';
+}
 async function loadVenueLink() {
   const token = new URL(location.href).searchParams.get("venue");
   if (!token) return;
@@ -2004,7 +2237,7 @@ async function loadVenueLink() {
     const result = await accountApi.venueInfo(token);
     if (requestId !== state.sharedRequestId) return;
     if (!Array.isArray(result.sets) || !result.sets.length) throw new Error("店舗テーマが見つかりません。");
-    state.venue = { token, venue: result.venue, table: result.table, sets: result.sets, ageTapped: false };
+    state.venue = { token, venue: result.venue, table: result.table, sets: result.sets, ageTapped: false, displayR18: false };
     state.selectedVenueSetId = result.sets[0].id;
     state.shared = { token, name: result.venue.name, cardCount: result.sets[0].cardCount, adultOnly: result.sets[0].adultOnly };
     syncSelectedVenueSet();
@@ -2014,7 +2247,7 @@ async function loadVenueLink() {
 }
 
 const accountConfigReady = discoverAccountConfig();
-try { const saved = loadSession(); if (saved?.customSet && saved.ownerUserId) state.pendingCustomResume = saved; else state.resume = saved; } catch { state.resume = null; state.pendingCustomResume = null; }
+try { const saved = loadSession(); if (saved?.customSet && saved.ownerUserId && Array.isArray(saved.customQuestions) && saved.customQuestions.length > 0) state.pendingCustomResume = saved; else state.resume = saved; } catch { state.resume = null; state.pendingCustomResume = null; }
 render();
 loadSharedLink();
 loadVenueLink();
@@ -2028,6 +2261,7 @@ accountConfigReady.then(() => { state.account.enabled = accountConfig.enabled; s
             state.venue = null;
             state.selectedVenueSetId = null;
             state.sharedLoading = false;
+            state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryHasMore = false; state.soloHistoryLoading = false; state.soloHistoryError = ""; state.soloHistoryEditing = null; state.soloHistoryOpen = false; state.soloMemoOpen = false; state.soloNoteDrafts = Object.create(null); state.soloNoteStatuses = Object.create(null); state.soloNoteErrors = Object.create(null); state.soloSummaryDrafts = Object.create(null); state.soloSummaryStatuses = Object.create(null); state.soloSummaryErrors = Object.create(null); state.busy = false;
           }
           const privateResume = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (event === "SIGNED_OUT" || identityChanged) { clearAccountParticipantName(); purgeAdultSessions(); }
           if ((event === "SIGNED_OUT" || identityChanged) && privateResume) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === "play") state.screen = "participants";
@@ -2037,7 +2271,7 @@ accountConfigReady.then(() => { state.account.enabled = accountConfig.enabled; s
           state.account.avatarDraft = "";
           state.account.avatarBusy = false;
           state.account.avatarError = "";
-          state.account.revealAdult = false;
+          if (event === "SIGNED_OUT" || identityChanged) { clearR18Visible(state.account, r18Storage()); state.account.r18DisplayHydrated = false; state.account.revealAdult = false; }
           state.account.ageConfirmedAt = null; state.account.adultConfirmationAvailable = false; state.account.ageRevokeOpen = false; state.account.ageConfirmChecked = false;
           state.account.status = "";
           state.account.error = ""; const preserveRound = Boolean((state.roundFavorite?.loginPending || state.continuePending) && state.session && nextId && !previousId); if (!preserveRound) state.feedback = null; if (state.continuePending?.kind !== "resume") state.resume = null; if (state.account.user) { render(); loadAccount(); } else { state.account.favorites = new Set(); state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = []; state.account.aiName = ""; state.account.aiR18 = false; state.account.studioReplaceIndex = null; state.account.customCardsAvailable = false; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ""; state.account.customDraftR18 = false; state.account.sets = []; state.account.ageConfirmedAt = null; state.account.adultConfirmationAvailable = false; render(); } }, 0); }); } }).catch(() => { state.account.authReady = true; state.account.enabled = false; render(); });

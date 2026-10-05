@@ -1,7 +1,9 @@
 import { body, bodyWithLimit, json, sameOrigin } from '../server-side/http.mjs';
 import { createAccountService } from '../server-side/accounts.mjs';
+import { createSoloNoteService } from '../server-side/solo-notes.mjs';
 
 const service = createAccountService();
+const soloNotes = createSoloNoteService();
 
 function respondError(res, error) {
   const status = error.status || 502;
@@ -24,6 +26,16 @@ export default async function account(req, res) {
     if (pathname === '/api/account/profile' && req.method === 'PATCH') { req.body = await body(req); return json(res, 200, await service.profile(req)); }
     if (pathname === '/api/account/adult-confirmation') {
       if (req.method === 'PUT' || req.method === 'DELETE') { req.body = await body(req); return json(res, 200, await service.adultConfirmation(req)); }
+      return json(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+    }
+    if (pathname === '/api/account/solo-notes' || /^\/api\/account\/solo-notes\/[^/]+$/.test(pathname)) {
+      if (req.method === 'PUT' || req.method === 'PATCH') req.body = await body(req);
+      const noteId = pathname.split('/').length === 5 ? decodeURIComponent(pathname.split('/').at(-1)) : '';
+      if (pathname === '/api/account/solo-notes') {
+        if (req.method === 'GET') return json(res, 200, await soloNotes.list(req));
+        if (req.method === 'PUT') return json(res, 200, await soloNotes.upsert(req));
+      } else if (req.method === 'PATCH') return json(res, 200, await soloNotes.edit(req, noteId));
+      else if (req.method === 'DELETE') return json(res, 200, await soloNotes.remove(req, noteId));
       return json(res, 405, { error: 'METHOD_NOT_ALLOWED' });
     }
     if (pathname === '/api/account/ai/questions' && req.method === 'POST') { req.body = await body(req); return json(res, 200, await service.aiQuestions(req)); }

@@ -2,13 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decks } from '../dist/data/decks.js';
 import { groupLabels } from '../dist/data/theme-groups.js';
-import { GUEST_THEME_IDS, canGuestUseTheme, canUseTheme, sessionNeedsThemeAccess, isAgeConfirmed, isAdultTheme, canSeeTheme, canOfferR18Option, visibleFilterIds, cardsHaveR18, sessionHasR18, canAccessSessionContent, isActiveVenueSession, nextAgeConfirmedAt, groupRoomHref } from '../dist/theme-access.js';
+import { GUEST_THEME_IDS, canGuestUseTheme, canUseTheme, sessionNeedsThemeAccess, isAgeConfirmed, isAdultTheme, canSeeTheme, canOfferR18Option, visibleFilterIds, cardsHaveR18, sessionHasR18, canAccessSessionContent, isActiveVenueSession, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible, R18_DISPLAY_KEY } from '../dist/theme-access.js';
 
 const pick = (id) => decks.find((deck) => deck.id === id);
 const ADULT_ONLY_IDS = ['intimacy', 'first-intimacy', 'intimacy-refresh', 'intimacy-distance'];
 const guest = { enabled: true, authReady: true, user: null };
 const member = { enabled: true, authReady: true, user: { id: 'member-1' } };
-const confirmed = { enabled: true, authReady: true, user: { id: 'member-1' }, ageConfirmedAt: '2026-10-05T09:12:00.000Z' };
+const confirmed = { enabled: true, authReady: true, user: { id: 'member-1' }, ageConfirmedAt: '2026-10-05T09:12:00.000Z', r18DisplayEnabled: true };
+const confirmedOff = { ...confirmed, r18DisplayEnabled: false };
 const loading = { enabled: true, authReady: false, user: { id: 'member-1' }, ageConfirmedAt: '2026-10-05T09:12:00.000Z' };
 
 test('guest access is limited to four non-adult themes', () => {
@@ -33,6 +34,7 @@ test('adult themes are not even visible to guests, unconfirmed members, or while
     assert.equal(isAdultTheme(pick(id)), true);
     for (const account of [guest, member, loading, { enabled: false, authReady: true, user: null }, undefined, null]) assert.equal(canSeeTheme(pick(id), account), false, `${id} ${JSON.stringify(account)}`);
     assert.equal(canSeeTheme(pick(id), confirmed), true);
+    assert.equal(canSeeTheme(pick(id), confirmedOff), false);
   }
 });
 
@@ -45,11 +47,31 @@ test('age confirmation requires a registered account and a server timestamp stri
   assert.equal(isAgeConfirmed({ ...confirmed, ageConfirmedAt: '' }), false);
 });
 
+test('R18 display is explicit, account-scoped, and safe when storage is blocked', () => {
+  const store = new Map(); const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
+  const account = { ...confirmedOff };
+  assert.equal(r18Visible(account), false);
+  assert.equal(setR18Visible(account, true, storage), true);
+  assert.equal(r18Visible(account), true);
+  const other = { ...confirmedOff, user: { id: 'member-2' } };
+  assert.equal(readR18Visible(other, storage), false);
+  assert.equal(setR18Visible(account, false, storage), false);
+  assert.equal(r18Visible(account), false);
+  assert.equal(setR18Visible(member, true, storage), false);
+  const blocked = { getItem() { throw new Error('blocked'); }, setItem() { throw new Error('blocked'); }, removeItem() { throw new Error('blocked'); } };
+  assert.equal(setR18Visible(account, true, blocked), true);
+  assert.equal(r18Visible(account), true);
+  clearR18Visible(account, blocked);
+  assert.equal(r18Visible(account), false);
+  assert.equal(store.has(R18_DISPLAY_KEY), false);
+});
+
 test('date themes are regular themes; their optional R18 switch needs confirmation', () => {
   for (const id of ['date', 'acquaintance-date']) {
     assert.equal(isAdultTheme(pick(id)), false);
     for (const account of [guest, member, confirmed]) assert.equal(canSeeTheme(pick(id), account), true);
     assert.equal(canOfferR18Option(pick(id), confirmed), true, id);
+    assert.equal(canOfferR18Option(pick(id), confirmedOff), false, id);
     assert.equal(canOfferR18Option(pick(id), member), false, id);
     assert.equal(canOfferR18Option(pick(id), guest), false, id);
     assert.equal(canOfferR18Option(pick(id), loading), false, id);
@@ -64,6 +86,7 @@ test('the R18 filter chip is offered only to confirmed accounts outside mix mode
   assert.equal(visibleFilterIds(groupLabels, guest, false).includes('adult'), false);
   assert.equal(visibleFilterIds(groupLabels, member, false).includes('adult'), false);
   assert.equal(visibleFilterIds(groupLabels, confirmed, false).includes('adult'), true);
+  assert.equal(visibleFilterIds(groupLabels, confirmedOff, false).includes('adult'), false);
   assert.equal(visibleFilterIds(groupLabels, confirmed, true).includes('adult'), false);
   assert.deepEqual(visibleFilterIds(groupLabels, guest, false), Object.keys(groupLabels).filter((id) => id !== 'adult'));
 });
@@ -105,7 +128,8 @@ test('only an attested venue session may hold R18 content without age confirmati
   const plain = { deckId: 'friends', deckIds: ['friends'], questions: [{ id: 'a', r18: false }] };
   assert.equal(canAccessSessionContent(plain, guest), true);
   assert.equal(canAccessSessionContent(venue, guest), false);
-  assert.equal(canAccessSessionContent(venue, guest, { activeVenue: true }), true);
+  assert.equal(canAccessSessionContent(venue, guest, { activeVenue: true }), false);
+  assert.equal(canAccessSessionContent(venue, guest, { activeVenue: true, venueDisplay: true }), true);
   assert.equal(canAccessSessionContent({ ...venue, venueSession: undefined }, guest, { activeVenue: true }), false);
   assert.equal(canAccessSessionContent({ deckId: 'intimacy', deckIds: ['intimacy'] }, member, { activeVenue: true }), false);
   assert.equal(canAccessSessionContent({ deckId: 'intimacy', deckIds: ['intimacy'] }, confirmed), true);
@@ -145,4 +169,6 @@ test('group room link includeR18 follows the consent checkbox', () => {
   assert.equal(groupRoomHref({ ...base, offerR18: false, adultConfirmed: true }), '/group-room.html?create=date&includeR18=0');
   assert.equal(groupRoomHref({ deckId: 'intimacy', adultOnly: true }), '/group-room.html?create=intimacy&includeR18=0&setAdult=1');
   assert.equal(groupRoomHref({ setId: 'a b', setHasR18: true }), '/group-room.html?set=a%20b&setAdult=1');
+  assert.equal(groupRoomHref({ deckId: 'date', plannedParticipantCount: 3 }), '/group-room.html?create=date&includeR18=0&planned=3');
+  assert.equal(groupRoomHref({ deckId: 'date', plannedParticipantCount: 9 }), '/group-room.html?create=date&includeR18=0');
 });

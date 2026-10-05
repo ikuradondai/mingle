@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { decks } from '../dist/data/decks.js';
+import { soloDecks } from '../dist/data/solo-decks.js';
 import { createSession, createSavedSession } from '../dist/engine.js';
 import { accountConfig } from './accounts.mjs';
 import { AGE_ERRORS, requireAdultConfirmed } from './age-confirmation.mjs';
@@ -44,7 +45,7 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
   const config = accountConfig(env);
   const service = config?.serviceKey ? { ...config, key: config.serviceKey } : null;
   let lastCleanup = 0;
-  const staticCards = new Map(decks.flatMap((deck) => [...(deck.questions || []), ...(deck.r18Questions || [])].map((card) => [card.id, { id: card.id, text: card.text, r18: Boolean(card.r18 || deck.adultOnly), sourceDeckId: deck.id }])));
+    const staticCards = new Map([...decks, ...soloDecks].flatMap((deck) => [...(deck.questions || []), ...(deck.r18Questions || [])].map((card) => [card.id, { id: card.id, text: card.text, r18: Boolean(card.r18 || deck.adultOnly), sourceDeckId: deck.id }])));
   async function host(req) {
     if (!service) throw fail(503, 'GROUP_UNAVAILABLE');
     const bearer = auth(req); if (!bearer) throw fail(401, 'UNAUTHENTICATED');
@@ -81,15 +82,16 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
   async function projected(room, member, includeCard) { return publicRoom(room, member, includeCard, await members(room.id)); }
   async function resolveSet(ownerId, setId) {
     if (!setId || !/^[0-9a-f-]{16,64}$/i.test(setId)) throw fail(400, 'INVALID_REQUEST');
-    const sets = await rest(service, `/rest/v1/my_sets?id=eq.${encodeURIComponent(setId)}&user_id=eq.${encodeURIComponent(ownerId)}&select=id,name,card_ids`, {}, fetchImpl);
+    const sets = await rest(service, `/rest/v1/my_sets?id=eq.${encodeURIComponent(setId)}&user_id=eq.${encodeURIComponent(ownerId)}&select=*`, {}, fetchImpl);
     const set = sets?.[0]; if (!set || !Array.isArray(set.card_ids)) throw fail(404, 'NOT_FOUND');
+    if (set.audience === 'solo') throw fail(400, 'SOLO_ONLY_SOURCE');
     if (set.card_ids.length < 6 || set.card_ids.length > 40 || new Set(set.card_ids).size !== set.card_ids.length) throw fail(400, 'GROUP_THEME_UNAVAILABLE');
     const customIds = set.card_ids.filter((id) => String(id).startsWith('custom:')).map((id) => String(id).slice(7));
     const custom = customIds.length ? await rest(service, `/rest/v1/custom_cards?user_id=eq.${encodeURIComponent(ownerId)}&id=in.(${customIds.map((id) => encodeURIComponent(id)).join(',')})&select=id,text,r18`, {}, fetchImpl) : [];
     const customMap = new Map((custom || []).map((card) => [`custom:${card.id}`, { id: `custom:${card.id}`, text: card.text, r18: card.r18 === true }]));
     const cards = set.card_ids.map((id) => staticCards.get(id) || customMap.get(id));
     if (cards.some((card) => !card)) throw fail(400, 'GROUP_THEME_UNAVAILABLE');
-    return { id: set.id, name: set.name, cardIds: set.card_ids, customCards: custom || [], cards, adultOnly: cards.some((card) => card.r18 === true) };
+    return { id: set.id, name: set.name, cardIds: set.card_ids, customCards: custom || [], cards, adultOnly: cards.some((card) => card.r18 === true), audience: set.audience || 'group', questionOrder: set.question_order || 'shuffle' };
   }
   async function adultGate(owner, input) {
     await requireAdultConfirmed({ config: service, userId: owner.id, authorization: `Bearer ${service.key}`, fetchImpl });
@@ -103,11 +105,11 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     if (setId) {
       source = await resolveSet(owner.id, setId);
       if (source.adultOnly) { await adultGate(owner, input); gated = true; }
-      const session = createSavedSession({ participants: [hostName, '参加者2'], cardIds: source.cardIds, customCards: source.customCards, ownerUserId: owner.id, adultConfirmed: input.adultConfirmed === true });
+      const session = createSavedSession({ participants: [hostName, '参加者2'], cardIds: source.cardIds, customCards: source.customCards, ownerUserId: owner.id, questionOrder: source.questionOrder, adultConfirmed: input.adultConfirmed === true });
       source.cards = session.questions.map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true }));
       source.adultOnly = session.includeR18 === true;
     } else {
-      if (!deck) throw fail(400, 'GROUP_THEME_UNAVAILABLE');
+      if (!deck) throw fail(400, soloDecks.some((item) => item.id === deckId) ? 'SOLO_ONLY_SOURCE' : 'GROUP_THEME_UNAVAILABLE');
       const includeR18 = input.includeR18 === true && deck.adultOnly !== true;
       if (input.includeR18 !== undefined && typeof input.includeR18 !== 'boolean') throw fail(400, 'INVALID_REQUEST');
       if (includeR18 || deck.adultOnly) { await adultGate(owner, input); gated = true; }

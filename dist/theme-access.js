@@ -1,4 +1,5 @@
 import { decks } from "./data/decks.js";
+import { soloDecks } from "./data/solo-decks.js";
 export const GUEST_THEME_IDS = new Set(['date', 'party-first-meeting', 'business-meetup', 'bar-first-meeting']);
 
 export function isRegisteredAccount(account) {
@@ -8,6 +9,24 @@ export function isRegisteredAccount(account) {
 // Age confirmation is server-side account state mirrored into memory only; it is never persisted in the browser.
 export function isAgeConfirmed(account) {
   return isRegisteredAccount(account) && typeof account?.ageConfirmedAt === 'string' && account.ageConfirmedAt !== '';
+}
+
+export const R18_DISPLAY_KEY = 'mingle.cards.r18-display.v1';
+export function r18Visible(account) { return isAgeConfirmed(account) && account?.r18DisplayEnabled === true; }
+export function setR18Visible(account, visible, storage) {
+  const next = isAgeConfirmed(account) && visible === true;
+  if (account && typeof account === 'object') account.r18DisplayEnabled = next;
+  try { if (next) storage?.setItem(R18_DISPLAY_KEY, JSON.stringify({ userId: account.user.id, visible: true })); else storage?.removeItem(R18_DISPLAY_KEY); } catch {}
+  return next;
+}
+export function clearR18Visible(account, storage) {
+  if (account && typeof account === 'object') account.r18DisplayEnabled = false;
+  try { storage?.removeItem(R18_DISPLAY_KEY); } catch {}
+}
+export function readR18Visible(account, storage) {
+  if (!isAgeConfirmed(account)) { if (account) account.r18DisplayEnabled = false; return false; }
+  try { const saved = JSON.parse(storage?.getItem(R18_DISPLAY_KEY) || 'null'); account.r18DisplayEnabled = saved?.userId === account.user.id && saved.visible === true; } catch { account.r18DisplayEnabled = false; }
+  return account.r18DisplayEnabled === true;
 }
 
 // A theme is "adult" when it is an adult-only theme or any of its regular cards is R18.
@@ -21,7 +40,7 @@ export function canGuestUseTheme(deck) {
 }
 
 export function canSeeTheme(deck, account) {
-  return Boolean(deck) && (!isAdultTheme(deck) || isAgeConfirmed(account));
+  return Boolean(deck) && (!isAdultTheme(deck) || (isAgeConfirmed(account) && r18Visible(account)));
 }
 
 export function canUseTheme(deck, account) {
@@ -30,11 +49,11 @@ export function canUseTheme(deck, account) {
 
 // date / acquaintance-date: the optional "include R18 questions" switch.
 export function canOfferR18Option(deck, account) {
-  return Boolean(deck?.r18Available === true && !deck.adultOnly && Array.isArray(deck.r18Questions) && isAgeConfirmed(account));
+  return Boolean(deck?.r18Available === true && !deck.adultOnly && Array.isArray(deck.r18Questions) && isAgeConfirmed(account) && r18Visible(account));
 }
 
 export function visibleFilterIds(labels, account, mixed) {
-  return Object.keys(labels).filter((id) => id !== 'adult' || (!mixed && isAgeConfirmed(account)));
+  return Object.keys(labels).filter((id) => id !== 'adult' || (!mixed && isAgeConfirmed(account) && r18Visible(account)));
 }
 
 export function cardsHaveR18(cards) {
@@ -50,12 +69,19 @@ export function sessionHasR18(session) {
 }
 
 // A venue session started inside a QR whose owner attested the audience is the one exception.
-export function canAccessSessionContent(session, account, { activeVenue = false } = {}) {
-  return !sessionHasR18(session) || isAgeConfirmed(account) || (activeVenue && session?.venueSession != null);
+export function canAccessSessionContent(session, account, { activeVenue = false, venueDisplay = false } = {}) {
+  return !sessionHasR18(session) || (isAgeConfirmed(account) && r18Visible(account)) || (activeVenue && venueDisplay === true && session?.venueSession != null);
 }
 
 export function sessionNeedsThemeAccess(session, account) {
   if (!session) return false;
+  if (session.mode === 'solo' && !session.customSet) {
+    const deck = soloDecks.find((item) => item.id === session.deckId);
+    const canonical = Boolean(deck && session.questionOrder === 'fixed' && session.questions?.length === 12 && session.questions.every((card, index) => card?.id === deck.questions[index]?.id && card.r18 !== true));
+    if (!canonical) return true;
+    if (isRegisteredAccount(account)) return false;
+    return !(session.cursor < 6 || (session.cursor === 6 && session.unlockedUntil === 6));
+  }
   if (session.customSet) return !isRegisteredAccount(account);
   if (session.sharedGuest) return session.includeR18 === true && !isRegisteredAccount(account);
   const ids = session.mixed ? session.deckIds : [session.deckId];
@@ -76,7 +102,8 @@ export function nextAgeConfirmedAt({ previous, sameAccount, confirmedAt, availab
 }
 
 // Group-room entry link. includeR18 follows the current consent checkbox.
-export function groupRoomHref({ deckId, adultOnly = false, setId = null, setHasR18 = false, offerR18 = false, adultConfirmed = false }) {
-  if (setId) return `/group-room.html?set=${encodeURIComponent(setId)}&setAdult=${setHasR18 ? '1' : '0'}`;
-  return `/group-room.html?create=${encodeURIComponent(deckId)}&includeR18=${offerR18 && adultConfirmed ? '1' : '0'}${adultOnly ? '&setAdult=1' : ''}`;
+export function groupRoomHref({ deckId, adultOnly = false, setId = null, setHasR18 = false, offerR18 = false, adultConfirmed = false, plannedParticipantCount = null }) {
+  const planned = Number.isInteger(plannedParticipantCount) && plannedParticipantCount >= 2 && plannedParticipantCount <= 8 ? `&planned=${plannedParticipantCount}` : '';
+  if (setId) return `/group-room.html?set=${encodeURIComponent(setId)}&setAdult=${setHasR18 ? '1' : '0'}${planned}`;
+  return `/group-room.html?create=${encodeURIComponent(deckId)}&includeR18=${offerR18 && adultConfirmed ? '1' : '0'}${adultOnly ? '&setAdult=1' : ''}${planned}`;
 }

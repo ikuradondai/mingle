@@ -1,4 +1,5 @@
 import { decks } from '../dist/data/decks.js';
+import { soloDecks } from '../dist/data/solo-decks.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { consumeAiQuota, persistentStoreAvailable } from './store.mjs';
 import { readAdultConfirmation, requireAdultConfirmed, setAdultConfirmation, userFromBearer } from './age-confirmation.mjs';
@@ -6,7 +7,8 @@ import { readAdultConfirmation, requireAdultConfirmed, setAdultConfirmation, use
 const MAX_NAME = 80;
 const MAX_CARDS = 40;
 const MIN_CARDS = 6;
-const CARD_IDS = new Set(decks.flatMap((deck) => [...(deck.questions || []), ...(deck.r18Questions || [])].map((card) => typeof card === 'string' ? card : card.id)));
+const ALL_DECKS = [...decks, ...soloDecks];
+const CARD_IDS = new Set(ALL_DECKS.flatMap((deck) => [...(deck.questions || []), ...(deck.r18Questions || [])].map((card) => typeof card === 'string' ? card : card.id)));
 const CUSTOM_ID = /^custom:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const CUSTOM_TEXT_MAX = 300;
 const SHARE_TOKEN_BYTES = 32;
@@ -39,7 +41,7 @@ export function accountConfig(env = process.env) {
 export function validCardId(id) { return typeof id === 'string' && CARD_IDS.has(id); }
 export function validCards(value) { return Array.isArray(value) && value.length >= MIN_CARDS && value.length <= MAX_CARDS && new Set(value).size === value.length && value.every(validCardId); }
 const DISPLAY_NAME_MAX = 40;
-const STATIC_CARDS = new Map(decks.flatMap((deck) => [...(deck.questions || []), ...(deck.r18Questions || [])].map((card) => [card.id, { id: card.id, text: card.text, r18: Boolean(card.r18 || deck.adultOnly), kind: card.kind || 'question' }])));
+const STATIC_CARDS = new Map(ALL_DECKS.flatMap((deck) => [...(deck.questions || []), ...(deck.r18Questions || [])].map((card) => [card.id, { id: card.id, text: card.text, r18: Boolean(card.r18 || deck.adultOnly), kind: card.kind || 'question' }])));
 function displayName(value) { return typeof value === 'string' ? value.trim() : ''; }
 function userDisplayName(user) { return displayName(user?.user_metadata?.display_name) || null; }
 
@@ -116,14 +118,14 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
   }
   async function account(req) {
     const { user, authorization } = await requireUser(req);
-    const [favorites, sets] = await Promise.all([rows('favorites', user.id, authorization, '&select=card_id,created_at&order=created_at.desc'), rows('my_sets', user.id, authorization, '&select=id,name,card_ids,created_at,updated_at&order=created_at.asc')]);
+    const [favorites, sets] = await Promise.all([rows('favorites', user.id, authorization, '&select=card_id,created_at&order=created_at.desc'), rows('my_sets', user.id, authorization, '&select=*&order=created_at.asc')]);
     let customCards = []; let customCardsAvailable = true;
     try { customCards = (await customRows(user.id, authorization)).map(mapCustom); } catch (error) { if (missingCustomTable(error)) customCardsAvailable = false; else throw error; }
     let adultState = { available: true, confirmedAt: null }; try { adultState = await readAdultConfirmation({ config, userId: user.id, authorization, fetchImpl }); } catch { adultState = { available: false, confirmedAt: null }; /* Unreadable: treated as not confirmed and flagged unavailable; /me stays available. */ }
     let avatarUrlValue = null; try { avatarUrlValue = await avatarUrl(user.id, authorization); } catch { /* Storage may not be configured; account data remains available. */ }
     let drafts = []; let draftsAvailable = true;
     try {
-      const draftRows = await rows('my_set_drafts', user.id, authorization, '&select=id,source_set_id,name,items,updated_at&order=updated_at.desc');
+      const draftRows = await rows('my_set_drafts', user.id, authorization, '&select=*&order=updated_at.desc');
       drafts = draftRows.map(mapDraft);
     } catch (error) { if (missingDraftTable(error)) draftsAvailable = false; else throw error; }
     return { user: { id: user.id, email: user.email || null, displayName: userDisplayName(user), avatarUrl: avatarUrlValue }, account: { deletionAvailable: Boolean(config.serviceKey), completionAvailable: Boolean(config.serviceKey), adultConfirmedAt: adultState.confirmedAt, adultConfirmationAvailable: adultState.available }, favorites, sets, customCards, customCardsAvailable, drafts, draftsAvailable, aiGenerationAvailable: Boolean(openAiKey && (persistentStoreAvailable() || rateLimitImpl !== consumeAiQuota)) };
@@ -147,13 +149,14 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
   async function draft(req, draftId = '') {
     const { user, authorization } = await requireUser(req);
     if (!draftId && req.method === 'GET') {
-      const found = await rows('my_set_drafts', user.id, authorization, '&select=id,source_set_id,name,items,updated_at&order=updated_at.desc');
+      const found = await rows('my_set_drafts', user.id, authorization, '&select=*&order=updated_at.desc');
       return { drafts: found.map(mapDraft), draftsAvailable: true };
     }
     if (!draftId && req.method === 'POST') {
       const input = req.body || {};
-      if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['name', 'items', 'sourceSetId'].includes(key)) || !Object.prototype.hasOwnProperty.call(input, 'name') || !Object.prototype.hasOwnProperty.call(input, 'items')) throw fail(400, ACCOUNT_ERRORS.invalid);
+      if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['name', 'items', 'sourceSetId', 'audience', 'questionOrder'].includes(key)) || !Object.prototype.hasOwnProperty.call(input, 'name') || !Object.prototype.hasOwnProperty.call(input, 'items')) throw fail(400, ACCOUNT_ERRORS.invalid);
       const name = draftName(input.name); const items = draftItems(input.items);
+      const metadata = setMetadata(input);
       let sourceSetId = null;
       if (Object.prototype.hasOwnProperty.call(input, 'sourceSetId')) {
         if (input.sourceSetId !== null && (typeof input.sourceSetId !== 'string' || !/^[0-9a-f-]{16,64}$/i.test(input.sourceSetId))) throw fail(400, ACCOUNT_ERRORS.invalid);
@@ -167,15 +170,15 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
         const owned = await ownerCardIds(user.id, authorization);
         if (items.some((item) => item.kind === 'saved' && item.cardId.startsWith('custom:') && !owned.has(item.cardId))) throw fail(403, ACCOUNT_ERRORS.forbidden);
       }
-      const created = await supabaseFetch(config, '/rest/v1/my_set_drafts', { method: 'POST', body: JSON.stringify({ user_id: user.id, source_set_id: sourceSetId, name, items, status: 'draft' }), headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl);
+      const created = await supabaseFetch(config, '/rest/v1/my_set_drafts', { method: 'POST', body: JSON.stringify({ user_id: user.id, source_set_id: sourceSetId, name, items, status: 'draft', ...metadata }), headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl);
       const row = Array.isArray(created) ? created[0] : created; if (!row) throw fail(502, ACCOUNT_ERRORS.unavailable);
       return { draft: mapDraft(row) };
     }
     if (!draftId || !/^[0-9a-f-]{16,64}$/i.test(draftId)) throw fail(400, ACCOUNT_ERRORS.invalid);
     const path = `/rest/v1/my_set_drafts?id=eq.${encodeURIComponent(draftId)}&user_id=eq.${encodeURIComponent(user.id)}`;
     if (req.method === 'PATCH') {
-      const input = req.body || {}; if (!input || typeof input !== 'object' || Array.isArray(input) || !Object.keys(input).length || Object.keys(input).some((key) => !['name', 'items'].includes(key))) throw fail(400, ACCOUNT_ERRORS.invalid);
-      const update = {}; if (Object.prototype.hasOwnProperty.call(input, 'name')) update.name = draftName(input.name); if (Object.prototype.hasOwnProperty.call(input, 'items')) update.items = draftItems(input.items);
+      const input = req.body || {}; if (!input || typeof input !== 'object' || Array.isArray(input) || !Object.keys(input).length || Object.keys(input).some((key) => !['name', 'items', 'audience', 'questionOrder'].includes(key))) throw fail(400, ACCOUNT_ERRORS.invalid);
+      const update = {}; if (Object.prototype.hasOwnProperty.call(input, 'name')) update.name = draftName(input.name); if (Object.prototype.hasOwnProperty.call(input, 'items')) update.items = draftItems(input.items); Object.assign(update, setMetadata(input, true));
       if (update.items?.some((item) => item.kind === 'saved' && item.cardId.startsWith('custom:'))) { const owned = await ownerCardIds(user.id, authorization); if (update.items.some((item) => item.kind === 'saved' && item.cardId.startsWith('custom:') && !owned.has(item.cardId))) throw fail(403, ACCOUNT_ERRORS.forbidden); }
       const updated = await supabaseFetch(config, path, { method: 'PATCH', body: JSON.stringify(update), headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl); const row = Array.isArray(updated) ? updated[0] : updated; if (!row) throw fail(404, 'NOT_FOUND'); return { draft: mapDraft(row) };
     }
@@ -186,14 +189,14 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     const { user, authorization } = await requireUser(req);
     if (!config.serviceKey) throw fail(503, ACCOUNT_ERRORS.unavailable);
     if (!/^[0-9a-f-]{16,64}$/i.test(draftId)) throw fail(400, ACCOUNT_ERRORS.invalid);
-    const found = await rows('my_set_drafts', user.id, authorization, `&id=eq.${encodeURIComponent(draftId)}&select=id,name,source_set_id,items`);
+    const found = await rows('my_set_drafts', user.id, authorization, `&id=eq.${encodeURIComponent(draftId)}&select=*`);
     if (!found.length) throw fail(404, 'NOT_FOUND');
     const items = draftItems(found[0].items); if (items.length < MIN_CARDS) throw fail(400, ACCOUNT_ERRORS.invalid);
     if (items.some((item) => item.kind === 'saved' && item.cardId.startsWith('custom:'))) { const owned = await ownerCardIds(user.id, authorization); if (items.some((item) => item.kind === 'saved' && item.cardId.startsWith('custom:') && !owned.has(item.cardId))) throw fail(403, ACCOUNT_ERRORS.forbidden); }
     const rpcConfig = { ...config, key: config.serviceKey };
     const result = await supabaseFetch(rpcConfig, '/rest/v1/rpc/complete_my_set_draft', { method: 'POST', body: JSON.stringify({ p_draft_id: draftId, p_user_id: user.id, p_expected_items: items }), headers: { Authorization: `Bearer ${config.serviceKey}`, Prefer: 'return=representation' } }, fetchImpl);
     const value = Array.isArray(result) ? result[0] : result; const setId = value?.id || value?.set_id; if (!setId) throw fail(502, ACCOUNT_ERRORS.unavailable);
-    const sets = await rows('my_sets', user.id, authorization, `&id=eq.${encodeURIComponent(setId)}&select=id,name,card_ids,created_at,updated_at`); if (!sets.length) throw fail(502, ACCOUNT_ERRORS.unavailable);
+    const sets = await rows('my_sets', user.id, authorization, `&id=eq.${encodeURIComponent(setId)}&select=*`); if (!sets.length) throw fail(502, ACCOUNT_ERRORS.unavailable);
     return { set: sets[0] };
   }
   async function aiQuestions(req) {
@@ -254,9 +257,10 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     const { user, authorization } = await requireUser(req);
     if (req.method === 'POST' && !setId) {
       const input = req.body || {};
+      if (Object.keys(input).some((key) => !['name', 'cardIds', 'audience', 'questionOrder', 'userId'].includes(key))) throw fail(400, ACCOUNT_ERRORS.invalid);
       if (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > MAX_NAME) throw fail(400, ACCOUNT_ERRORS.invalid);
       await validateCardsForUser(input.cardIds, user.id, authorization);
-      const created = await supabaseFetch(config, '/rest/v1/my_sets', { method: 'POST', body: JSON.stringify({ user_id: user.id, name: input.name.trim(), card_ids: input.cardIds }), headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl);
+      const created = await supabaseFetch(config, '/rest/v1/my_sets', { method: 'POST', body: JSON.stringify({ user_id: user.id, name: input.name.trim(), card_ids: input.cardIds, ...setMetadata(input) }), headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl);
       return Array.isArray(created) ? created[0] : created;
     }
     if (!setId || !/^[0-9a-f-]{16,64}$/i.test(setId)) throw fail(400, ACCOUNT_ERRORS.invalid);
@@ -264,8 +268,10 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     if (req.method === 'DELETE') { await supabaseFetch(config, path, { method: 'DELETE', headers: { Authorization: authorization } }, fetchImpl); return { deleted: true, id: setId }; }
     if (req.method !== 'PATCH') throw fail(405, 'METHOD_NOT_ALLOWED');
     const input = req.body || {}; const update = {};
+    if (Object.keys(input).some((key) => !['name', 'cardIds', 'audience', 'questionOrder'].includes(key))) throw fail(400, ACCOUNT_ERRORS.invalid);
     if (Object.prototype.hasOwnProperty.call(input, 'name')) { if (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > MAX_NAME) throw fail(400, ACCOUNT_ERRORS.invalid); update.name = input.name.trim(); }
     if (Object.prototype.hasOwnProperty.call(input, 'cardIds')) { await validateCardsForUser(input.cardIds, user.id, authorization); update.card_ids = input.cardIds; }
+    Object.assign(update, setMetadata(input, true));
     if (!Object.keys(update).length) throw fail(400, ACCOUNT_ERRORS.invalid);
     const updated = await supabaseFetch(config, path, { method: 'PATCH', body: JSON.stringify(update), headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl);
     const result = Array.isArray(updated) ? updated[0] : updated;
@@ -306,27 +312,28 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
       if (!card) throw fail(403, ACCOUNT_ERRORS.forbidden);
       cards.push({ id: card.id, text: card.text, r18: Boolean(card.r18), kind: card.kind || 'question' });
     }
-    return { name: set.name, cardCount: cards.length, adultOnly: cards.some((card) => card.r18), cards };
+    return { name: set.name, cardCount: cards.length, adultOnly: cards.some((card) => card.r18), cards, audience: set.audience || 'group', questionOrder: set.question_order || 'shuffle' };
   }
   async function shareSet(req, setId = '') {
     const { user, authorization } = await requireUser(req);
     if (!/^[0-9a-f-]{16,64}$/i.test(setId)) throw fail(400, ACCOUNT_ERRORS.invalid);
     if (!['GET', 'POST', 'PUT'].includes(req.method)) throw fail(405, 'METHOD_NOT_ALLOWED');
-    const sets = await rows('my_sets', user.id, authorization, `&id=eq.${encodeURIComponent(setId)}&select=id,name,card_ids`);
+    const sets = await rows('my_sets', user.id, authorization, `&id=eq.${encodeURIComponent(setId)}&select=*`);
     if (!sets.length) throw fail(404, 'NOT_FOUND');
     const current = async () => {
-      const rowsFound = await supabaseFetch(config, `/rest/v1/shared_sets?owner_id=eq.${encodeURIComponent(user.id)}&set_id=eq.${encodeURIComponent(setId)}&revoked_at=is.null&select=id,token,name,card_count,adult_only&limit=1`, { headers: { Authorization: authorization } }, fetchImpl);
+      const rowsFound = await supabaseFetch(config, `/rest/v1/shared_sets?owner_id=eq.${encodeURIComponent(user.id)}&set_id=eq.${encodeURIComponent(setId)}&revoked_at=is.null&select=id,token,name,card_count,adult_only,question_order&limit=1`, { headers: { Authorization: authorization } }, fetchImpl);
       const row = Array.isArray(rowsFound) ? rowsFound[0] : null;
-      return row ? { share: { token: row.token, url: `/?share=${encodeURIComponent(row.token)}`, name: row.name, cardCount: row.card_count, adultOnly: Boolean(row.adult_only), id: row.id || null } } : { share: null };
+      return row ? { share: { token: row.token, url: `/?share=${encodeURIComponent(row.token)}`, name: row.name, cardCount: row.card_count, adultOnly: Boolean(row.adult_only), questionOrder: row.question_order || 'shuffle', id: row.id || null, audience: sets[0].audience || 'group' } } : { share: null };
     };
     if (req.method === 'GET') return current();
+    if (sets[0].audience === 'solo') throw fail(400, 'SOLO_ONLY_SOURCE');
     const snapshot = await snapshotForSet(sets[0], user.id, authorization);
     if (snapshot.adultOnly) await ensureAdult(user, authorization);
     const token = shareToken();
     const created = await supabaseFetch(config, '/rest/v1/rpc/create_shared_set', { method: 'POST', body: JSON.stringify({ p_set_id: setId, p_token: token, p_token_hash: shareHash(token), p_name: snapshot.name, p_card_count: snapshot.cardCount, p_adult_only: snapshot.adultOnly, p_cards: snapshot.cards, p_rotate: req.method === 'PUT' }), headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl);
     const row = Array.isArray(created) ? created[0] : created;
     if (!row?.token) throw fail(502, ACCOUNT_ERRORS.unavailable);
-    return { share: { token: row.token, url: `/?share=${encodeURIComponent(row.token)}`, name: row.name || snapshot.name, cardCount: row.card_count || snapshot.cardCount, adultOnly: Boolean(row.adult_only ?? snapshot.adultOnly), id: row.id || null } };
+    return { share: { token: row.token, url: `/?share=${encodeURIComponent(row.token)}`, name: row.name || snapshot.name, cardCount: row.card_count || snapshot.cardCount, adultOnly: Boolean(row.adult_only ?? snapshot.adultOnly), questionOrder: snapshot.questionOrder, id: row.id || null, audience: snapshot.audience } };
   }
   async function stopShare(req, setId = '') {
     const { user, authorization } = await requireUser(req);
@@ -338,11 +345,13 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) throw fail(404, 'NOT_FOUND');
     if (!config?.serviceKey) throw fail(503, 'SHARE_UNAVAILABLE');
     const privateConfig = { ...config, key: config.serviceKey };
-    const rowsFound = await supabaseFetch(privateConfig, `/rest/v1/shared_sets?token_hash=eq.${encodeURIComponent(shareHash(token))}&revoked_at=is.null&select=name,card_count,adult_only,cards`, { headers: { Authorization: `Bearer ${config.serviceKey}` } }, fetchImpl);
+    let rowsFound;
+    try { rowsFound = await supabaseFetch(privateConfig, `/rest/v1/shared_sets?token_hash=eq.${encodeURIComponent(shareHash(token))}&revoked_at=is.null&select=name,card_count,adult_only,question_order,cards`, { headers: { Authorization: `Bearer ${config.serviceKey}` } }, fetchImpl); }
+    catch { rowsFound = await supabaseFetch(privateConfig, `/rest/v1/shared_sets?token_hash=eq.${encodeURIComponent(shareHash(token))}&revoked_at=is.null&select=name,card_count,adult_only,cards`, { headers: { Authorization: `Bearer ${config.serviceKey}` } }, fetchImpl); }
     const share = Array.isArray(rowsFound) ? rowsFound[0] : null;
     if (!share) throw fail(404, 'NOT_FOUND');
     if (!start) {
-      const summary = { name: share.name, cardCount: share.card_count, adultOnly: Boolean(share.adult_only), active: true, ageConfirmationRequired: false };
+      const summary = { name: share.name, cardCount: share.card_count, adultOnly: Boolean(share.adult_only), ...(share.question_order ? { questionOrder: share.question_order } : {}), active: true, ageConfirmationRequired: false };
       if (!summary.adultOnly) return { share: summary };
       // Adult shares reveal nothing unless the (optional) Bearer belongs to an age-confirmed account.
       const viewer = await userFromBearer({ config, authorization: authHeader(req), fetchImpl });
@@ -359,7 +368,7 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
       await requireAdultConfirmed({ config: privateConfig, userId: viewer.user.id, authorization: `Bearer ${config.serviceKey}`, fetchImpl });
       if (input.adultConfirmed !== true) throw fail(403, 'ADULT_CONSENT_REQUIRED');
     }
-    return { share: { name: share.name, cardCount: share.card_count, adultOnly: Boolean(share.adult_only), active: true, ageConfirmationRequired: false }, participants: input.participants.map((value) => value.trim()), cards: Array.isArray(share.cards) ? share.cards : [] };
+    return { share: { name: share.name, cardCount: share.card_count, adultOnly: Boolean(share.adult_only), ...(share.question_order ? { questionOrder: share.question_order } : {}), active: true, ageConfirmationRequired: false }, participants: input.participants.map((value) => value.trim()), cards: Array.isArray(share.cards) ? share.cards : [] };
   }
 
   function avatarPath(userId) { return AVATAR_PATH(userId); }
@@ -377,6 +386,18 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     const name = value.trim(); if (!name || Array.from(name).length > MAX_NAME) throw fail(400, ACCOUNT_ERRORS.invalid);
     return name;
   }
+  function setMetadata(input, partial = false) {
+    const update = {};
+    if (Object.prototype.hasOwnProperty.call(input, 'audience')) {
+      if (!['group', 'solo', 'both'].includes(input.audience)) throw fail(400, ACCOUNT_ERRORS.invalid);
+      update.audience = input.audience;
+    } else if (!partial) update.audience = 'group';
+    if (Object.prototype.hasOwnProperty.call(input, 'questionOrder')) {
+      if (!['shuffle', 'fixed'].includes(input.questionOrder)) throw fail(400, ACCOUNT_ERRORS.invalid);
+      update.question_order = input.questionOrder;
+    } else if (!partial) update.question_order = 'shuffle';
+    return update;
+  }
   function draftItems(value) {
     if (!Array.isArray(value) || value.length > DRAFT_MAX_ITEMS) throw fail(400, ACCOUNT_ERRORS.invalid);
     const ids = new Set(); const texts = new Set();
@@ -392,7 +413,7 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
       return { kind: 'custom', text, r18: item.r18, origin: item.origin };
     });
   }
-  function mapDraft(row) { return { id: row.id, sourceSetId: row.source_set_id || null, name: row.name, items: Array.isArray(row.items) ? row.items : [], updatedAt: row.updated_at }; }
+  function mapDraft(row) { return { id: row.id, sourceSetId: row.source_set_id || null, name: row.name, items: Array.isArray(row.items) ? row.items : [], audience: row.audience || 'group', questionOrder: row.question_order || 'shuffle', updatedAt: row.updated_at }; }
   function missingDraftTable(error) { if (error?.status !== 404) return false; const remote = error.remote || {}; return (remote.code === 'PGRST205' || remote.code === '42P01') && /my_set_drafts/i.test(JSON.stringify(remote)); }
   function avatarCacheBust(url) { if (!url) return null; return `${url}${url.includes('?') ? '&' : '?'}v=${Date.now().toString(36)}`; }
   async function avatarUrl(userId, authorization) {

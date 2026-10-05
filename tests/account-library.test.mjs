@@ -6,7 +6,7 @@ import { decks } from '../dist/data/decks.js';
 const custom = [{ id: '11111111-1111-4111-8111-111111111111', text: '<質問>', r18: false, origin: 'user' }];
 const guestAccount = { enabled: true, authReady: true, user: null };
 const memberAccount = { enabled: true, authReady: true, user: { id: 'member-1' } };
-const confirmedAccount = { enabled: true, authReady: true, user: { id: 'member-1' }, ageConfirmedAt: '2026-10-05T09:12:00.000Z' };
+const confirmedAccount = { enabled: true, authReady: true, user: { id: 'member-1' }, ageConfirmedAt: '2026-10-05T09:12:00.000Z', r18DisplayEnabled: true };
 
 test('library escapes set metadata and keeps ready set actions', () => {
   const html = renderLibrary({ sets: [{ id: 'set-1', name: '<private>', card_ids: ['unknown'] }] });
@@ -92,7 +92,6 @@ const HIDDEN = 'R18の質問（年齢確認後に表示）';
 test('unconfirmed accounts see no R18 switches in custom card, AI, or editor views', () => {
   assert.doesNotMatch(renderLibrary({ studioMode: 'ai', aiGenerationAvailable: true, aiR18: true }), /data-ai-r18|R18の話題を含める/);
   assert.doesNotMatch(renderLibrary({ studioMode: 'custom', customEditorOpen: true, customDraft: '自分の質問', customDraftR18: true }), /data-custom-r18|R18の話題にする/);
-  assert.doesNotMatch(renderLibrary({ studioMode: 'editor', setName: 'x', customCards: adultCustom, studioItems: [{ kind: 'saved', cardId: adultCustomId }], revealAdult: true }), /data-library-adult/);
   assert.doesNotMatch(renderLibrary({ ...guestAccount, studioMode: 'ai', aiGenerationAvailable: true }), /data-ai-r18/);
   assert.doesNotMatch(renderLibrary({ ...memberAccount, studioMode: 'ai', aiGenerationAvailable: true }), /data-ai-r18/);
 });
@@ -100,7 +99,12 @@ test('unconfirmed accounts see no R18 switches in custom card, AI, or editor vie
 test('confirmed accounts keep the R18 switches and consent exactly as before', () => {
   assert.match(renderLibrary({ ...confirmedAccount, studioMode: 'ai', aiGenerationAvailable: true }), /data-ai-r18/);
   assert.match(renderLibrary({ ...confirmedAccount, studioMode: 'custom', customEditorOpen: true }), /data-custom-r18/);
-  assert.match(renderLibrary({ ...confirmedAccount, studioMode: 'editor', setName: 'x', customCards: adultCustom, studioItems: [{ kind: 'saved', cardId: adultCustomId }] }), /data-library-adult/);
+});
+
+test('R18 custom input is unavailable while the explicit display preference is off', () => {
+  const hidden = renderLibrary({ ...confirmedAccount, r18DisplayEnabled: false, studioMode: 'custom', customEditorOpen: true, customDraftR18: true });
+  assert.doesNotMatch(hidden, /data-custom-r18|R18の話題にする/);
+  assert.doesNotMatch(hidden, /内緒のR18質問/);
 });
 
 test('R18 card text is replaced with the age-gate placeholder for unconfirmed accounts only', () => {
@@ -118,7 +122,7 @@ test('R18 card text is replaced with the age-gate placeholder for unconfirmed ac
   const revealed = renderLibrary({ ...confirmedAccount, revealAdult: true, studioMode: 'favorites', favorites, customCards: adultCustom });
   assert.match(revealed, new RegExp(adultCard.text));
   assert.match(revealed, /内緒のR18質問/);
-  const masked = renderLibrary({ ...confirmedAccount, studioMode: 'favorites', favorites, customCards: adultCustom });
+  const masked = renderLibrary({ ...confirmedAccount, r18DisplayEnabled: false, studioMode: 'favorites', favorites, customCards: adultCustom });
   assert.match(masked, /R18の質問/);
   assert.doesNotMatch(masked, new RegExp(adultCard.text));
 });
@@ -142,13 +146,31 @@ test('R18 sets cannot be played or shared before age confirmation but can still 
   assert.match(r18Row, /R18を含む · 年齢確認後に遊べます/);
   assert.match(r18Row, /data-action="set-play"[^>]*disabled/);
   assert.match(r18Row, /data-action="set-share"[^>]*disabled/);
-  assert.match(r18Row, /data-action="studio-edit-set"(?![^>]*disabled)/);
+  assert.match(r18Row, /data-action="studio-edit-set"[^>]*disabled/);
   assert.match(r18Row, /data-action="set-delete"(?![^>]*disabled)/);
   const plainRow = row(locked, 'set-plain');
   assert.doesNotMatch(plainRow, /disabled/);
   assert.doesNotMatch(plainRow, /年齢確認後/);
   const open = renderLibrary({ ...confirmedAccount, sets });
   assert.doesNotMatch(row(open, 'set-r18'), /disabled|年齢確認後/);
+});
+
+test('explicit R18 display preference redacts and restores private adult metadata', () => {
+  const set = { id: 'set-r18', name: '秘密の大人セット', card_ids: [adultCard.id, ...intimacy.questions.slice(1, 6).map((card) => card.id)] };
+  const hidden = renderLibrary({ ...confirmedAccount, r18DisplayEnabled: false, sets: [set] });
+  assert.doesNotMatch(hidden, /秘密の大人セット|セックスをしたいと感じるのは/);
+  assert.match(hidden, /R18を含むマイセット/);
+  const shown = renderLibrary({ ...confirmedAccount, r18DisplayEnabled: true, sets: [set], studioMode: 'favorites', favorites: new Set([adultCard.id]) });
+  assert.match(shown, /セックスをしたいと感じるのは/);
+});
+
+test('global R18 display is required for adult editor names and legacy revealAdult cannot bypass it', () => {
+  const items = [{ kind: 'custom', text: '成人カード本文', r18: true, origin: 'user' }];
+  const hidden = renderLibrary({ ...confirmedAccount, r18DisplayEnabled: false, revealAdult: true, studioMode: 'editor', setName: '成人編集セット', studioItems: items });
+  assert.doesNotMatch(hidden, /成人編集セット|成人カード本文/);
+  assert.match(hidden, /R18セット|表示設定/);
+  const shown = renderLibrary({ ...confirmedAccount, r18DisplayEnabled: true, studioMode: 'editor', setName: '成人編集セット', studioItems: items });
+  assert.match(shown, /成人編集セット|成人カード本文/);
 });
 
 test('R18 custom cards cannot be opened for editing before age confirmation', () => {

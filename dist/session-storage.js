@@ -1,5 +1,6 @@
 import { challenges } from './data/challenges.js';
 import { decks } from './data/decks.js';
+import { soloDecks } from './data/solo-decks.js';
 
 export const SESSION_STORAGE_KEY = 'mingle.cards.session.v1';
 export const SESSION_STORAGE_VERSION = 1;
@@ -15,22 +16,28 @@ function cardIndex() {
   const map = new Map();
   decks.forEach((deck) => deck.questions.forEach((card) => map.set(card.id, { ...card, sourceDeckId: deck.id })));
   decks.forEach((deck) => (deck.r18Questions || []).forEach((card) => { if (!map.has(card.id)) map.set(card.id, { ...card, sourceDeckId: deck.id, r18: true }); }));
+  soloDecks.forEach((deck) => deck.questions.forEach((card) => map.set(card.id, { ...card, sourceDeckId: deck.id, r18: false })));
   challenges.forEach((card) => map.set(card.id, { ...card, kind: 'challenge' }));
   return map;
 }
 function validNames(names) { return Array.isArray(names) && names.length >= 2 && names.length <= 8 && names.every((name) => typeof name === 'string' && name.trim() && name.length <= 24); }
+function validSoloName(name) { return typeof name === 'string' && name.trim() && Array.from(name).length <= 40 && !/[\u0000-\u001f\u007f]/u.test(name); }
+function validUuid(value) { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
 function validCustomQuestion(card) { return card && typeof card.id === 'string' && /^custom:[0-9a-f-]{16,80}$/i.test(card.id) && typeof card.text === 'string' && card.text.trim().length > 0 && Array.from(card.text.trim()).length <= 300 && !/[\u0000-\u001f\u007f\u2028\u2029]/u.test(card.text) && typeof card.r18 === 'boolean'; }
 
 export function saveSession(session, options = {}) {
   const storage = getStorage(options.storage);
-  if (!storage || !session || session.cursor >= session.questions?.length) { if (session?.cursor >= session?.questions?.length) discard(storage); return false; }
+  if (session && session.mode !== undefined && !['group', 'solo'].includes(session.mode)) return false;
+  if (session && session.questionOrder !== undefined && !['fixed', 'shuffle'].includes(session.questionOrder)) return false;
+  if (!storage || !session || (session.cursor >= session.questions?.length && options.allowCompleted !== true)) { if (session?.cursor >= session?.questions?.length && options.allowCompleted !== true) discard(storage); return false; }
   try {
     const now = getNow(options.now);
     const record = {
       version: SESSION_STORAGE_VERSION, savedAt: now, expiresAt: now + SESSION_STORAGE_TTL,
-      sessionId: session.sessionId, participants: [...session.participants], deckId: session.deckId,
+      sessionId: session.sessionId, mode: session.mode === 'solo' ? 'solo' : 'group', questionOrder: session.questionOrder === 'fixed' ? 'fixed' : 'shuffle', participants: [...session.participants], deckId: session.deckId,
       deckIds: [...(session.deckIds || [session.deckId])], mixed: session.mixed === true,
       customSet: session.customSet === true,
+      setId: session.customSet === true && typeof session.setId === 'string' ? session.setId : null,
       setName: session.customSet === true && typeof session.setName === 'string' ? session.setName.trim().slice(0, 80) : null,
       ownerUserId: session.customSet === true && typeof session.ownerUserId === 'string' ? session.ownerUserId : null,
       customQuestions: session.customSet === true && Array.isArray(session.customQuestions) ? session.customQuestions.filter(validCustomQuestion).map((card) => ({ id: card.id, text: card.text, r18: card.r18 })) : [],
@@ -48,24 +55,36 @@ export function saveSession(session, options = {}) {
   } catch { return false; }
 }
 
-function hydrate(record, now) {
+function hydrate(record, now, options = {}) {
   if (!record || record.version !== SESSION_STORAGE_VERSION || !Number.isFinite(record.expiresAt) || record.expiresAt <= now) throw new Error('expired');
-  if (typeof record.sessionId !== 'string' || !/^[A-Za-z0-9-]{8,100}$/.test(record.sessionId) || !validNames(record.participants)) throw new Error('session');
+  const solo = record.mode === undefined ? false : record.mode === 'solo';
+  if (record.mode !== undefined && !['group', 'solo'].includes(record.mode)) throw new Error('mode');
+  if (record.questionOrder !== undefined && !['fixed', 'shuffle'].includes(record.questionOrder)) throw new Error('order');
+  if (typeof record.sessionId !== 'string' || !/^[A-Za-z0-9-]{8,100}$/.test(record.sessionId) || (solo ? !(Array.isArray(record.participants) && record.participants.length === 1 && validSoloName(record.participants[0])) : !validNames(record.participants))) throw new Error('session');
   if ([record.mixed, record.adultConfirmed, record.includeR18, record.includeChallenges, record.revealed].some((value) => typeof value !== 'boolean')) throw new Error('flags');
   const customSet = record.customSet === true;
+  if (solo && customSet && !validUuid(record.ownerUserId)) throw new Error('owner');
+  if (solo && customSet && !validUuid(record.setId)) throw new Error('set');
   let hasCustom = Array.isArray(record.customQuestions) && record.customQuestions.length > 0;
+  if (solo && customSet) hasCustom = true;
   const deckIds = Array.isArray(record.deckIds) ? record.deckIds : [record.deckId];
   if (deckIds.some((id) => typeof id !== 'string' || !/^[A-Za-z0-9-]+$/.test(id))) throw new Error('decks');
-  if (!customSet && ((record.mixed !== true && (deckIds.length !== 1 || record.deckId !== deckIds[0])) || (record.mixed === true && (deckIds.length < 2 || deckIds.length > 3 || record.deckId !== 'mix'))) ) throw new Error('decks');
+  if (solo && (record.mixed || deckIds.length !== 1 || record.deckId !== deckIds[0])) throw new Error('decks');
+  if (!customSet && !solo && ((record.mixed !== true && (deckIds.length !== 1 || record.deckId !== deckIds[0])) || (record.mixed === true && (deckIds.length < 2 || deckIds.length > 3 || record.deckId !== 'mix'))) ) throw new Error('decks');
   if (customSet && (record.deckId !== 'my-set' || record.mixed !== false || deckIds.length !== 1 || deckIds[0] !== 'my-set')) throw new Error('decks');
   if (new Set(deckIds).size !== deckIds.length) throw new Error('decks');
-  const sourceDecks = deckIds.map((id) => decks.find((deck) => deck.id === id));
-  if (!customSet && sourceDecks.some((deck) => !deck || !Array.isArray(deck.questions) || deck.questions.length !== 40)) throw new Error('source');
+  const sourceDecks = deckIds.map((id) => (solo && !customSet ? soloDecks : decks).find((deck) => deck.id === id));
+  if (solo && !customSet && (record.questionOrder !== 'fixed' || !sourceDecks[0] || sourceDecks[0].questions.length !== 12)) throw new Error('source');
+  if (solo && !customSet && (record.mixed !== false || record.includeR18 !== false || record.includeChallenges !== false || record.adultConfirmed !== false)) throw new Error('solo-flags');
+  if (!customSet && !solo && sourceDecks.some((deck) => !deck || !Array.isArray(deck.questions) || deck.questions.length !== 40)) throw new Error('source');
   if (!customSet && record.mixed && sourceDecks.some((deck) => deck.adultOnly)) throw new Error('mixed-adult');
   if (!customSet && record.mixed && sourceDecks.some((deck) => deck.questions.some((card) => card.r18))) throw new Error('mixed-r18');
   if (!record.mixed && !customSet && ((record.includeR18 && record.adultConfirmed !== true) || (sourceDecks[0].adultOnly && record.adultConfirmed !== true))) throw new Error('consent');
   if (record.mixed && (record.includeR18 || record.adultConfirmed)) throw new Error('mixed-options');
-  if (!Array.isArray(record.questionIds) || record.questionIds.length < (customSet ? 6 : 40) || record.questionIds.length > 40 || record.questionIds.some((id) => typeof id !== 'string') || new Set(record.questionIds).size !== record.questionIds.length) throw new Error('questions');
+  const soloMin = 6;
+  const soloMax = customSet ? 40 : 12;
+  if (!Array.isArray(record.questionIds) || record.questionIds.length < (solo ? soloMin : customSet ? 6 : 40) || record.questionIds.length > (solo ? soloMax : 40) || record.questionIds.some((id) => typeof id !== 'string') || new Set(record.questionIds).size !== record.questionIds.length) throw new Error('questions');
+  if (solo && !customSet && (record.questionIds.length !== 12 || record.questionIds.some((id, index) => id !== sourceDecks[0].questions[index].id))) throw new Error('solo-order');
   const customQuestionIds = record.questionIds.filter((id) => id.startsWith('custom:'));
   hasCustom = hasCustom || customQuestionIds.length > 0;
   if (hasCustom && (!customSet || typeof record.ownerUserId !== 'string' || !/^[0-9a-f-]{8,100}$/i.test(record.ownerUserId))) throw new Error('owner');
@@ -77,8 +96,9 @@ function hydrate(record, now) {
   const questions = record.questionIds.map((id, i) => {
     const card = index.get(id) || customIndex.get(id); if (!card) throw new Error('question');
     if (card.kind === 'challenge' && !record.includeChallenges) throw new Error('challenge');
-    if (customSet && (card.kind === 'challenge' || !sources[i] || (card.custom ? sources[i] !== 'custom' : !decks.some((deck) => deck.id === sources[i] && (deck.questions.some((item) => item.id === id) || deck.r18Questions?.some((item) => item.id === id)))))) throw new Error('question-source');
-    if (!customSet && !record.mixed && card.kind !== 'challenge') {
+    if (customSet && (card.kind === 'challenge' || !sources[i] || (card.custom ? sources[i] !== 'custom' : ![...decks, ...soloDecks].some((deck) => deck.id === sources[i] && (deck.questions.some((item) => item.id === id) || deck.r18Questions?.some((item) => item.id === id)))))) throw new Error('question-source');
+    if (solo && !customSet && card.kind !== 'challenge' && !sourceDecks[0].questions.some((item) => item.id === id)) throw new Error('question-source');
+    if (!customSet && !solo && !record.mixed && card.kind !== 'challenge') {
       const deck = sourceDecks[0];
       const regular = deck.questions.some((item) => item.id === id);
       const optionalR18 = record.includeR18 && deck.r18Questions?.some((item) => item.id === id);
@@ -100,7 +120,7 @@ function hydrate(record, now) {
   const questionIndex = new Map(record.questionIds.map((id, index) => [id, index]));
   if (revealedQuestionIds.some((id) => {
     const card = questions[questionIndex.get(id)];
-    return card?.sourceDeckId === 'custom' || card?.custom === true || card?.kind === 'challenge' || questionIndex.get(id) > record.cursor || (!record.revealed && questionIndex.get(id) >= record.cursor);
+    return (!solo && (card?.sourceDeckId === 'custom' || card?.custom === true)) || card?.kind === 'challenge' || questionIndex.get(id) > record.cursor || (!record.revealed && questionIndex.get(id) >= record.cursor);
   })) throw new Error('revealed-history');
   const finalLength = record.questionIds.length;
   const validUnlock = (value) => value === finalLength || (value >= 6 && value < finalLength && value % 6 === 0);
@@ -115,15 +135,15 @@ function hydrate(record, now) {
     if (!match || !record.questionIds.includes(match[1]) || Number(match[2]) >= record.participants.length || !Number.isSafeInteger(value) || value < 0) throw new Error('likes');
   }
   const feedbackSubmitted = Array.isArray(record.feedbackSubmitted) ? [...new Set(record.feedbackSubmitted.filter((cursor) => Number.isInteger(cursor) && cursor >= 6 && cursor <= finalLength && cursor <= record.cursor))] : [];
-  if (record.cursor >= finalLength) return null;
-  return { sessionId: record.sessionId, setName: customSet && typeof record.setName === 'string' ? record.setName : null, participants: [...record.participants], deckId: record.deckId, deckIds, customSet, ownerUserId: hasCustom ? record.ownerUserId : null, customQuestions: hasCustom ? record.customQuestions.map((card) => ({ ...card })) : [], mixed: record.mixed === true, questions, cursor: record.cursor, unlockedUntil: record.unlockedUntil, roundStart: Number.isInteger(record.roundStart) ? record.roundStart : Math.max(0, record.unlockedUntil - 6), roundCount: Number.isInteger(record.roundCount) ? record.roundCount : record.cursor % 6, roundNumber: Number.isInteger(record.roundNumber) ? record.roundNumber : Math.floor(record.cursor / 6) + 1, adultConfirmed: record.adultConfirmed === true, includeR18: record.includeR18 === true, includeChallenges: record.includeChallenges === true, revealed: record.revealed === true, answerIndex: record.answerIndex, likes: { ...likes }, feedbackSubmitted, revealedQuestionIds };
+  if (record.cursor >= finalLength && options.allowCompleted !== true) return null;
+  return { sessionId: record.sessionId, mode: solo ? 'solo' : 'group', questionOrder: record.questionOrder === 'fixed' ? 'fixed' : 'shuffle', setId: customSet && typeof record.setId === 'string' ? record.setId : null, setName: customSet && typeof record.setName === 'string' ? record.setName : null, participants: [...record.participants], deckId: record.deckId, deckIds, customSet, ownerUserId: hasCustom ? record.ownerUserId : null, customQuestions: hasCustom ? record.customQuestions.map((card) => ({ ...card })) : [], mixed: record.mixed === true, questions, cursor: record.cursor, unlockedUntil: record.unlockedUntil, roundStart: Number.isInteger(record.roundStart) ? record.roundStart : Math.max(0, record.unlockedUntil - 6), roundCount: Number.isInteger(record.roundCount) ? record.roundCount : record.cursor % 6, roundNumber: Number.isInteger(record.roundNumber) ? record.roundNumber : Math.floor(record.cursor / 6) + 1, adultConfirmed: record.adultConfirmed === true, includeR18: record.includeR18 === true, includeChallenges: record.includeChallenges === true, revealed: record.revealed === true, answerIndex: record.answerIndex, likes: solo ? {} : { ...likes }, feedbackSubmitted: solo ? [] : feedbackSubmitted, revealedQuestionIds };
 }
 
 export function loadSession(options = {}) {
   const storage = getStorage(options.storage); if (!storage) return null;
   try {
     const raw = storage.getItem(SESSION_STORAGE_KEY); if (!raw) return null;
-    const value = hydrate(JSON.parse(raw), getNow(options.now));
+    const value = hydrate(JSON.parse(raw), getNow(options.now), options);
     if (!value) { discard(storage); return null; }
     return value;
   } catch { discard(storage); return null; }
