@@ -7,6 +7,11 @@
       "has": [{ "type": "host", "value": "about.mingle.cards" }],
       "dest": "/about/index.html"
     },
+    {
+      "src": "/",
+      "has": [{ "type": "host", "value": "business.mingle.cards" }],
+      "dest": "/business/index.html"
+    },
     { "src": "/admin/?", "dest": "/admin.html" },
     { "handle": "filesystem" }
   ]
