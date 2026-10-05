@@ -1,0 +1,4 @@
+Use case: ui-mockup
+Asset type: design review contact sheet for a friendly conversation card game
+Primary request: Six Mingle card families, each showing front and back: first meeting, relationships and family, friends, work and future, self-reflection, tasteful adult conversation.
+Constraints: cream paper, navy ink, cobalt/coral/lemon/mint/lavender accents, large blank front text-safe area, no logos or product text in generated cards, no question copy, no explicit adult imagery. Review reference only; implement real question text and brand logo in HTML.

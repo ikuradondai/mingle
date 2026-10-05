@@ -551,8 +551,7 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 body.solo-play .speaker-pill,
 body.solo-play .participant-strip,
 body.solo-play .like-button,
-body.solo-play .answer-actions .secondary-button { display:none; }
-body.solo-play .answer-actions { grid-template-columns:1fr 1fr; }
+
 @media (min-width:681px) {
   .home-screen .home-mode-switch { grid-column:1 / -1; grid-row:2; width:min(100%,360px); margin:0 auto 4px; }
   .home-screen .form-panel { grid-row:3; }
@@ -584,8 +583,6 @@ body.solo-play .answer-actions { grid-template-columns:1fr 1fr; }
 .theme-screen .solo-deck-list .solo-deck-option .deck-option-copy small { display:block; line-height:1.35; }
 .solo-theme-screen > .primary-button { margin-top:16px !important; margin-bottom:12px !important; }
 @media (max-width:520px) { .theme-screen .solo-deck-list .solo-deck-option { min-height:126px; padding:11px 9px; gap:7px; } }
-body.solo-play .answer-actions { grid-template-columns:1fr 1fr; }
-body.solo-play .answer-actions .primary-button, body.solo-play .answer-actions .pass-button { grid-column:auto; grid-row:auto; }
 .solo-theme-screen .screen-brand .text-button { white-space:nowrap; min-height:40px; padding-inline:8px; font-size:12px; }
 .solo-theme-screen .solo-deck-option:nth-child(1) { background:#fff8ea; }
 .solo-theme-screen .solo-deck-option:nth-child(2) { background:#eef6ff; }
@@ -640,3 +637,130 @@ body.solo-play .answer-actions .primary-button, body.solo-play .answer-actions .
 .home-solo-panel{display:grid;gap:7px;margin:0 auto;padding:16px 18px;border:1px solid rgba(23,105,232,.18);border-radius:19px;background:#fffdf8;box-shadow:0 8px 22px rgba(20,33,61,.07)}.home-solo-panel h2{margin:0;font-size:22px;letter-spacing:-.035em}.home-solo-panel p{margin:0;color:var(--muted);line-height:1.45}.home-solo-panel .primary-button{width:100%;margin-top:5px}
 .home-screen:has(.home-solo-panel) .home-illustration{width:100%;max-width:600px;margin-left:auto;margin-right:auto}
 @media(max-width:520px){.solo-theme-screen{padding:0 10px 16px}.solo-theme-header{margin-bottom:14px}.solo-theme-screen>.solo-deck-list{grid-template-columns:1fr;gap:10px}.solo-theme-card{grid-template-columns:52px minmax(0,1fr);min-height:104px;padding:13px;border-radius:17px}.solo-theme-card .solo-topic-icon{width:46px;height:46px}.solo-card-copy strong{font-size:16px}.solo-card-copy small{font-size:13px}.solo-card-check{right:13px;top:13px}.solo-mysets{margin-top:18px}.home-solo-panel{padding:14px 15px}}
+
+/* Solo play keeps the question quiet and readable without changing group play. */
+body.solo-play .content{width:min(100%,920px);margin-inline:auto;padding-top:18px;padding-bottom:36px}
+body.solo-play .solo-play-head{max-width:880px;margin:0 auto;align-items:end;padding:0 4px}
+body.solo-play .solo-play-head .play-deck{font-size:18px;line-height:1.25}
+body.solo-play .solo-play-head .progress-copy{font-size:12px;margin-top:4px}
+body.solo-play .solo-play-head .quiet-button{min-height:40px;font-size:13px}
+body.solo-play .solo-round-progress{max-width:880px;margin:12px auto 18px}
+body.solo-play{--solo-card-min-height:clamp(280px,42dvh,430px)}
+body.solo-play .solo-question-card{width:min(100%,880px);min-height:var(--solo-card-min-height);margin:0 auto;padding:clamp(30px,5vw,64px);border:1px solid rgba(23,45,88,.1);border-radius:24px;background:#fffdf8;box-shadow:0 12px 28px rgba(20,33,61,.08);transform:none;overflow:visible}
+body.solo-play .solo-question-card::before,body.solo-play .solo-question-card::after{display:none}
+body.solo-play .solo-question-card p{font-size:clamp(28px,3.3vw,34px);line-height:1.35;letter-spacing:-.045em}
+body.solo-play .solo-question-card .card-audio-toggle{left:20px;bottom:18px;box-shadow:0 3px 10px rgba(20,33,61,.1)}
+body.solo-play .solo-answer-actions{width:min(100%,680px);grid-template-columns:minmax(0,1fr) 120px;margin:24px auto 0;gap:10px}
+body.solo-play .solo-answer-actions .primary-button,body.solo-play .solo-answer-actions .pass-button{grid-column:auto;grid-row:auto;min-height:52px}
+body.solo-play .solo-answer-actions .pass-button{font-size:13px;font-weight:700;color:var(--muted);background:transparent;border-color:transparent}
+body.solo-play .solo-memo{width:min(100%,680px);margin:18px auto 0;padding:0;border:0;border-top:1px solid rgba(23,45,88,.12);border-radius:0;background:transparent;box-shadow:none}
+body.solo-play .solo-memo summary{display:flex;align-items:center;min-height:44px;color:var(--muted);font-size:13px;font-weight:800;cursor:pointer;list-style:none}
+body.solo-play .solo-memo summary::-webkit-details-marker{display:none}body.solo-play .solo-memo summary::before{content:'⌄';order:2;margin-left:auto;color:var(--blue);font-size:15px}body.solo-play .solo-memo[open] summary::before{content:'⌃'}
+body.solo-play .solo-memo label{margin-top:8px;font-size:13px}body.solo-play .solo-memo textarea{display:block;box-sizing:border-box;width:100%;min-height:96px;margin:8px 0 10px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-size:16px;line-height:1.5;resize:vertical}
+body.solo-play .solo-memo .secondary-button{display:inline-flex;align-items:center;justify-content:center;min-width:96px;min-height:44px;padding:0 16px;border-radius:12px;font-size:14px;font-weight:800}
+@media(max-width:680px){body.solo-play{--solo-card-min-height:clamp(220px,38dvh,340px)}body.solo-play .content{padding:12px 16px 28px}body.solo-play .solo-play-head{align-items:start;padding:0}.solo-play-head .quiet-button{padding-inline:6px}body.solo-play .solo-round-progress{margin:10px auto 14px}body.solo-play .solo-question-card{padding:28px 22px 62px;border-radius:20px}body.solo-play .solo-question-card p{font-size:clamp(26px,7vw,34px);line-height:1.34}body.solo-play .solo-answer-actions{grid-template-columns:minmax(0,1fr) 92px;margin-top:18px;gap:8px}body.solo-play .solo-answer-actions .primary-button,body.solo-play .solo-answer-actions .pass-button{min-height:48px}body.solo-play .solo-memo{margin-top:14px}}
+
+body.solo-play .solo-card-back-wrap{width:min(100%,880px);margin:0 auto}
+body.solo-play .solo-card-back{min-height:var(--solo-card-min-height);border:1px solid rgba(23,45,88,.12);border-radius:24px;color:var(--ink);background:#edf4ff;box-shadow:0 12px 28px rgba(20,33,61,.08)}
+body.solo-play .solo-card-back .round-badge{top:16px;left:16px;color:var(--ink);background:#fff}
+body.solo-play .solo-card-back .back-brand{font-size:20px;gap:8px;color:var(--ink)}
+body.solo-play .solo-card-back .back-brand-mark{width:48px;height:48px;border-radius:15px;color:#fff;background:var(--blue)}
+body.solo-play .solo-card-back .back-brand-mark svg{width:38px;height:38px}
+body.solo-play .solo-card-back h1{color:var(--ink);font-size:clamp(26px,3vw,34px)}
+body.solo-play .solo-card-back-wrap .card-audio-toggle{left:20px;bottom:18px;box-shadow:0 3px 10px rgba(20,33,61,.1)}
+body.solo-play .solo-memo summary:focus-visible{outline:3px solid var(--lime);outline-offset:3px;border-radius:8px}
+/* Keep solo cards isolated from the legacy play-card selectors. */
+body.solo-play .app-shell[data-screen="play"] .solo-question-card,
+body.solo-play .app-shell[data-screen="play"] .solo-card-back{min-height:var(--solo-card-min-height);padding:clamp(30px,5vw,64px);border-radius:24px}
+body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;grid-template-columns:minmax(0,1fr) 120px}
+@media(max-width:680px){body.solo-play .app-shell[data-screen="play"] .solo-question-card,body.solo-play .app-shell[data-screen="play"] .solo-card-back{padding:28px 22px 62px;border-radius:20px}body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{grid-template-columns:minmax(0,1fr) 92px}}
+/* Shared navigation header for theme screens and compact play controls. */
+.theme-frame-topbar{width:min(100%,900px);margin:0 auto;padding:max(12px,env(safe-area-inset-top)) 24px 10px;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:64px;box-sizing:border-box}
+.app-brand-home{width:112px;height:58px;min-height:44px;padding:0;overflow:hidden;justify-content:flex-start}
+.app-brand-home img{display:block;width:112px;height:58px;object-fit:contain;object-position:left center}
+.topbar .account-bar,.theme-frame-topbar .account-bar{margin:0 0 0 auto;flex:0 0 auto}
+.icon-action{display:inline-grid;place-items:center;width:44px;height:44px;min-width:44px;padding:0;border:1px solid rgba(23,45,88,.14);border-radius:13px;background:#fff;color:var(--blue);cursor:pointer}
+.icon-action svg{width:22px;height:22px}
+.action-icon{display:inline-block;width:18px;height:18px;vertical-align:-4px;stroke:currentColor;flex:0 0 auto}
+.primary-button .action-icon,.secondary-button .action-icon,.pass-button .action-icon,.like-button .action-icon{margin-right:6px}
+.solo-memo summary{gap:6px}.solo-memo summary .action-icon{width:17px;height:17px;vertical-align:-3px}
+.answer-actions .secondary-button:has(.action-icon){min-width:44px;padding:0 12px}.answer-actions .like-button{display:inline-flex;align-items:center;justify-content:center;gap:4px}.answer-actions .like-button .action-icon{margin:0;width:18px;height:18px}
+.icon-action:focus-visible,.app-brand-home:focus-visible{outline:3px solid var(--lime);outline-offset:3px}
+@media(max-width:680px){.theme-frame-topbar{padding-left:16px;padding-right:16px}.app-brand-home,.app-brand-home img{width:100px;height:52px}.theme-frame-topbar .account-button{width:44px;height:44px}}
+@media (orientation:landscape) and (max-height:560px){body.solo-play .app-shell[data-screen="play"] .content{display:block;grid-template-columns:none;grid-template-rows:none;gap:0;padding-left:16px;padding-right:16px}body.solo-play .app-shell[data-screen="play"] .solo-question-card,body.solo-play .app-shell[data-screen="play"] .solo-card-back{grid-column:auto;grid-row:auto}}
+/* Generated card art: HTML owns all copy; family art supplies paper, corners, and the reverse illustration. */
+.app-shell[data-screen="play"] .content { width:min(100%,728px); margin-inline:auto; }
+.app-shell[data-screen="play"] .question-card[data-card-family],
+.app-shell[data-screen="play"] .card-back[data-card-family] {
+  position: relative;
+  width: 100%;
+  max-width: 680px;
+  margin-inline: auto;
+  border: 1px solid color-mix(in srgb, var(--card-art-accent) 38%, #fff 62%);
+  border-radius: 24px;
+  background: #fffaf3;
+  box-shadow: 0 10px 24px rgba(20,33,61,.1);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.app-shell[data-screen="play"] .question-card[data-card-family] {
+  min-height: clamp(250px, 52dvh, 520px);
+  padding: clamp(72px, 8vw, 94px) clamp(90px, 10vw, 120px) 76px;
+  isolation: isolate;
+}
+.app-shell[data-screen="play"] .question-card[data-card-family] p { position: relative; z-index: 1; overflow-wrap: anywhere; }
+.app-shell[data-screen="play"] .question-card[data-card-family]::before,
+.app-shell[data-screen="play"] .question-card[data-card-family]::after { display:none; }
+.app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner {
+  position: absolute; z-index: 0; width: clamp(60px, 11vw, 110px); height: auto;
+  pointer-events: none; user-select: none;
+}
+.app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner-tl { top: 0; left: 0; mask-image:linear-gradient(90deg,#000 0 86%,transparent),linear-gradient(180deg,#000 0 86%,transparent); mask-composite:intersect; }
+.app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner-tr { top: 0; right: 0; mask-image:linear-gradient(270deg,#000 0 86%,transparent),linear-gradient(180deg,#000 0 86%,transparent); mask-composite:intersect; }
+.app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner-bl { bottom: 0; left: 0; mask-image:linear-gradient(90deg,#000 0 86%,transparent),linear-gradient(0deg,#000 0 86%,transparent); mask-composite:intersect; }
+.app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner-br { bottom: 0; right: 0; mask-image:linear-gradient(270deg,#000 0 86%,transparent),linear-gradient(0deg,#000 0 86%,transparent); mask-composite:intersect; }
+.app-shell[data-screen="play"] [data-card-family] .card-theme-mark {
+  position:absolute; top:16px; left:18px; right:auto; z-index:3; display:grid; place-items:center;
+  width:34px; height:34px; color:var(--card-art-accent); border-radius:12px;
+  background:rgba(255,253,248,.84); box-shadow:0 2px 8px rgba(20,33,61,.08);
+}
+.app-shell[data-screen="play"] [data-card-family] .card-theme-mark svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.app-shell[data-screen="play"] .card-back[data-card-family] {
+  min-height:370px; display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr); gap:18px; padding:18px;
+  color:var(--ink);
+}
+.app-shell[data-screen="play"] .card-back[data-card-family] .card-back-art {
+  min-height:320px; width:100%; border-radius:20px; background-image:var(--card-art-back);
+  background-repeat:no-repeat; background-position:center; background-size:contain; background-color:#fffaf3;
+}
+.app-shell[data-screen="play"] .card-back[data-card-family] .card-back-copy {
+  display:flex; flex-direction:column; justify-content:center; align-items:center; gap:14px; min-width:0;
+  padding:24px 18px; border-radius:20px; background:rgba(255,250,243,.94); text-align:center;
+}
+.app-shell[data-screen="play"] .card-back[data-card-family] .card-back-logo { width:min(180px,74%); height:auto; object-fit:contain; }
+.app-shell[data-screen="play"] .card-back[data-card-family] .card-theme-mark { position:static; width:36px; height:36px; }
+.app-shell[data-screen="play"] .card-back[data-card-family] .card-back-copy h1 { margin:0; color:var(--ink); font-size:clamp(24px,3vw,34px); }
+.app-shell[data-screen="play"] .card-back[data-card-family] .card-back-copy p { display:none; }
+.app-shell[data-screen="play"] .card-back[data-card-family] .round-badge { z-index:3; color:var(--ink); background:var(--lime); }
+.app-shell[data-screen="play"] .solo-card-back[data-card-family] { width:100%; max-width:680px; }
+.app-shell[data-screen="play"] .solo-card-motif { color:var(--card-art-accent); }
+@media (max-width:680px) {
+  .app-shell[data-screen="play"] .question-card[data-card-family] { min-height:clamp(240px,42dvh,390px); padding:58px 50px 66px; border-radius:21px; }
+  .app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner { width:clamp(60px,19vw,75px); }
+  .app-shell[data-screen="play"] .card-back[data-card-family] { position:relative; display:block; min-height:clamp(380px,58dvh,430px); max-width:680px; padding:0; border-radius:22px; }
+  .app-shell[data-screen="play"] .card-back[data-card-family] .card-back-art { position:absolute; inset:0; width:100%; min-height:0; border-radius:21px; background-size:cover; }
+  .app-shell[data-screen="play"] .card-back[data-card-family] .card-back-copy { position:absolute; left:50%; bottom:18px; z-index:2; width:auto; min-width:180px; transform:translateX(-50%); gap:6px; padding:10px 20px; border-radius:999px; background:#fffaf3; box-shadow:0 4px 14px rgba(20,33,61,.16); }
+  .app-shell[data-screen="play"] .card-back[data-card-family] .card-back-logo { display:none; }
+  .app-shell[data-screen="play"] .card-back[data-card-family] .card-back-copy h1 { font-size:20px; white-space:nowrap; }
+  .app-shell[data-screen="play"] .solo-card-back[data-card-family] { min-height:clamp(380px,58dvh,430px); padding:0; }
+}
+/* Solo's older question-card rules remain available for the non-art fallback, but
+   they must not override the art card's measured surface. */
+body.solo-play .app-shell[data-screen="play"] .question-card[data-card-family] { min-height:clamp(240px,42dvh,390px); padding:58px 50px 66px; border:1px solid color-mix(in srgb,var(--card-art-accent) 38%,#fff 62%); border-radius:24px; background:#fffaf3; box-shadow:0 10px 24px rgba(20,33,61,.1); }
+body.solo-play .app-shell[data-screen="play"] .card-back[data-card-family] { width:100%; max-width:680px; min-height:370px; padding:18px; }
+body.solo-play .app-shell[data-screen="play"] .question-card[data-card-family]::before,
+body.solo-play .app-shell[data-screen="play"] .question-card[data-card-family]::after { display:none; }
+@media (max-width:680px) {
+  body.solo-play .app-shell[data-screen="play"] .question-card[data-card-family] { min-height:clamp(240px,42dvh,390px); padding:58px 50px 66px; }
+  body.solo-play .app-shell[data-screen="play"] .card-back[data-card-family] { min-height:clamp(380px,58dvh,430px); padding:0; }
+}

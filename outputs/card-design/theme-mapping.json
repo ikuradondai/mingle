@@ -1,0 +1,371 @@
+{
+  "generatedAt": "2026-10-06",
+  "count": 44,
+  "families": [
+    "welcome",
+    "romance",
+    "adult",
+    "friends",
+    "work",
+    "family",
+    "sports",
+    "roleplay",
+    "self"
+  ],
+  "missing": [],
+  "extra": [],
+  "themes": [
+    {
+      "id": "date",
+      "title": "初対面の初デート",
+      "family": "welcome",
+      "variant": 0,
+      "accent": "#ef6a55",
+      "mode": "group"
+    },
+    {
+      "id": "acquaintance-date",
+      "title": "知り合いとの初デート",
+      "family": "welcome",
+      "variant": 1,
+      "accent": "#1769e8",
+      "mode": "group"
+    },
+    {
+      "id": "couples",
+      "title": "夫婦で、あらためて",
+      "family": "romance",
+      "variant": 0,
+      "accent": "#e9b62f",
+      "mode": "group"
+    },
+    {
+      "id": "intimacy",
+      "title": "大人の本音、話してみる？",
+      "family": "adult",
+      "variant": 0,
+      "accent": "#7d3457",
+      "mode": "group"
+    },
+    {
+      "id": "friends",
+      "title": "友人と、もう一歩",
+      "family": "friends",
+      "variant": 0,
+      "accent": "#5eb59d",
+      "mode": "group"
+    },
+    {
+      "id": "founders",
+      "title": "起業家の本音",
+      "family": "work",
+      "variant": 0,
+      "accent": "#326d74",
+      "mode": "group"
+    },
+    {
+      "id": "team",
+      "title": "一緒に働く仲間",
+      "family": "work",
+      "variant": 1,
+      "accent": "#1769e8",
+      "mode": "group"
+    },
+    {
+      "id": "parent-50plus",
+      "title": "親子で語る人生",
+      "family": "family",
+      "variant": 0,
+      "accent": "#e9a35d",
+      "mode": "group"
+    },
+    {
+      "id": "parent-under12",
+      "title": "親子でわくわく",
+      "family": "family",
+      "variant": 1,
+      "accent": "#5eb59d",
+      "mode": "group"
+    },
+    {
+      "id": "reunion",
+      "title": "久しぶりの旧友と",
+      "family": "friends",
+      "variant": 1,
+      "accent": "#1769e8",
+      "mode": "group"
+    },
+    {
+      "id": "siblings",
+      "title": "きょうだいで、あらためて",
+      "family": "family",
+      "variant": 3,
+      "accent": "#8471c6",
+      "mode": "group"
+    },
+    {
+      "id": "new-couple",
+      "title": "付き合いはじめのふたり",
+      "family": "romance",
+      "variant": 1,
+      "accent": "#ef6a55",
+      "mode": "group"
+    },
+    {
+      "id": "moving-in",
+      "title": "一緒に暮らす前のふたり",
+      "family": "romance",
+      "variant": 2,
+      "accent": "#b65d87",
+      "mode": "group"
+    },
+    {
+      "id": "first-intimacy",
+      "title": "はじめてを迎えるふたり",
+      "family": "adult",
+      "variant": 1,
+      "accent": "#a94f64",
+      "mode": "group"
+    },
+    {
+      "id": "intimacy-refresh",
+      "title": "ふたりに、新しいときめきを",
+      "family": "adult",
+      "variant": 2,
+      "accent": "#9b6a3a",
+      "mode": "group"
+    },
+    {
+      "id": "intimacy-distance",
+      "title": "ひさしぶりに踏み出せないふたり",
+      "family": "adult",
+      "variant": 3,
+      "accent": "#5a315d",
+      "mode": "group"
+    },
+    {
+      "id": "family-reunion",
+      "title": "久しぶりに会う親子",
+      "family": "family",
+      "variant": 2,
+      "accent": "#ef6a55",
+      "mode": "group"
+    },
+    {
+      "id": "new-colleagues",
+      "title": "新しく加わった仲間と",
+      "family": "work",
+      "variant": 2,
+      "accent": "#e9b62f",
+      "mode": "group"
+    },
+    {
+      "id": "sports-teammates",
+      "title": "スポーツのチームメートと",
+      "family": "sports",
+      "variant": 0,
+      "accent": "#1769e8",
+      "mode": "group"
+    },
+    {
+      "id": "omiai",
+      "title": "お見合い",
+      "family": "welcome",
+      "variant": 2,
+      "accent": "#e9b62f",
+      "mode": "group"
+    },
+    {
+      "id": "party-first-meeting",
+      "title": "パーティで、はじめまして",
+      "family": "welcome",
+      "variant": 3,
+      "accent": "#4da99a",
+      "mode": "group"
+    },
+    {
+      "id": "business-meetup",
+      "title": "ビジネスミートアップで、はじめまして",
+      "family": "welcome",
+      "variant": 0,
+      "accent": "#ef6a55",
+      "mode": "group"
+    },
+    {
+      "id": "bar-first-meeting",
+      "title": "バーで、はじめまして",
+      "family": "welcome",
+      "variant": 0,
+      "accent": "#ef6a55",
+      "mode": "group"
+    },
+    {
+      "id": "promotion-rivals",
+      "title": "出世のライバル同士",
+      "family": "work",
+      "variant": 3,
+      "accent": "#5eb59d",
+      "mode": "group"
+    },
+    {
+      "id": "love-rivals",
+      "title": "恋のライバル同士",
+      "family": "romance",
+      "variant": 1,
+      "accent": "#ef6a55",
+      "mode": "group"
+    },
+    {
+      "id": "arch-enemies",
+      "title": "仇敵同士",
+      "family": "roleplay",
+      "variant": 2,
+      "accent": "#ef6a55",
+      "mode": "group"
+    },
+    {
+      "id": "hero-and-demon-king",
+      "title": "勇者と魔王同士",
+      "family": "roleplay",
+      "variant": 0,
+      "accent": "#6d5ab8",
+      "mode": "group"
+    },
+    {
+      "id": "assassin-and-target",
+      "title": "暗殺者とターゲット同士",
+      "family": "roleplay",
+      "variant": 1,
+      "accent": "#1769e8",
+      "mode": "group"
+    },
+    {
+      "id": "ex-lovers",
+      "title": "元恋人同士",
+      "family": "romance",
+      "variant": 0,
+      "accent": "#e9b62f",
+      "mode": "group"
+    },
+    {
+      "id": "detective-and-phantom-thief",
+      "title": "探偵と怪盗同士",
+      "family": "roleplay",
+      "variant": 3,
+      "accent": "#e9b62f",
+      "mode": "group"
+    },
+    {
+      "id": "in-laws",
+      "title": "義理の親子同士",
+      "family": "family",
+      "variant": 0,
+      "accent": "#e9a35d",
+      "mode": "group"
+    },
+    {
+      "id": "same-oshi-fans",
+      "title": "同担の推し仲間",
+      "family": "friends",
+      "variant": 2,
+      "accent": "#ef6a55",
+      "mode": "group"
+    },
+    {
+      "id": "roommates",
+      "title": "ルームメイトと、あらためて",
+      "family": "friends",
+      "variant": 3,
+      "accent": "#e9b62f",
+      "mode": "group"
+    },
+    {
+      "id": "grandparents-and-grandchildren",
+      "title": "祖父母と孫で、3世代トーク",
+      "family": "family",
+      "variant": 1,
+      "accent": "#5eb59d",
+      "mode": "group"
+    },
+    {
+      "id": "neighbors",
+      "title": "ご近所さんと、はじめまして",
+      "family": "welcome",
+      "variant": 1,
+      "accent": "#1769e8",
+      "mode": "group"
+    },
+    {
+      "id": "travel-companions",
+      "title": "旅の道連れと",
+      "family": "friends",
+      "variant": 0,
+      "accent": "#5eb59d",
+      "mode": "group"
+    },
+    {
+      "id": "late-night-diner",
+      "title": "深夜のファミレスで",
+      "family": "friends",
+      "variant": 1,
+      "accent": "#1769e8",
+      "mode": "group"
+    },
+    {
+      "id": "group-mixer",
+      "title": "合コン・街コンで、はじめまして",
+      "family": "welcome",
+      "variant": 2,
+      "accent": "#e9b62f",
+      "mode": "group"
+    },
+    {
+      "id": "engaged-couple",
+      "title": "結婚を控えたふたり",
+      "family": "romance",
+      "variant": 3,
+      "accent": "#1769e8",
+      "mode": "group"
+    },
+    {
+      "id": "classmates",
+      "title": "クラスメイトと、学校あるある",
+      "family": "welcome",
+      "variant": 3,
+      "accent": "#4da99a",
+      "mode": "group"
+    },
+    {
+      "id": "self-values",
+      "title": "自分の価値観",
+      "family": "self",
+      "variant": 0,
+      "accent": "#8471c6",
+      "mode": "solo"
+    },
+    {
+      "id": "self-strengths",
+      "title": "強みを見つける",
+      "family": "self",
+      "variant": 1,
+      "accent": "#1769e8",
+      "mode": "solo"
+    },
+    {
+      "id": "self-work",
+      "title": "仕事とこれから",
+      "family": "self",
+      "variant": 2,
+      "accent": "#5eb59d",
+      "mode": "solo"
+    },
+    {
+      "id": "self-checkin",
+      "title": "最近の自分",
+      "family": "self",
+      "variant": 3,
+      "accent": "#e9b62f",
+      "mode": "solo"
+    }
+  ]
+}
