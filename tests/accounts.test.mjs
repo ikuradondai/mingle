@@ -230,6 +230,7 @@ test('custom cards enforce exact payload, owner identity, and set references', a
   const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url, options = {}) => {
     calls.push({ url, options });
     if (url.endsWith('/auth/v1/user')) return response(200, { id: 'owner-1', email: 'x@y.test' });
+    if (url.includes('/account_profiles?')) return response(200, [{ adult_confirmed_at: '2026-10-05T09:12:00+00:00' }]);
     if (url.includes('/custom_cards?user_id=')) return response(200, [{ id: uuid, text: 'Saved', r18: false, created_at: '2026-01-01', updated_at: '2026-01-01' }]);
     if (url.endsWith('/custom_cards') && options.method === 'POST') return response(201, [{ id: uuid, text: '  New  ', r18: true, created_at: '2026-01-01', updated_at: '2026-01-01' }]);
     if (url.includes('/custom_cards?id=') && options.method === 'PATCH') return response(200, [{ id: uuid, text: 'Edited', r18: true, created_at: '2026-01-01', updated_at: '2026-01-01' }]);
@@ -308,6 +309,7 @@ test('AI question generation is optional, strict, and never persists a draft', a
   let aiRequest;
   const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey, OPENAI_API_KEY: 'openai-test' }, rateLimitImpl: async () => 1, fetchImpl: async (url, options = {}) => {
     if (url.endsWith('/auth/v1/user')) return response(200, { id: 'owner-1' });
+    if (url.includes('/account_profiles?')) return response(200, [{ adult_confirmed_at: '2026-10-05T09:12:00+00:00' }]);
     if (url === 'https://api.openai.com/v1/responses') { aiRequest = JSON.parse(options.body); const includeR18 = aiRequest.instructions.includes('成人向けの話題を含めてもよい'); return response(200, { output_text: JSON.stringify({ name: 'AI案', questions: Array.from({ length: 6 }, (_, index) => ({ text: `質問${index}`, r18: includeR18 && index === 0 })) }) }); }
     return response(200, []);
   } });
@@ -331,4 +333,143 @@ test('AI generation fails closed on quota, provider, malformed, R18, and abort r
   await assert.rejects(() => make(async () => ({ minute: 1, daily: 1, minuteLimit: 3, dailyLimit: 30 }), async () => response(200, { output_text: '{' })).aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: input }), body: input }), (error) => error.status === 503);
   await assert.rejects(() => make(async () => ({ minute: 1, daily: 1, minuteLimit: 3, dailyLimit: 30 }), async () => response(200, { output_text: JSON.stringify({ name: 'x', questions: Array.from({ length: 6 }, () => ({ text: 'q', r18: true })) }) })).aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: input }), body: input }), (error) => error.status === 503);
   let signalSeen; await assert.rejects(() => make(async () => ({ minute: 1, daily: 1, minuteLimit: 3, dailyLimit: 30 }), async (_url, options) => { signalSeen = options.signal; throw new Error('AbortError'); }).aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body: input }), body: input }), (error) => error.status === 503); assert.ok(signalSeen);
+});
+
+const anonKeyForAdult = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+const adultEnv = { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKeyForAdult };
+const confirmedRow = { adult_confirmed_at: '2026-10-05T09:12:00+00:00' };
+
+test('/me reports adultConfirmedAt read with the user Bearer, and degrades to unconfirmed', async () => {
+  const calls = [];
+  const confirmed = createAccountService({ env: adultEnv, fetchImpl: async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'user-1' });
+    if (url.includes('/account_profiles?')) return response(200, [confirmedRow]);
+    return response(200, []);
+  } });
+  const me = await confirmed.account(request('/api/account/me'));
+  assert.equal(me.account.adultConfirmedAt, '2026-10-05T09:12:00.000Z'); assert.equal(me.account.adultConfirmationAvailable, true);
+  const read = calls.find((call) => call.url.includes('/account_profiles?'));
+  assert.match(read.url, /user_id=eq\.user-1&select=adult_confirmed_at/); assert.equal(read.options.headers.Authorization, 'Bearer user-token');
+  const none = createAccountService({ env: adultEnv, fetchImpl: async (url) => url.endsWith('/auth/v1/user') ? response(200, { id: 'user-1' }) : response(200, []) });
+  const noRow = await none.account(request('/api/account/me'));
+  assert.equal(noRow.account.adultConfirmedAt, null); assert.equal(noRow.account.adultConfirmationAvailable, true);
+  const missing = createAccountService({ env: adultEnv, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'user-1' });
+    if (url.includes('/account_profiles?')) return response(404, { code: 'PGRST205', message: 'Could not find the table public.account_profiles' });
+    return response(200, []);
+  } });
+  const noTable = await missing.account(request('/api/account/me'));
+  assert.equal(noTable.account.adultConfirmedAt, null); assert.equal(noTable.account.adultConfirmationAvailable, false);
+  const broken = createAccountService({ env: adultEnv, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'user-1' });
+    if (url.includes('/account_profiles?')) return response(500, { message: 'database down' });
+    return response(200, []);
+  } });
+  const failed = await broken.account(request('/api/account/me'));
+  assert.equal(failed.account.adultConfirmedAt, null); assert.equal(failed.account.adultConfirmationAvailable, false);
+});
+
+test('adult-confirmation PUT and DELETE call the RPC as the user and validate the body strictly', async () => {
+  const calls = [];
+  const service = createAccountService({ env: adultEnv, fetchImpl: async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'user-1' });
+    if (url.endsWith('/rpc/set_adult_confirmation')) return response(200, JSON.parse(options.body).p_confirmed ? '2026-10-05T09:12:00.123456+00:00' : null);
+    throw new Error(`unexpected ${url}`);
+  } });
+  const put = (body, extra = {}) => ({ ...request('/api/account/adult-confirmation', { method: 'PUT', body }), body, ...extra });
+  const done = await service.adultConfirmation(put({ source: 'login_screen' }));
+  assert.equal(done.adultConfirmedAt, '2026-10-05T09:12:00.123Z');
+  const rpc = calls.find((call) => call.url.endsWith('/rpc/set_adult_confirmation'));
+  assert.deepEqual(JSON.parse(rpc.options.body), { p_confirmed: true, p_source: 'login_screen' }); assert.equal(rpc.options.headers.Authorization, 'Bearer user-token');
+  assert.equal((await service.adultConfirmation(put({ source: 'settings' }))).adultConfirmedAt, '2026-10-05T09:12:00.123Z');
+  const callCount = calls.length;
+  for (const bad of [{}, { source: 'other' }, { source: 'settings', extra: 1 }, { source: 1 }, { confirmed: true }, [], null]) {
+    await assert.rejects(() => service.adultConfirmation(put(bad)), (error) => error.status === 400 && error.code === 'INVALID_REQUEST', JSON.stringify(bad));
+  }
+  assert.equal(calls.slice(callCount).filter((call) => call.url.endsWith('/rpc/set_adult_confirmation')).length, 0);
+  const del = (body) => ({ ...request('/api/account/adult-confirmation', { method: 'DELETE' }), body });
+  assert.deepEqual(await service.adultConfirmation(del(undefined)), { adultConfirmedAt: null });
+  assert.deepEqual(await service.adultConfirmation(del({})), { adultConfirmedAt: null });
+  assert.deepEqual(JSON.parse(calls.filter((call) => call.url.endsWith('/rpc/set_adult_confirmation')).at(-1).options.body).p_confirmed, false);
+  await assert.rejects(() => service.adultConfirmation(del({ source: 'settings' })), (error) => error.status === 400);
+  await assert.rejects(() => service.adultConfirmation({ ...request('/api/account/adult-confirmation', { method: 'GET' }) }), (error) => error.status === 405);
+  await assert.rejects(() => service.adultConfirmation(put({ source: 'settings' }, { headers: { host: 'localhost' } })), (error) => error.status === 401 && error.code === 'UNAUTHENTICATED');
+});
+
+test('adult-confirmation failures map to 503 when the RPC is missing and never touch data without a Bearer', async () => {
+  const missing = createAccountService({ env: adultEnv, fetchImpl: async (url) => url.endsWith('/auth/v1/user') ? response(200, { id: 'user-1' }) : response(404, { code: 'PGRST202', message: 'function missing' }) });
+  await assert.rejects(() => missing.adultConfirmation({ ...request('/api/account/adult-confirmation', { method: 'PUT' }), body: { source: 'settings' } }), (error) => error.status === 503 && error.code === 'FEATURE_UNAVAILABLE');
+  const never = createAccountService({ env: adultEnv, fetchImpl: async () => { throw new Error('must not call network'); } });
+  await assert.rejects(() => never.adultConfirmation({ ...request('/api/account/adult-confirmation', { method: 'PUT', authorization: '' }), body: { source: 'settings' } }), (error) => error.status === 401);
+  const disabled = createAccountService({ env: {}, fetchImpl: async () => { throw new Error('must not call network'); } });
+  await assert.rejects(() => disabled.adultConfirmation({ ...request('/api/account/adult-confirmation', { method: 'PUT' }), body: { source: 'settings' } }), (error) => error.status === 503);
+});
+
+test('adult-confirmation handler is routed for PUT and DELETE only', async () => {
+  const seen = [];
+  const original = globalThis.fetch; const savedEnv = { url: process.env.SUPABASE_URL, key: process.env.SUPABASE_ANON_KEY };
+  globalThis.fetch = async (url) => { seen.push(String(url)); return response(401, { message: 'invalid' }); };
+  try {
+    process.env.SUPABASE_URL = 'https://project.supabase.co'; process.env.SUPABASE_ANON_KEY = anonKeyForAdult;
+    const { default: handler } = await import('../api/account.js?adult-route');
+    for (const method of ['PUT', 'DELETE']) {
+      const output = sink();
+      await handler(request('/api/account/adult-confirmation', { method, body: method === 'PUT' ? { source: 'settings' } : undefined }), output.res);
+      assert.equal(output.result.status, 401, method); assert.equal(output.result.result.error, 'UNAUTHENTICATED', method);
+    }
+    for (const method of ['GET', 'POST', 'PATCH']) {
+      const output = sink();
+      await handler(request('/api/account/adult-confirmation', { method }), output.res);
+      assert.equal(output.result.status, 405, method);
+    }
+  } finally {
+    globalThis.fetch = original;
+    for (const [name, value] of [['SUPABASE_URL', savedEnv.url], ['SUPABASE_ANON_KEY', savedEnv.key]]) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
+  }
+});
+
+test('R18 AI generation and R18 custom cards require an age-confirmed account; non-R18 and deletes do not', async () => {
+  let confirmed = false;
+  const uuid = '11111111-1111-4111-8111-111111111111';
+  const service = createAccountService({ env: { ...adultEnv, OPENAI_API_KEY: 'openai-test' }, rateLimitImpl: async () => 1, fetchImpl: async (url, options = {}) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'owner-1' });
+    if (url.includes('/account_profiles?')) return response(200, confirmed ? [confirmedRow] : []);
+    if (url === 'https://api.openai.com/v1/responses') { const adult = JSON.parse(options.body).instructions.includes('成人向けの話題を含めてもよい'); return response(200, { output_text: JSON.stringify({ name: 'AI案', questions: Array.from({ length: 6 }, (_, index) => ({ text: `質問${index}`, r18: adult && index === 0 })) }) }); }
+    if (url.endsWith('/custom_cards') && options.method === 'POST') return response(201, [{ id: uuid, text: 'New', r18: JSON.parse(options.body).r18, created_at: 't', updated_at: 't' }]);
+    if (url.includes('/custom_cards?id=') && options.method === 'PATCH') return response(200, [{ id: uuid, text: 'Edited', r18: JSON.parse(options.body).r18, created_at: 't', updated_at: 't' }]);
+    if (url.includes('/custom_cards?id=') && options.method === 'DELETE') return response(200, [{ id: uuid }]);
+    if (url.includes('/my_sets?user_id=')) return response(200, []);
+    throw new Error(`unexpected ${options.method || 'GET'} ${url}`);
+  } });
+  const withBody = (path, method, body) => ({ ...request(path, { method, body }), body });
+  const ai = (r18) => service.aiQuestions(withBody('/api/account/ai/questions', 'POST', { theme: '初対面', tone: '軽い', count: 6, ...(r18 === undefined ? {} : { r18 }) }));
+  const create = (r18) => service.customCard(withBody('/api/account/cards', 'POST', { text: 'New', r18 }));
+  const edit = (r18) => service.customCard(withBody(`/api/account/cards/custom:${uuid}`, 'PATCH', { text: 'Edited', r18 }), `custom:${uuid}`);
+  const denied = (error) => error.status === 403 && error.code === 'AGE_CONFIRMATION_REQUIRED';
+  await assert.rejects(() => ai(true), denied); await assert.rejects(() => create(true), denied); await assert.rejects(() => edit(true), denied);
+  assert.equal((await ai(false)).questions.length, 6); assert.equal((await ai()).questions.length, 6);
+  assert.equal((await create(false)).card.r18, false); assert.equal((await edit(false)).card.r18, false);
+  assert.equal((await service.customCard(request(`/api/account/cards/custom:${uuid}`, { method: 'DELETE' }), `custom:${uuid}`)).deleted, true);
+  confirmed = true;
+  assert.equal((await ai(true)).questions[0].r18, true); assert.equal((await create(true)).card.r18, true); assert.equal((await edit(true)).card.r18, true);
+});
+
+test('aiQuestions validates input and checks age confirmation before consuming quota', async () => {
+  let quotaCalls = 0; let confirmed = false;
+  const service = createAccountService({ env: { ...adultEnv, OPENAI_API_KEY: 'openai-test' }, rateLimitImpl: async () => { quotaCalls += 1; return { minute: 1, daily: 1, minuteLimit: 3, dailyLimit: 30 }; }, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'owner-1' });
+    if (url.includes('/account_profiles?')) return response(200, confirmed ? [confirmedRow] : []);
+    if (url === 'https://api.openai.com/v1/responses') return response(200, { output_text: JSON.stringify({ name: 'AI案', questions: Array.from({ length: 6 }, (_, index) => ({ text: `質問${index}`, r18: false })) }) });
+    return response(200, []);
+  } });
+  const call = (body) => service.aiQuestions({ ...request('/api/account/ai/questions', { method: 'POST', body }), body });
+  await assert.rejects(() => call({ theme: '初対面', tone: '軽い', count: 6, r18: true }), (error) => error.status === 403 && error.code === 'AGE_CONFIRMATION_REQUIRED');
+  await assert.rejects(() => call({ theme: '初対面', tone: '軽い', count: 7 }), (error) => error.status === 400);
+  await assert.rejects(() => call({ theme: '  ', tone: '軽い', count: 6 }), (error) => error.status === 400);
+  assert.equal(quotaCalls, 0, 'rejected requests do not consume quota');
+  confirmed = true;
+  await call({ theme: '初対面', tone: '軽い', count: 6, r18: true });
+  assert.equal(quotaCalls, 1);
 });

@@ -22,6 +22,10 @@ export default async function account(req, res) {
       return json(res, 405, { error: 'METHOD_NOT_ALLOWED' });
     }
     if (pathname === '/api/account/profile' && req.method === 'PATCH') { req.body = await body(req); return json(res, 200, await service.profile(req)); }
+    if (pathname === '/api/account/adult-confirmation') {
+      if (req.method === 'PUT' || req.method === 'DELETE') { req.body = await body(req); return json(res, 200, await service.adultConfirmation(req)); }
+      return json(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+    }
     if (pathname === '/api/account/ai/questions' && req.method === 'POST') { req.body = await body(req); return json(res, 200, await service.aiQuestions(req)); }
     if (pathname === '/api/account/avatar') {
       if (req.method === 'PUT') req.body = await bodyWithLimit(req, 400 * 1024);

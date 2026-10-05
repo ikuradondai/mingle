@@ -25,10 +25,10 @@ test('venue public QR exposes venue active snapshots and server-issued session o
 });
 
 test('venue public start rejects a set outside the current venue and adult snapshots require consent', async () => {
-  const fetchImpl = async (url) => { if (url.includes('/venue_tables?token_hash=')) return response(200, [{ id: tableId, label: 'A卓', venue_id: venueId, venues: { ...venueRow, adult_enabled: true } }]); if (url.includes('/venue_sets?venue_id=')) return response(200, [{ ...setRow, adult_only: true }]); if (url.includes('/venue_sets?id=')) return response(200, [{ ...setRow, adult_only: false, cards: setRow.cards.map((card, index) => index === 0 ? { ...card, r18: true } : card) }]); throw new Error(`unexpected ${url}`); };
+  const fetchImpl = async (url) => { if (url.includes('/venue_tables?token_hash=')) return response(200, [{ id: tableId, label: 'A卓', venue_id: venueId, venues: { ...venueRow, adult_enabled: true, adult_attested_at: '2026-10-05T00:00:00+00:00' } }]); if (url.endsWith('/rpc/is_adult_confirmed')) return response(200, true); if (url.includes('/venue_sets?venue_id=')) return response(200, [{ ...setRow, adult_only: true }]); if (url.includes('/venue_sets?id=')) return response(200, [{ ...setRow, adult_only: false, cards: setRow.cards.map((card, index) => index === 0 ? { ...card, r18: true } : card) }]); throw new Error(`unexpected ${url}`); };
   const service = createVenueService({ env, fetchImpl });
   await assert.rejects(() => service.publicInfo(req(`/api/venue/public/${token}/start`, { method: 'POST', headers: {}, body: { setId: '00000000-0000-4000-8000-000000000099', participants: ['A', 'B'], adultConfirmed: true } }), token, true), (e) => e.code === 'NOT_FOUND');
-  await assert.rejects(() => service.publicInfo(req(`/api/venue/public/${token}/start`, { method: 'POST', headers: {}, body: { setId, participants: ['A', 'B'], adultConfirmed: false } }), token, true), (e) => e.code === 'ADULT_CONSENT_REQUIRED');
+  await assert.rejects(() => service.publicInfo(req(`/api/venue/public/${token}/start`, { method: 'POST', headers: {}, body: { setId, participants: ['A', 'B'], ageConfirmed: true, adultConfirmed: false } }), token, true), (e) => e.code === 'ADULT_CONSENT_REQUIRED');
 });
 
 test('venue completion requires the server-issued session, selected snapshot, and a full six-card block', async () => {
@@ -113,4 +113,152 @@ test('venue owner scope rejects foreign updates and stats paginates beyond one t
   await assert.rejects(() => service.update(req(`/api/venue/${venueId}`, { method: 'PATCH', body: { name: '他店舗' } }), venueId), (error) => error.code === 'NOT_FOUND');
   const stats = await service.stats(req(`/api/venue/${venueId}/stats`), venueId);
   assert.equal(stats.totals.starts, 1000); assert.equal(stats.totals.completedRounds, 2);
+});
+
+const attestedAt = '2026-10-05T00:00:00+00:00';
+const adultCards = Array.from({ length: 6 }, (_, i) => ({ id: `intimacy-0${i + 1}`, text: `R${i + 1}`, r18: true }));
+function ownerFetch({ confirmed = true, row = {} } = {}) {
+  const calls = [];
+  const current = { ...venueRow, ...row };
+  const fetchImpl = async (url, options = {}) => {
+    const method = options.method || 'GET'; calls.push({ url, method, body: options.body ? JSON.parse(options.body) : null });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: owner });
+    if (url.includes('/account_profiles?')) return response(200, confirmed ? [{ adult_confirmed_at: '2026-10-05T09:12:00+00:00' }] : []);
+    if (url.endsWith('/rest/v1/venues') && method === 'POST') { const body = JSON.parse(options.body); return response(201, [{ ...venueRow, ...body, adult_attested_at: body.adult_enabled ? attestedAt : null }]); }
+    if (url.includes('/venues?id=eq.') && method === 'GET') return response(200, [current]);
+    if (url.includes('/venues?id=eq.') && method === 'PATCH') { const body = JSON.parse(options.body); return response(200, [{ ...current, ...body }]); }
+    if (url.endsWith('/rest/v1/venue_sets') && method === 'POST') { const body = JSON.parse(options.body); return response(201, [{ id: setId, ...body, active: true }]); }
+    if (url.includes('/venue_sets?id=eq.') && method === 'GET') return response(200, [{ id: setId, venue_id: venueId, active: false, adult_only: true, venues: { owner_id: owner, adult_enabled: Boolean(current.adult_enabled) } }]);
+    if (url.includes('/venue_sets?id=eq.') && method === 'PATCH') return response(204, null);
+    throw new Error(`unexpected ${method} ${url}`);
+  };
+  return { service: createVenueService({ env, fetchImpl }), calls };
+}
+const post = (path, body, extra = {}) => req(path, { method: 'POST', body, ...extra });
+const patch = (path, body) => req(path, { method: 'PATCH', body });
+
+test('turning R18 on at venue creation needs a confirmed owner account, then the owner attestation', async () => {
+  const unconfirmed = ownerFetch({ confirmed: false });
+  await assert.rejects(() => unconfirmed.service.create(post('/api/venue', { name: '店', adultEnabled: true, participantsAdultAttested: true })), (e) => e.status === 403 && e.code === 'AGE_CONFIRMATION_REQUIRED');
+  assert.equal(unconfirmed.calls.some((call) => call.method === 'POST' && call.url.endsWith('/rest/v1/venues')), false);
+  const { service, calls } = ownerFetch();
+  await assert.rejects(() => service.create(post('/api/venue', { name: '店', adultEnabled: true })), (e) => e.status === 403 && e.code === 'ADULT_ATTESTATION_REQUIRED');
+  await assert.rejects(() => service.create(post('/api/venue', { name: '店', adultEnabled: true, participantsAdultAttested: false })), (e) => e.status === 403 && e.code === 'ADULT_ATTESTATION_REQUIRED');
+  await assert.rejects(() => service.create(post('/api/venue', { name: '店', adultEnabled: true, participantsAdultAttested: 'yes' })), (e) => e.status === 400 && e.code === 'INVALID_REQUEST');
+  const created = await service.create(post('/api/venue', { name: '店', adultEnabled: true, participantsAdultAttested: true }));
+  assert.equal(created.venue.adultEnabled, true);
+  assert.equal(created.venue.adultAttestedAt, '2026-10-05T00:00:00.000Z');
+  const write = calls.find((call) => call.method === 'POST' && call.url.endsWith('/rest/v1/venues'));
+  assert.equal(write.body.adult_enabled, true);
+  assert.equal(Object.hasOwn(write.body, 'adult_attested_at'), false);
+  assert.equal(Object.hasOwn(write.body, 'adult_attested_by'), false);
+  const plain = await service.create(post('/api/venue', { name: '店' }));
+  assert.equal(plain.venue.adultEnabled, false); assert.equal(plain.venue.adultAttestedAt, null);
+});
+
+test('enabling R18 on an existing venue checks account and attestation only on the off-to-on change', async () => {
+  const off = ownerFetch({ confirmed: false, row: { adult_enabled: false } });
+  await assert.rejects(() => off.service.update(patch(`/api/venue/${venueId}`, { adultEnabled: true, participantsAdultAttested: true }), venueId), (e) => e.status === 403 && e.code === 'AGE_CONFIRMATION_REQUIRED');
+  const confirmedOff = ownerFetch({ row: { adult_enabled: false } });
+  await assert.rejects(() => confirmedOff.service.update(patch(`/api/venue/${venueId}`, { adultEnabled: true }), venueId), (e) => e.status === 403 && e.code === 'ADULT_ATTESTATION_REQUIRED');
+  const enabled = await confirmedOff.service.update(patch(`/api/venue/${venueId}`, { adultEnabled: true, participantsAdultAttested: true }), venueId);
+  assert.equal(enabled.venue.adultEnabled, true);
+  const patchBody = confirmedOff.calls.find((call) => call.method === 'PATCH').body;
+  assert.deepEqual(patchBody, { adult_enabled: true });
+  // Already on: no account lookup and no attestation needed.
+  const alreadyOn = ownerFetch({ confirmed: false, row: { adult_enabled: true, adult_attested_at: attestedAt } });
+  const same = await alreadyOn.service.update(patch(`/api/venue/${venueId}`, { adultEnabled: true }), venueId);
+  assert.equal(same.venue.adultEnabled, true);
+  assert.equal(alreadyOn.calls.some((call) => call.url.includes('/account_profiles')), false);
+  // Turning it off never needs a check.
+  const turnOff = await alreadyOn.service.update(patch(`/api/venue/${venueId}`, { adultEnabled: false }), venueId);
+  assert.equal(turnOff.venue.adultEnabled, false);
+});
+
+test('database age-guard failures surface as 403 AGE_CONFIRMATION_REQUIRED', async () => {
+  const fetchImpl = async (url, options = {}) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: owner });
+    if (url.includes('/account_profiles?')) return response(200, [{ adult_confirmed_at: '2026-10-05T09:12:00+00:00' }]);
+    if (url.endsWith('/rest/v1/venues') && options.method === 'POST') return response(400, { code: 'P0001', message: 'AGE_CONFIRMATION_REQUIRED' });
+    throw new Error(`unexpected ${url}`);
+  };
+  const service = createVenueService({ env, fetchImpl });
+  await assert.rejects(() => service.create(post('/api/venue', { name: '店', adultEnabled: true, participantsAdultAttested: true })), (e) => e.status === 403 && e.code === 'AGE_CONFIRMATION_REQUIRED');
+});
+
+test('R18 sets can only be added or re-published by an age-confirmed owner of an R18-enabled venue', async () => {
+  const unconfirmed = ownerFetch({ confirmed: false, row: { adult_enabled: true, adult_attested_at: attestedAt } });
+  await assert.rejects(() => unconfirmed.service.addSet(post(`/api/venue/${venueId}/sets`, { name: '大人', sourceType: 'standard', sourceId: 'intimacy' }), venueId), (e) => e.status === 403 && e.code === 'AGE_CONFIRMATION_REQUIRED');
+  assert.equal(unconfirmed.calls.some((call) => call.method === 'POST' && call.url.endsWith('/venue_sets')), false);
+  await assert.rejects(() => unconfirmed.service.updateSet(patch(`/api/venue/sets/${setId}`, { active: true }), setId), (e) => e.status === 403 && e.code === 'AGE_CONFIRMATION_REQUIRED');
+  const disabled = ownerFetch({ row: { adult_enabled: false } });
+  await assert.rejects(() => disabled.service.updateSet(patch(`/api/venue/sets/${setId}`, { active: true }), setId), (e) => e.status === 400 && e.code === 'ADULT_VENUE_REQUIRED');
+  const ok = ownerFetch({ row: { adult_enabled: true, adult_attested_at: attestedAt } });
+  const added = await ok.service.addSet(post(`/api/venue/${venueId}/sets`, { name: '大人', sourceType: 'standard', sourceId: 'intimacy' }), venueId);
+  assert.equal(added.set.adultOnly, true);
+  assert.deepEqual(await ok.service.updateSet(patch(`/api/venue/sets/${setId}`, { active: true }), setId), { active: true });
+  // Pausing an R18 set stays possible for an unconfirmed owner.
+  assert.deepEqual(await unconfirmed.service.updateSet(patch(`/api/venue/sets/${setId}`, { active: false }), setId), { active: false });
+  // Non-R18 sets need no account confirmation.
+  const plain = await unconfirmed.service.addSet(post(`/api/venue/${venueId}/sets`, { name: '通常', sourceType: 'standard', sourceId: 'date' }), venueId);
+  assert.equal(plain.set.adultOnly, false);
+});
+
+function publicFetch({ venue = {}, confirmed = true, rpcFails = false } = {}) {
+  const calls = [];
+  const adultSet = { ...setRow, id: '00000000-0000-4000-8000-0000000000a1', adult_only: true, cards: adultCards };
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.includes('/venue_tables?token_hash=')) return response(200, [{ id: tableId, label: 'A卓', venue_id: venueId, venues: { ...venueRow, adult_enabled: true, adult_attested_at: attestedAt, ...venue } }]);
+    if (url.endsWith('/rpc/is_adult_confirmed')) return rpcFails ? response(500, { message: 'down' }) : response(200, confirmed);
+    if (url.includes('/venue_sets?venue_id=')) return response(200, [setRow, adultSet].map(({ cards, ...rest }) => rest));
+    if (url.includes('/venue_sets?id=')) return response(200, [url.includes(adultSet.id) ? adultSet : setRow]);
+    if (url.endsWith('/venue_usage_events')) return response(201, {});
+    throw new Error(`unexpected ${url}`);
+  };
+  return { service: createVenueService({ env, fetchImpl }), calls, adultSetId: adultSet.id };
+}
+
+test('public QR lists R18 sets only while enabled, attested and the owner is still age-confirmed', async () => {
+  const live = publicFetch();
+  const open = await live.service.publicInfo(req(`/api/venue/public/${token}`, { headers: {} }), token, false);
+  assert.equal(open.sets.length, 2); assert.equal(open.venue.adultEnabled, true); assert.equal(open.venue.adultAttestedAt, '2026-10-05T00:00:00.000Z');
+  assert.equal(Object.hasOwn(open.venue, 'owner_id') || Object.hasOwn(open.venue, 'ownerId'), false);
+  const rpc = live.calls.find((call) => call.url.endsWith('/rpc/is_adult_confirmed'));
+  assert.deepEqual(JSON.parse(rpc.options.body), { p_user_id: owner });
+  assert.equal(rpc.options.headers.Authorization, 'Bearer service_role_test');
+  for (const scenario of [{ confirmed: false }, { rpcFails: true }, { venue: { adult_attested_at: null } }, { venue: { adult_enabled: false } }]) {
+    const closed = publicFetch(scenario);
+    const info = await closed.service.publicInfo(req(`/api/venue/public/${token}`, { headers: {} }), token, false);
+    assert.deepEqual(info.sets.map((set) => set.id), [setId], JSON.stringify(scenario));
+    assert.equal(info.venue.adultEnabled, false, JSON.stringify(scenario));
+  }
+});
+
+test('public R18 start needs the participant tap, then the per-session consent; never stores the tap', async () => {
+  const { service, calls, adultSetId } = publicFetch();
+  const start = (extra) => service.publicInfo(post(`/api/venue/public/${token}/start`, { setId: adultSetId, participants: ['A', 'B'], adultConfirmed: true, ...extra }, { headers: {} }), token, true);
+  await assert.rejects(() => start({}), (e) => e.status === 403 && e.code === 'PARTICIPANT_AGE_REQUIRED');
+  await assert.rejects(() => start({ ageConfirmed: false }), (e) => e.status === 403 && e.code === 'PARTICIPANT_AGE_REQUIRED');
+  await assert.rejects(() => start({ ageConfirmed: 'true' }), (e) => e.status === 400 && e.code === 'INVALID_REQUEST');
+  await assert.rejects(() => start({ ageConfirmed: true, adultConfirmed: false }), (e) => e.status === 403 && e.code === 'ADULT_CONSENT_REQUIRED');
+  assert.equal(calls.some((call) => call.url.endsWith('/venue_usage_events')), false);
+  const started = await start({ ageConfirmed: true });
+  assert.equal(started.set.adultOnly, true); assert.equal(started.cards.length, 6);
+  const event = calls.find((call) => call.url.endsWith('/venue_usage_events'));
+  assert.equal(JSON.stringify(JSON.parse(event.options.body)).includes('age'), false);
+  // Non-R18 sets are unaffected by the tap.
+  const plain = await service.publicInfo(post(`/api/venue/public/${token}/start`, { setId, participants: ['A', 'B'], adultConfirmed: false }, { headers: {} }), token, true);
+  assert.equal(plain.set.adultOnly, false);
+});
+
+test('public R18 start is refused once the owner account is no longer confirmed', async () => {
+  const { service, adultSetId } = publicFetch({ confirmed: false });
+  await assert.rejects(() => service.publicInfo(post(`/api/venue/public/${token}/start`, { setId: adultSetId, participants: ['A', 'B'], ageConfirmed: true, adultConfirmed: true }, { headers: {} }), token, true), (e) => e.status === 404 && e.code === 'NOT_FOUND');
+});
+
+test('adult-gate migration is static-checked for venue guard and attestation columns', async () => {
+  const sql = await readFile(new URL('../supabase/migrations/202610090001_adult_gate.sql', import.meta.url), 'utf8');
+  assert.match(sql, /create trigger venues_adult_guard before insert or update on public\.venues/);
+  assert.match(sql, /add column if not exists adult_attested_by uuid null references auth\.users\(id\) on delete set null/);
 });

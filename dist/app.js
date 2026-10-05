@@ -12,7 +12,7 @@ import { playableSavedSets } from "./my-set.js";
 import { resetStudioEntryState } from "./studio-state.js";
 import { buildFacebookShareUrl, buildShareText, buildXShareUrl } from "./share-text.js";
 import { isCardAudioEnabled, toggleCardAudio, playFlipSound } from "./card-audio.js";
-import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess } from "./theme-access.js";
+import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref } from "./theme-access.js";
 const root = document.querySelector("#app");
 const state = {
   shared: null,
@@ -53,6 +53,7 @@ const state = {
     customDraftR18: false,
     drafts: [], draftsAvailable: false, completionAvailable: false, aiGenerationAvailable: false, studioMode: "list", studioAiReturnMode: "list", editingDraftId: null, studioItems: [], studioRequestId: 0, studioReplaceIndex: null, aiQuestions: [], aiName: "", aiTheme: "", aiTone: "", aiCount: 6, aiR18: false,
     revealAdult: false,
+    ageConfirmedAt: null, adultConfirmationAvailable: false, adultIntent: false, ageConfirmChecked: false, ageRevokeOpen: false, ageBusy: false,
     status: "", returnAfterAuth: false,
     error: "",
     busy: false,
@@ -76,12 +77,12 @@ function restoreAuthReturnIntent() {
   if (!Array.isArray(intent.participants) || intent.participants.length < 2 || intent.participants.length > 8 || !intent.participants.every((name) => typeof name === "string" && name.length <= MAX_NAME_LENGTH && !/[\u0000-\u001f\u007f]/u.test(name))) return;
   state.participants = intent.participants;
   if (intent.screen === "participants") { state.screen = "participants"; return; }
-  const validIds = new Set(decks.map((deck) => deck.id));
+  const validIds = new Set(decks.filter((deck) => canSeeTheme(deck, state.account)).map((deck) => deck.id));
   const ids = Array.isArray(intent.selectedDeckIds) ? intent.selectedDeckIds.filter((id) => validIds.has(id)).slice(0, 3) : [];
   state.selectedDeckIds = ids.length ? ids : ["date"];
   state.selectedDeckId = validIds.has(intent.selectedDeckId) ? intent.selectedDeckId : state.selectedDeckIds[0];
   state.themeMode = intent.themeMode === "mixed" ? "mixed" : "single";
-  state.filter = typeof intent.filter === "string" && Object.hasOwn(groupLabels, intent.filter) ? intent.filter : "all";
+  state.filter = typeof intent.filter === "string" && Object.hasOwn(groupLabels, intent.filter) && visibleFilterIds(groupLabels, state.account, state.themeMode === "mixed").includes(intent.filter) ? intent.filter : "all";
   state.adultConfirmed = false;
   state.screen = "decks";
 }
@@ -91,12 +92,105 @@ function restoreAuthReturnIntent() {
 function accountAccessReady() { return state.account.enabled && state.account.authReady; }
 function isRegisteredUser() { return Boolean(accountAccessReady() && state.account.user?.id); }
 function canUseDeck(deck) { return canUseThemeForAccount(deck, state.account); }
+function ageConfirmed() { return isAgeConfirmed(state.account); }
+function canSeeDeck(deck) { return canSeeTheme(deck, state.account); }
+function canOfferR18(deck) { return canOfferR18Option(deck, state.account); }
+const AGE_REQUIRED_MESSAGE = "R18は、アカウント設定で18歳以上の確認をすると利用できます。";
+const ADULT_INTENT_KEY = "mingle.cards.adult-intent.v1";
+function formatConfirmedDate(iso) { const date = new Date(iso); return Number.isNaN(date.getTime()) ? "" : `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`; }
+function adultErrorMessage(error, fallback) {
+  const code = String(error?.message || "");
+  if (code === "AGE_CONFIRMATION_REQUIRED") return AGE_REQUIRED_MESSAGE;
+  if (code === "ADULT_ATTESTATION_REQUIRED") return "参加者全員が18歳以上であることの確認が必要です。";
+  if (code === "PARTICIPANT_AGE_REQUIRED") return "18歳以上であることの確認が必要です。";
+  if (code === "FEATURE_UNAVAILABLE") return "現在利用できません。";
+  return fallback;
+}
+// Venue sessions started inside an attested QR are the only R18 sessions a non-confirmed account may hold,
+// and only while the venue context (state.venue) is still loaded: logout / account switch clears state.venue first.
+// Clears R18 play state (memory and the stored resume) on logout, identity change and revocation.
+function purgeAdultSessions() {
+  let touched = false;
+  if (sessionHasR18(state.session) && !isActiveVenueSession(state.session)) { state.session = null; touched = true; if (state.screen === "play") state.screen = "participants"; }
+  if (sessionHasR18(state.resume) && !isActiveVenueSession(state.resume)) { state.resume = null; touched = true; }
+  if (sessionHasR18(state.pendingCustomResume)) { state.pendingCustomResume = null; touched = true; }
+  let stored = null; try { stored = loadSession(); } catch { stored = null; }
+  if (touched || sessionHasR18(stored)) clearSession();
+  state.feedback = null; state.roundFavorite = null; state.shareDialogOpen = false; state.adultConfirmed = false;
+}
+// Runs at the top of every render: while the account is not age-confirmed, nothing R18 may stay selected or visible.
+function enforceAgeGate() {
+  if (state.venue) return;
+  if (ageConfirmed()) return;
+  if (state.filter === "adult") state.filter = "all";
+  const fallback = decks.find((deck) => canUseDeck(deck) && canSeeDeck(deck)) ?? decks.find((deck) => canSeeDeck(deck)) ?? decks[0];
+  const visibleIds = state.selectedDeckIds.filter((id) => canSeeDeck(decks.find((deck) => deck.id === id)));
+  state.selectedDeckIds = visibleIds.length ? visibleIds : [fallback.id];
+  if (!canSeeDeck(decks.find((deck) => deck.id === state.selectedDeckId))) state.selectedDeckId = state.selectedDeckIds[0];
+  if (state.selectedMySetId) { const set = playableSavedSets(state.account.sets, state.account.customCards).find((item) => item.id === state.selectedMySetId); if (!set || set.hasR18) state.selectedMySetId = null; }
+  state.adultConfirmed = false;
+  state.account.revealAdult = false; state.account.aiR18 = false; state.account.customDraftR18 = false;
+  if (state.account.pendingSet) state.account.pendingSet = null;
+  if (state.account.authReady && state.session && sessionHasR18(state.session) && !isActiveVenueSession(state.session)) {
+    state.session = null; state.feedback = null; state.roundFavorite = null; state.shareDialogOpen = false;
+    if (state.screen === "play") state.screen = "participants";
+  }
+}
+function saveAdultIntent() {
+  try {
+    if (!state.account.adultIntent) { sessionStorage.removeItem(ADULT_INTENT_KEY); return; }
+    const createdAt = Date.now();
+    sessionStorage.setItem(ADULT_INTENT_KEY, JSON.stringify({ createdAt, expiresAt: createdAt + 30 * 60 * 1000 }));
+  } catch {}
+}
+// The login checkbox is only a bridge across the OTP/OAuth round trip; the server stays the source of truth.
+// Resolves to true when saving the confirmation failed.
+async function applyAdultIntent() {
+  let intent = null;
+  try { intent = JSON.parse(sessionStorage.getItem(ADULT_INTENT_KEY) || "null"); } catch { intent = null; }
+  if (!intent) return false;
+  const now = Date.now();
+  const valid = Number.isFinite(intent.createdAt) && Number.isFinite(intent.expiresAt) && intent.expiresAt >= now && intent.createdAt <= now && intent.expiresAt - intent.createdAt <= 30 * 60 * 1000;
+  if (!state.account.user && valid) return false;
+  try { sessionStorage.removeItem(ADULT_INTENT_KEY); } catch {}
+  state.account.adultIntent = false;
+  if (!valid || !state.account.user || state.account.ageConfirmedAt) return false;
+  const generation = state.account.generation;
+  try {
+    const result = await accountApi.confirmAdult("login_screen");
+    if (generation !== state.account.generation) return false;
+    if (typeof result?.adultConfirmedAt !== "string" || !result.adultConfirmedAt) throw new Error("age_confirmation_failed");
+    state.account.ageConfirmedAt = result.adultConfirmedAt; state.account.adultConfirmationAvailable = true;
+    return false;
+  } catch { return generation === state.account.generation; }
+}
+async function refreshSharedAfterAccountChange() {
+  if (state.venue || !state.shared?.token) return;
+  const token = state.shared.token;
+  try {
+    const result = await accountApi.sharedSet(token);
+    if (state.venue || state.shared?.token !== token) return;
+    state.shared = { token, ...(result.share || result) };
+    render();
+  } catch { /* keep the current (blocked) view */ }
+}
+// Non-venue shared sets: R18 content is shown only to age-confirmed accounts.
+function sharedBlocked() {
+  if (state.venue || !state.shared) return false;
+  return state.shared.ageConfirmationRequired === true || (state.shared.adultOnly === true && !ageConfirmed());
+}
+function sharedSubmitDisabled() {
+  if (state.sharedLoading || state.busy) return true;
+  if (state.venue) { const set = selectedVenueSet(); return set?.adultOnly === true && !(state.venue.ageTapped === true && state.adultConfirmed === true); }
+  if (sharedBlocked()) return true;
+  return state.shared?.adultOnly === true && !state.adultConfirmed;
+}
 function sessionNeedsRegistration(session) {
   if (isActiveVenueSession(session)) return false;
   return sessionNeedsThemeAccess(session, state.account);
 }
 function isActiveVenueSession(session = state.session) {
-  return Boolean(state.venue?.token && session?.sharedGuest && session.venueSession && session.venueSetId && state.venue.sets?.some((set) => set.id === session.venueSetId));
+  return isActiveVenueSessionFor(session, state.venue);
 }
 function selectedVenueSet() {
   return state.venue?.sets?.find((set) => set.id === state.selectedVenueSetId) || state.venue?.sets?.[0] || null;
@@ -181,6 +275,7 @@ function restoreAccountScroll(snapshot) {
   if (favorites) { favorites.scrollTop = snapshot.favoritesTop; favorites.scrollLeft = snapshot.favoritesLeft; }
 }
 function render() {
+  enforceAgeGate();
   if (state.account.authReady && !state.account.user && state.account.guestNormalizedGeneration !== state.account.generation) {
     const preserveMixed = state.themeMode === "mixed";
     const guestDecks = state.selectedDeckIds.filter((id) => GUEST_THEME_IDS.has(id));
@@ -221,7 +316,7 @@ function render() {
     input.addEventListener("change", (event) => {
       state.adultConfirmed = event.currentTarget.checked;
       const submit = event.currentTarget.form?.querySelector("button[type=submit]");
-      if (submit) submit.disabled = state.sharedLoading || state.busy || (state.shared?.adultOnly === true && !state.adultConfirmed);
+      if (submit) submit.disabled = sharedSubmitDisabled();
     }),
   );
   root.querySelector("[data-venue-set]")?.addEventListener("change", (event) => { state.selectedVenueSetId = event.currentTarget.value; state.adultConfirmed = false; state.error = ""; syncSelectedVenueSet(); render(); });
@@ -306,6 +401,9 @@ function render() {
   });
   root.querySelector("[data-custom-r18]")?.addEventListener("change", (event) => { state.account.customDraftR18 = event.currentTarget.checked; if (!event.currentTarget.checked) { const text = root.querySelector("[data-custom-text]"); if (text) text.value = state.account.customDraft; } });
   root.querySelector("[data-account-otp]")?.addEventListener("input", (event) => { state.account.otp = event.target.value; });
+  root.querySelector("[data-adult-intent]")?.addEventListener("change", (event) => { state.account.adultIntent = event.currentTarget.checked; });
+  root.querySelector("[data-age-confirm]")?.addEventListener("change", (event) => { state.account.ageConfirmChecked = event.currentTarget.checked; const button = root.querySelector('[data-action="age-confirm"]'); if (button) button.disabled = state.account.ageBusy || !state.account.ageConfirmChecked; });
+  root.querySelector("[data-venue-age]")?.addEventListener("change", (event) => { if (state.venue) state.venue.ageTapped = event.currentTarget.checked; const submit = event.currentTarget.form?.querySelector("button[type=submit]"); if (submit) submit.disabled = sharedSubmitDisabled(); });
   root.querySelector('form[data-form="account"]')?.addEventListener("submit", (event) => { event.preventDefault(); loginWithOtp(); });
   root.querySelector('form[data-form="profile"]')?.addEventListener("submit", (event) => { event.preventDefault(); saveProfile(); });
   root.querySelector('form[data-form="custom-card"]')?.addEventListener("submit", (event) => { event.preventDefault(); saveCustomCard(); });
@@ -427,10 +525,12 @@ function frame(content, eyebrow = "Mingle.Cards", withHeader = true) { const qui
 function sharedView() {
   const shared = state.shared || {};
   const venueSet = syncSelectedVenueSet();
-  const consent = state.venue ? venueSet?.adultOnly === true : shared.adultOnly === true;
-  const registered = state.venue ? true : isRegisteredUser();
-  const registrationNotice = consent && !registered ? `<p class="guest-theme-note">R18の共有セットは無料登録後に使えます。<button type="button" class="text-button" data-action="account" data-auth-return="true">ログイン / 新規登録</button></p>` : "";
-  const consentControl = consent ? `<label class="adult-consent"><input type="checkbox" data-shared-adult ${state.adultConfirmed ? "checked" : ""} ${!registered ? "disabled" : ""} aria-disabled="${!registered}" /> ${registered ? "参加者全員が18歳以上で、R18の話題に同意します" : "登録後に参加者全員の同意を確認します"}</label>` : "";
+  const blocked = sharedBlocked();
+  const consent = !blocked && (state.venue ? venueSet?.adultOnly === true : shared.adultOnly === true);
+  const blockedActions = !state.account.enabled ? "" : isRegisteredUser() ? '<button type="button" class="primary-button" data-action="age-settings-open">アカウント設定を開く</button>' : '<button type="button" class="primary-button" data-action="account" data-auth-return="true">ログイン / 新規登録</button>';
+  const blockedPanel = blocked ? `<section class="panel form-panel shared-age-blocked"><p class="guest-theme-note">このセットは、18歳以上であることを確認したアカウントでのみ表示できます。</p>${blockedActions}</section>` : "";
+  const venueAgeTap = state.venue && consent ? `<label class="adult-consent venue-age-confirm"><input type="checkbox" data-venue-age ${state.venue.ageTapped ? "checked" : ""} /> <span><strong>この端末で遊ぶ参加者は全員18歳以上です</strong><br><small>このお店はR18のテーマを提供しています。店舗が参加者の年齢を確認する責任を負います。</small></span></label>` : "";
+  const consentControl = consent ? `${venueAgeTap}<label class="adult-consent"><input type="checkbox" data-shared-adult ${state.adultConfirmed ? "checked" : ""} /> ${state.venue ? "参加者全員がR18の話題に同意しています" : "参加者全員が18歳以上で、R18の話題に同意します"}</label>` : "";
   const venuePicker = state.venue ? `<label class="venue-picker"><span>店舗のおすすめテーマ</span><select data-venue-set aria-label="店舗のおすすめテーマ">${state.venue.sets.map((set) => `<option value="${esc(set.id)}" ${set.id === (venueSet?.id || '') ? 'selected' : ''}>${esc(set.name)}（${set.cardCount}枚${set.adultOnly ? '・R18' : ''}）</option>`).join('')}</select></label>` : '';
   const participantFields = `<div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="${state.venue ? '呼び名（任意）' : '呼び名'}" aria-label="${index + 1}人目の呼び名" /></label>`).join("")}</div>`;
   const participantInput = state.venue ? `<label class="venue-count"><span>参加人数</span><select data-venue-count aria-label="参加人数">${Array.from({ length: MAX_PARTICIPANTS - 1 }, (_, index) => index + 2).map((count) => `<option value="${count}" ${count === state.participants.length ? "selected" : ""}>${count}人</option>`).join("")}</select></label><details class="venue-names"><summary>呼び名をつける（任意）</summary>${participantFields}</details>` : `${participantFields}<div class="inline-actions"><button type="button" class="text-button add-person" data-action="add-person" ${state.participants.length >= MAX_PARTICIPANTS ? "disabled" : ""}>＋ 参加者を追加</button>${state.participants.length > 2 ? '<button type="button" class="text-button muted" data-action="remove-person">最後の人を削除</button>' : ""}</div>`;
@@ -439,12 +539,12 @@ function sharedView() {
   const store = state.venue?.venue.storeUrl ? `<a class="text-button venue-store-link" href="${esc(state.venue.venue.storeUrl)}" target="_blank" rel="noopener noreferrer">店舗の公式サイト</a>` : "";
   const footer = state.venue ? `<div class="venue-footer-links">${store}<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button></div>` : `<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button>`;
   const landingHint = state.venue ? "テーマと人数を選んで、会話をはじめましょう。" : "質問内容は、参加者を入力して始めるまで表示されません。";
-  return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? title : (shared.name || "共有セット"))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}<p class="account-hint">${landingHint}</p>${registrationNotice}<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${state.busy || state.sharedLoading || (consent && (!registered || !state.adultConfirmed)) ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button></form>${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
+  return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? title : (blocked ? "共有セット" : (shared.name || "共有セット")))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${!blocked && Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}${blocked ? "" : `<p class="account-hint">${landingHint}</p>`}${blockedPanel}${blocked ? "" : `<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${sharedSubmitDisabled() ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button></form>`}${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
 
 function participantsView() {
   syncAccountParticipantName();
   const atLimit = state.participants.length >= MAX_PARTICIPANTS;
-  const resumeCard = state.resume ? `<aside class="resume-card" aria-label="前回の続き"><strong>前回の続き</strong><span>${esc(state.resume.mixed ? "テーマミックス" : state.resume.customSet ? "マイセット" : decks.find((deck) => deck.id === state.resume.deckId)?.title || "会話カード")} · ${state.resume.cursor}/${state.resume.questions?.length || 40}</span><div><button type="button" class="primary-button" data-action="resume">続きから</button><button type="button" class="text-button muted" data-action="discard-resume">削除</button></div></aside>` : "";
+  const resumeCard = state.resume && canAccessSessionContent(state.resume, state.account) ? `<aside class="resume-card" aria-label="前回の続き"><strong>前回の続き</strong><span>${esc(state.resume.mixed ? "テーマミックス" : state.resume.customSet ? "マイセット" : decks.find((deck) => deck.id === state.resume.deckId)?.title || "会話カード")} · ${state.resume.cursor}/${state.resume.questions?.length || 40}</span><div><button type="button" class="primary-button" data-action="resume">続きから</button><button type="button" class="text-button muted" data-action="discard-resume">削除</button></div></aside>` : "";
   return frame(`<div class="home-screen">${accountView()}<div class="masthead-slot"><img class="masthead-image" src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards。やっぱり人って面白い。" width="1493" height="1054" /><h1 class="visually-hidden" tabindex="-1" data-focus>Mingle.Cards</h1></div>${resumeCard}<form class="panel form-panel" data-form="participants"><div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="呼び名" aria-label="${index + 1}人目の呼び名" autocomplete="off" enterkeyhint="${index === state.participants.length - 1 ? "done" : "next"}" /></label>`).join("")}</div><div class="inline-actions"><button type="button" class="text-button add-person" data-action="add-person" ${atLimit ? "disabled" : ""}>＋ 参加者を追加</button>${state.participants.length > 2 ? '<button type="button" class="text-button muted" data-action="remove-person">最後の人を削除</button>' : ""}<span class="limit-note">${atLimit ? "8人まで" : ""}</span></div><p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button">質問テーマを選ぶ</button></form><img class="home-illustration" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たちのイラスト" width="1611" height="976" loading="eager" />${renderAd("top")}<footer class="home-footer"><p><span>α版</span><span>開発：株式会社ErudAite</span></p><nav aria-label="ご案内"><a href="/terms.html">利用規約</a><a href="/privacy.html">プライバシーポリシー</a><a href="/personal-information.html">個人情報保護法に基づく公表事項</a></nav></footer></div>`, "Mingle.Cards", false);
 }
 function avatarImageSrc(value) {
@@ -616,10 +716,20 @@ function shareDialogView(a) {
   const qr = a.qrBusy ? '<p class="account-hint" role="status">QRコードを作成中…</p>' : share.active === false ? '<p class="account-hint" role="status">この共有は停止中です。リンクを作り直してください。</p>' : typeof share.qrDataUrl === "string" && share.qrDataUrl.startsWith("data:image/") ? `<img class="share-qr" src="${esc(share.qrDataUrl)}" alt="共有リンクのQRコード" />` : `<p class="account-hint" role="status">${esc(a.qrError || "QRコードを作成できませんでした。リンクをコピーして共有できます。")}</p>`;
   return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button account-back" data-action="share-close">戻る</button><strong id="account-dialog-title">セットを共有</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><p class="account-share-title">${esc(share.name || "マイセット")}</p><p class="account-hint">${Number.isFinite(share.cardCount) ? `${share.cardCount}枚` : ""}${share.adultOnly === true ? " · R18を含む" : ""}。リンクを知っている人は、最初の6枚を登録なしで遊べます。</p>${url ? `<label class="account-share-url">共有リンク<input readonly value="${esc(url)}" data-share-url /></label>${share.active === false ? "" : `<div class="share-actions"><button type="button" class="primary-button" data-action="share-copy">リンクをコピー</button><button type="button" class="secondary-button" data-action="share-native">端末で共有</button></div>`}${qr}` : '<p class="account-hint">共有リンクはまだ発行されていません。</p>'}<div class="share-actions"><button type="button" class="secondary-button" data-action="share-rotate" ${a.shareBusy ? "disabled" : ""}>${url ? "リンクを作り直す" : "リンクを発行"}</button>${url && share.active !== false ? `<button type="button" class="text-button" data-action="share-stop" ${a.shareBusy ? "disabled" : ""}>共有を停止</button>` : ""}</div>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ""}`, "account-dialog-share");
 }
+function ageSettingsView(a) {
+  const section = (inner) => `<section class="account-age-section" aria-labelledby="account-age-title"><h2 id="account-age-title">年齢の確認</h2>${inner}</section>`;
+  if (a.ageConfirmedAt) {
+    if (a.ageRevokeOpen) return section(`<p class="account-hint">取り消すと、R18のテーマ、R18を含むマイセットや途中のセッションが表示されなくなります。保存したカードやセットは削除されません。</p><div class="account-age-actions"><button type="button" class="danger-button" data-action="age-revoke-confirm" ${a.ageBusy ? "disabled" : ""}>${a.ageBusy ? "取り消し中…" : "取り消す"}</button><button type="button" class="text-button" data-action="age-revoke-cancel" ${a.ageBusy ? "disabled" : ""}>キャンセル</button></div>`);
+    const date = formatConfirmedDate(a.ageConfirmedAt);
+    return section(`<p>18歳以上であることを確認済みです${date ? `（${esc(date)}）` : ""}。</p><div class="account-age-actions"><button type="button" class="text-button" data-action="age-revoke-open" ${a.ageBusy ? "disabled" : ""}>確認を取り消す</button></div>`);
+  }
+  if (a.adultConfirmationAvailable !== true) return section('<p class="account-hint">年齢の確認は現在利用できません。</p>');
+  return section(`<p class="account-hint">R18のテーマは、18歳以上であることを確認したアカウントにだけ表示されます。</p><label class="account-age-check"><input type="checkbox" data-age-confirm ${a.ageConfirmChecked ? "checked" : ""} ${a.ageBusy ? "disabled" : ""}/> <span>私は18歳以上です</span></label><div class="account-age-actions"><button type="button" class="primary-button" data-action="age-confirm" ${a.ageBusy || !a.ageConfirmChecked ? "disabled" : ""}>${a.ageBusy ? "保存中…" : "確認して保存"}</button></div>`);
+}
 function accountSettingsView(a) {
-  if (a.deleteOpen) return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-settings">戻る</button><strong id="account-dialog-title">退会の確認</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-delete-warning"><p>退会すると、このアカウントの表示名・お気に入り・自作質問カード・非公開マイセットを削除します。</p><p>このアカウントが所有する店舗設定・提供テーマ・卓上QR・利用集計も削除されます。</p><p>この端末の呼び名と途中データも削除されます。</p><p>削除後は取り消せません。</p><label class="account-delete-confirm-label"><input type="checkbox" data-delete-confirm ${a.deleteConfirmed ? "checked" : ""} ${a.busy ? "disabled" : ""}/> 内容を確認しました</label></div>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}<div class="account-delete-actions"><button type="button" class="text-button" data-action="account-delete-cancel" ${a.busy ? "disabled" : ""}>キャンセル</button><button type="button" class="danger-button" data-action="account-delete-confirm" ${a.busy || !a.deletionAvailable || !a.deleteConfirmed ? "disabled" : ""}>${a.busy ? "削除中…" : "退会して削除"}</button></div>`, "account-dialog-delete");
+  if (a.deleteOpen) return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-settings">戻る</button><strong id="account-dialog-title">退会の確認</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-delete-warning"><p>退会すると、このアカウントの表示名・年齢確認の記録・お気に入り・自作質問カード・非公開マイセットを削除します。</p><p>このアカウントが所有する店舗設定・提供テーマ・卓上QR・利用集計も削除されます。</p><p>この端末の呼び名と途中データも削除されます。</p><p>削除後は取り消せません。</p><label class="account-delete-confirm-label"><input type="checkbox" data-delete-confirm ${a.deleteConfirmed ? "checked" : ""} ${a.busy ? "disabled" : ""}/> 内容を確認しました</label></div>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}<div class="account-delete-actions"><button type="button" class="text-button" data-action="account-delete-cancel" ${a.busy ? "disabled" : ""}>キャンセル</button><button type="button" class="danger-button" data-action="account-delete-confirm" ${a.busy || !a.deletionAvailable || !a.deleteConfirmed ? "disabled" : ""}>${a.busy ? "削除中…" : "退会して削除"}</button></div>`, "account-dialog-delete");
   const valid = validDisplayName(a.profileDraft);
-  return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-menu">戻る</button><strong id="account-dialog-title">アカウント設定</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${avatarSettingsView(a)}<form class="account-settings-form" data-form="profile"><label>表示名<input type="text" data-profile-name value="${esc(a.profileDraft)}" maxlength="80" autocomplete="nickname" ${a.busy ? "disabled" : ""}/></label><p class="account-hint">1人目の呼び名に自動入力されます。遊ぶときに変更できます。</p><p class="account-email">${esc(a.user?.email || "")}</p><button type="submit" class="primary-button" ${a.busy || !valid ? "disabled" : ""}>${a.busy ? "保存中…" : "表示名を保存"}</button></form>${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ""}${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}<section class="account-delete-section"><h2>退会</h2>${a.deletionAvailable ? `<button type="button" class="danger-button" data-action="account-delete-open" ${a.avatarBusy ? "disabled" : ""}>アカウントを削除</button>` : '<p class="account-hint">退会手続きは現在利用できません。</p><a class="account-support" href="mailto:inquiry@erudaite.ai">問い合わせる</a>'}</section>`, "account-dialog-settings");
+  return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-menu">戻る</button><strong id="account-dialog-title">アカウント設定</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${avatarSettingsView(a)}<form class="account-settings-form" data-form="profile"><label>表示名<input type="text" data-profile-name value="${esc(a.profileDraft)}" maxlength="80" autocomplete="nickname" ${a.busy ? "disabled" : ""}/></label><p class="account-hint">1人目の呼び名に自動入力されます。遊ぶときに変更できます。</p><p class="account-email">${esc(a.user?.email || "")}</p><button type="submit" class="primary-button" ${a.busy || !valid ? "disabled" : ""}>${a.busy ? "保存中…" : "表示名を保存"}</button></form>${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ""}${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}${ageSettingsView(a)}<section class="account-delete-section"><h2>退会</h2>${a.deletionAvailable ? `<button type="button" class="danger-button" data-action="account-delete-open" ${a.avatarBusy ? "disabled" : ""}>アカウントを削除</button>` : '<p class="account-hint">退会手続きは現在利用できません。</p><a class="account-support" href="mailto:inquiry@erudaite.ai">問い合わせる</a>'}</section>`, "account-dialog-settings");
 }
 function accountView(options = {}) {
   if (!state.account.enabled) return "";
@@ -631,8 +741,8 @@ function accountView(options = {}) {
   if (a.user && a.shareOpen) return wrap(shareDialogView(a));
   if (a.user && a.settingsOpen) return wrap(accountSettingsView(a));
   if (a.user && a.libraryOpen) return wrap(libraryAccountView(a));
-  if (a.user) return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">アカウント</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-menu-avatar"><span class="account-avatar">${accountAvatar(a.user)}</span></div>${a.user.displayName ? `<p class="account-display-name">${esc(a.user.displayName)}</p>` : ""}<p class="account-email">${esc(a.user.email || a.user.name || "ログイン中")}</p><button type="button" class="secondary-button account-menu-action" data-action="account-settings-open">アカウント設定</button><button type="button" class="secondary-button account-menu-action" data-action="account-library-open">保存したカード・マイセット</button><a class="secondary-button account-menu-action" href="/venue.html">店舗管理</a><button type="button" class="text-button account-menu-action" data-action="logout">ログアウト</button>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}`, "account-dialog-menu"));
-  return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">${state.continuePending ? "ログイン / 新規登録" : "ログインする"}</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.google ? '<button type="button" class="secondary-button account-provider" data-action="google-login">Googleで続ける</button>' : ""}<form class="account-otp" data-form="account"><label>メールアドレス<input type="email" data-account-email value="${esc(a.email)}" required autocomplete="email" /></label>${a.otpSent ? '<label>確認コード<input inputmode="numeric" data-account-otp value="' + esc(a.otp) + '" required autocomplete="one-time-code" /></label><button type="button" class="text-button muted" data-action="reset-otp"' + (a.busy ? " disabled" : "") + ">メールアドレスを変更／コードを再送</button>" : ""}<button type="submit" class="primary-button">${a.busy ? "処理中…" : a.otpSent ? "ログインする" : "確認コードを送る"}</button></form><p class="account-status" role="status">${esc(a.status || "ログインすると質問を保存できます")}</p><p class="form-error" role="alert">${esc(a.error)}</p>`, "account-dialog-login"));
+  if (a.user) return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">アカウント</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-menu-avatar"><span class="account-avatar">${accountAvatar(a.user)}</span></div>${a.user.displayName ? `<p class="account-display-name">${esc(a.user.displayName)}</p>` : ""}<p class="account-email">${esc(a.user.email || a.user.name || "ログイン中")}</p><button type="button" class="secondary-button account-menu-action" data-action="account-settings-open">アカウント設定</button>${!a.ageConfirmedAt && a.adultConfirmationAvailable ? '<p class="account-hint">R18テーマを表示するには、アカウント設定で年齢の確認が必要です。</p>' : ""}<button type="button" class="secondary-button account-menu-action" data-action="account-library-open">保存したカード・マイセット</button><a class="secondary-button account-menu-action" href="/venue.html">店舗管理</a><button type="button" class="text-button account-menu-action" data-action="logout">ログアウト</button>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}`, "account-dialog-menu"));
+  return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">${state.continuePending ? "ログイン / 新規登録" : "ログインする"}</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.google ? '<button type="button" class="secondary-button account-provider" data-action="google-login">Googleで続ける</button>' : ""}<label class="account-adult-intent"><input type="checkbox" data-adult-intent ${a.adultIntent ? "checked" : ""} /> <span>私は18歳以上です（任意）</span><small>チェックすると、R18のテーマが表示されるようになります。あとからアカウント設定で確認・取り消しできます。</small></label><form class="account-otp" data-form="account"><label>メールアドレス<input type="email" data-account-email value="${esc(a.email)}" required autocomplete="email" /></label>${a.otpSent ? '<label>確認コード<input inputmode="numeric" data-account-otp value="' + esc(a.otp) + '" required autocomplete="one-time-code" /></label><button type="button" class="text-button muted" data-action="reset-otp"' + (a.busy ? " disabled" : "") + ">メールアドレスを変更／コードを再送</button>" : ""}<button type="submit" class="primary-button">${a.busy ? "処理中…" : a.otpSent ? "ログインする" : "確認コードを送る"}</button></form><p class="account-status" role="status">${esc(a.status || "ログインすると質問を保存できます")}</p><p class="form-error" role="alert">${esc(a.error)}</p>`, "account-dialog-login"));
 }
 function topicIcon(deck) {
   const paths = {
@@ -675,20 +785,21 @@ function topicIcon(deck) {
 }
 function decksView() {
   const mixed = state.themeMode === "mixed";
-  const mySets = !mixed && isRegisteredUser() ? playableSavedSets(state.account.sets, state.account.customCards) : [];
+  const mySets = !mixed && isRegisteredUser() ? playableSavedSets(state.account.sets, state.account.customCards).filter((set) => !set.hasR18 || ageConfirmed()) : [];
   const selectedMySet = mySets.find((set) => set.id === state.selectedMySetId) || null;
-  const selected = (decks.find((deck) => deck.id === state.selectedDeckId && canUseDeck(deck)) ?? decks.find((deck) => canUseDeck(deck)) ?? decks.find((deck) => deck.id === state.selectedDeckId) ?? decks.find((deck) => !deck.adultOnly) ?? decks[0]);
-  const regularDecks = decks.filter((deck) => !deck.adultOnly), r18Decks = decks.filter((deck) => deck.adultOnly);
-  const visible = (deck) => state.filter === "all" || (state.filter === "adult" ? deck.adultOnly || deck.r18Available : !deck.adultOnly && themeGroups[deck.id]?.includes(state.filter));
+  const selected = (decks.find((deck) => deck.id === state.selectedDeckId && canUseDeck(deck)) ?? decks.find((deck) => canUseDeck(deck)) ?? decks.find((deck) => canSeeDeck(deck)) ?? decks[0]);
+  const regularDecks = decks.filter((deck) => !deck.adultOnly), r18Decks = decks.filter((deck) => deck.adultOnly && canSeeDeck(deck));
+  const visible = (deck) => state.filter === "all" || (state.filter === "adult" ? ageConfirmed() && (deck.adultOnly || deck.r18Available) : !deck.adultOnly && themeGroups[deck.id]?.includes(state.filter));
   const option = (deck) => { const checked = mixed ? state.selectedDeckIds.includes(deck.id) : !selectedMySet && deck.id === selected.id; const available = canUseDeck(deck); const locked = !available; const control = mixed ? `<input type="checkbox" name="deck" value="${esc(deck.id)}" data-deck-select ${checked ? "checked" : ""} ${locked ? "disabled" : ""} aria-disabled="${locked}" />` : `<input type="radio" name="deck" value="${esc(deck.id)}" data-deck-select ${checked ? "checked" : ""} ${locked ? "disabled" : ""} aria-disabled="${locked}" />`;
     return `<label class="deck-option theme-card-${esc(deck.id)} ${checked ? "is-selected" : ""} ${locked ? "is-locked" : ""}" aria-disabled="${locked}">${control}<span class="topic-icon topic-${esc(deck.id)}">${topicIcon(deck)}</span><span class="deck-option-copy"><strong>${esc(deck.title)}</strong><small>${esc(deck.subtitle)}</small></span><span class="deck-count">${locked ? '🔒 登録で解放' : '40枚'}</span></label>`; };
-  const filters = Object.entries(groupLabels).filter(([id]) => !(mixed && id === "adult"))
+  const allowedFilters = visibleFilterIds(groupLabels, state.account, mixed);
+  const filters = Object.entries(groupLabels).filter(([id]) => allowedFilters.includes(id))
     .map(([id, label]) => `<button type="button" class="filter-chip ${state.filter === id ? "is-active" : ""}" data-filter="${id}">${label}</button>`)
     .join("");
   const chips = state.selectedDeckIds.map((id) => { const deck = decks.find((item) => item.id === id); return deck ? `<span class="selected-theme-chip">${esc(deck.title)}<button type="button" data-remove-deck="${esc(id)}" aria-label="${esc(deck.title)}を外す">×</button></span>` : "";
     })
     .join("");
-  const consent = !mixed && (selected.r18Available || selected.adultOnly), consentCopy = selected.r18Available ? "R18を含めていい" : "参加者全員が18歳以上で、R18の話題に同意しています";
+  const consent = !mixed && (canOfferR18(selected) || (selected.adultOnly && canSeeDeck(selected))), consentCopy = selected.r18Available ? "R18を含めていい" : "参加者全員が18歳以上で、R18の話題に同意しています";
   const description = selected.adultOnly ? `<p class="deck-description">${esc(selected.description)}</p>` : "";
   const pool = (mixed ? regularDecks : state.filter === "adult" ? r18Decks : regularDecks).filter(visible).sort((a, b) => Number(canUseDeck(b)) - Number(canUseDeck(a)));
   const adultPool = !mixed && state.filter === "all" ? r18Decks.filter(visible) : [];
@@ -696,9 +807,10 @@ function decksView() {
   const lockedPool = pool.filter((deck) => !canUseDeck(deck));
   const regularIds = new Set(regularDecks.map((deck) => deck.id));
   const canStart = mixed ? state.selectedDeckIds.length >= 2 && state.selectedDeckIds.length <= 3 && new Set(state.selectedDeckIds).size === state.selectedDeckIds.length && state.selectedDeckIds.every((id) => regularIds.has(id) && canUseDeck(decks.find((deck) => deck.id === id))) : Boolean(selected && canUseDeck(selected));
-  const registrationNotice = !isRegisteredUser() ? `<p class="guest-theme-note">無料登録ですべてのテーマが使えます。<button type="button" class="text-button" data-action="account" data-auth-return="true">ログイン / 新規登録</button></p>` : "";
+  const registrationNotice = !isRegisteredUser() ? `<p class="guest-theme-note">無料登録で、さらに多くのテーマが使えます。<button type="button" class="text-button" data-action="account" data-auth-return="true">ログイン / 新規登録</button></p>` : "";
   const mySetConsent = selectedMySet?.hasR18 ? `<label class="consent selected-consent"><input type="checkbox" data-adult="my-set" ${state.adultConfirmed ? "checked" : ""} ${!isRegisteredUser() ? "disabled" : ""} /> <span><strong>参加者全員が18歳以上で、R18の話題に同意しています</strong><small>このマイセットにはR18の質問が含まれています。</small></span></label>` : "";
-  const themeControls = `<div class="theme-options">${selectedMySet ? "" : `<label class="consent challenge-toggle"><input type="checkbox" data-challenges ${state.includeChallenges ? "checked" : ""} /> <span><strong>「やってみて」を入れる</strong><small>6枚につき1枚、みんなで楽しむお題が入ります。</small></span></label>`}${selectedMySet ? mySetConsent : `${description}${consent ? `<label class="consent selected-consent"><input type="checkbox" data-adult="${esc(selected.id)}" ${state.adultConfirmed ? "checked" : ""} ${!isRegisteredUser() ? "disabled" : ""} aria-disabled="${!isRegisteredUser()}" /> <span><strong>${isRegisteredUser() ? consentCopy : "R18の話題に同意しています"}</strong><small>${isRegisteredUser() ? (selected.r18Available ? "6枚につき1問。全員が18歳以上で、話題に同意できるときに。" : "全員が18歳以上で、話題に同意できるときに。") : "ログイン / 新規登録後に、年齢と参加者全員の同意を確認できます。"}</small></span></label>` : ""}`}<p class="form-error" role="alert">${esc(state.error)}</p><button class="primary-button deck-start selected-start" data-action="${selectedMySet ? "choose-myset-start" : "choose-deck"}" ${selectedMySet ? `data-set-id="${esc(selectedMySet.id)}"` : `data-deck="${esc(selected.id)}"`} ${selectedMySet ? (selectedMySet.hasR18 && !state.adultConfirmed ? "disabled" : "") : (!canStart || (!mixed && selected.adultOnly && !state.adultConfirmed) ? "disabled" : "")}>${selectedMySet ? "このマイセットで始める" : mixed ? "ミックスで始める" : "このテーマで始める"}</button></div>`;
+  const groupLink = isRegisteredUser() && !mixed ? `<a class="secondary-button group-room-link" href="${groupRoomHref(groupRoomArgs(selected, selectedMySet))}">みんなのスマホで遊ぶ</a>` : "";
+  const themeControls = `<div class="theme-options">${selectedMySet ? "" : `<label class="consent challenge-toggle"><input type="checkbox" data-challenges ${state.includeChallenges ? "checked" : ""} /> <span><strong>「やってみて」を入れる</strong><small>6枚につき1枚、みんなで楽しむお題が入ります。</small></span></label>`}${selectedMySet ? mySetConsent : `${description}${consent ? `<label class="consent selected-consent"><input type="checkbox" data-adult="${esc(selected.id)}" ${state.adultConfirmed ? "checked" : ""} ${!isRegisteredUser() ? "disabled" : ""} aria-disabled="${!isRegisteredUser()}" /> <span><strong>${isRegisteredUser() ? consentCopy : "R18の話題に同意します"}</strong><small>${isRegisteredUser() ? (selected.r18Available ? "6枚につき1問。全員が18歳以上で、話題に同意できるときに。" : "全員が18歳以上で、話題に同意できるときに。") : "ログイン / 新規登録後に、年齢と参加者全員の同意を確認できます。"}</small></span></label>` : ""}`}<p class="form-error" role="alert">${esc(state.error)}</p><button class="primary-button deck-start selected-start" data-action="${selectedMySet ? "choose-myset-start" : "choose-deck"}" ${selectedMySet ? `data-set-id="${esc(selectedMySet.id)}"` : `data-deck="${esc(selected.id)}"`} ${selectedMySet ? (selectedMySet.hasR18 && !state.adultConfirmed ? "disabled" : "") : (!canStart || (!mixed && selected.adultOnly && !state.adultConfirmed) ? "disabled" : "")}>${selectedMySet ? "このマイセットで始める" : mixed ? "ミックスで始める" : "このテーマで始める"}</button>${groupLink}</div>`;
   const lockedSection = !isRegisteredUser() && lockedPool.length ? `<p class="theme-group-label guest-locked-label">無料登録で使えるテーマ</p>${lockedPool.map(option).join("")}` : lockedPool.map(option).join("");
   const groupLabel = `<p class="theme-group-label">${mixed ? "通常テーマ" : state.filter === "adult" ? "18歳以上のテーマ" : "テーマ"}</p>`;
   const adultMarkup = adultPool.length ? `<p class="theme-group-label">R18のテーマ</p>${adultPool.map(option).join("")}` : "";
@@ -878,14 +990,19 @@ async function loadAccount() {
   const generation = state.account.generation; const profileRevision = state.account.profileRevision; const avatarRevision = state.account.avatarRevision;
   let continueAfterLogin = false;
   let resumeAfterLogin = null;
+  let intentFailed = false;
   const current = () => generation === state.account.generation && profileRevision === state.account.profileRevision && avatarRevision === state.account.avatarRevision;
   try {
     const me = await accountApi.me();
     if (!current()) return;
+    const previousUserId = state.account.user?.id || null, previousAgeConfirmedAt = state.account.ageConfirmedAt;
     state.account.user = normalizeAccountUser(me.user || null, state.account.user);
     state.account.avatarUrl = avatarImageSrc(state.account.user?.avatarUrl);
     if (!state.account.avatarBusy && !state.account.avatarDraft) state.account.avatarError = "";
     state.account.deletionAvailable = me.account?.deletionAvailable === true;
+    state.account.adultConfirmationAvailable = me.account?.adultConfirmationAvailable === true;
+    // When the server could not read the status (available:false), keep the last known value for the same account only.
+    state.account.ageConfirmedAt = nextAgeConfirmedAt({ previous: previousAgeConfirmedAt, sameAccount: Boolean(previousUserId && previousUserId === state.account.user?.id), confirmedAt: me.account?.adultConfirmedAt, available: me.account?.adultConfirmationAvailable });
     state.account.customCardsAvailable = me.customCardsAvailable === true;
     state.account.draftsAvailable = me.draftsAvailable === true; state.account.completionAvailable = me.account?.completionAvailable === true; state.account.aiGenerationAvailable = me.aiGenerationAvailable === true; state.account.drafts = Array.isArray(me.drafts) ? me.drafts : [];
     state.account.customCards = state.account.customCardsAvailable && Array.isArray(me.customCards) ? me.customCards.map((card) => ({ ...card, id: typeof card.id === "string" && card.id.startsWith("custom:") ? card.id : `custom:${card.id}`,
@@ -894,6 +1011,8 @@ async function loadAccount() {
     state.account.profileDraft = state.account.user?.displayName || "";
     syncAccountParticipantName();
     if (state.account.user) {
+      intentFailed = await applyAdultIntent();
+      if (!current()) return;
       restoreAuthReturnIntent();
       if (!current()) return;
       state.account.favorites = new Set((me.favorites || []).map((item) => item.cardId || item.card_id || item.id || item));
@@ -911,9 +1030,11 @@ async function loadAccount() {
         state.pendingCustomResume = null;
       }
     }
-  } catch { if (!current()) return; state.account.user = null; state.account.authReady = true; if (state.continuePending) { state.account.status = ""; state.account.error = "ログイン状態を確認できませんでした。時間をおいて、もう一度お試しください。"; } }
+  } catch { if (!current()) return; state.account.user = null; state.account.ageConfirmedAt = null; state.account.adultConfirmationAvailable = false; state.account.authReady = true; if (state.continuePending) { state.account.status = ""; state.account.error = "ログイン状態を確認できませんでした。時間をおいて、もう一度お試しください。"; } }
   if (!current()) return;
   state.account.authReady = true;
+  if (intentFailed) state.account.status = "年齢の確認を保存できませんでした。アカウント設定からもう一度お試しください。";
+  if (state.account.user && !state.venue && state.shared?.ageConfirmationRequired === true) refreshSharedAfterAccountChange();
   if (resumeAfterLogin) resumeSaved(resumeAfterLogin);
   else render();
   if (continueAfterLogin) continueCurrentRound();
@@ -923,6 +1044,7 @@ async function loginWithOtp() {
   if (!email || state.account.busy) return;
   state.account.busy = true; state.account.error = "";
   state.account.status = ""; render();
+  saveAdultIntent();
   try { if (state.account.otpSent) { await accountApi.verifyOtp(email, state.account.otp.trim()); state.account.status = "ログインしました。"; } else { await accountApi.sendOtp(email); state.account.otpSent = true; state.account.status = "確認コードをメールに送りました。";
       state.focusSelector = "[data-account-otp]";
     }
@@ -975,8 +1097,8 @@ async function saveStudioDraft() {
 async function generateStudioQuestions() {
   if (state.account.busy || state.account.aiGenerationAvailable !== true) return;
   state.account.busy = true; state.account.error = ''; render(); const generation = state.account.generation; const requestId = ++state.account.studioRequestId;
-  try { const result = await accountApi.generateAiQuestions({ theme: (state.account.aiTheme || '').trim(), tone: (state.account.aiTone || '').trim() || '自然であたたかい', count: state.account.aiCount === 12 ? 12 : 6, r18: state.account.aiR18 === true }); if (generation !== state.account.generation || requestId !== state.account.studioRequestId) return; state.account.aiName = typeof result.name === 'string' ? result.name.trim() : ''; state.account.aiQuestions = (result.questions || []).map((question) => ({ text: question.text || '', r18: question.r18 === true, selected: true })); state.account.status = ''; }
-  catch (error) { if (generation === state.account.generation && requestId === state.account.studioRequestId) state.account.error = error?.status === 404 ? 'AIセット作成は現在利用できません。' : 'AI案を作成できませんでした。'; }
+  try { const result = await accountApi.generateAiQuestions({ theme: (state.account.aiTheme || '').trim(), tone: (state.account.aiTone || '').trim() || '自然であたたかい', count: state.account.aiCount === 12 ? 12 : 6, r18: state.account.aiR18 === true && ageConfirmed() }); if (generation !== state.account.generation || requestId !== state.account.studioRequestId) return; state.account.aiName = typeof result.name === 'string' ? result.name.trim() : ''; state.account.aiQuestions = (result.questions || []).map((question) => ({ text: question.text || '', r18: question.r18 === true, selected: true })); state.account.status = ''; }
+  catch (error) { if (generation === state.account.generation && requestId === state.account.studioRequestId) state.account.error = error?.status === 404 ? 'AIセット作成は現在利用できません。' : adultErrorMessage(error, 'AI案を作成できませんでした。'); }
   finally { if (generation === state.account.generation && requestId === state.account.studioRequestId) { state.account.busy = false; render(); } }
 }
 async function adoptStudioQuestions() {
@@ -991,7 +1113,7 @@ async function adoptStudioQuestions() {
   if (state.account.busy || !state.account.customCardsAvailable) return;
   if (!validCustomText(state.account.customDraft)) { state.account.error = "質問は1〜300文字で、改行せずに入力してください。";
     state.account.status = ""; render(); return; }
-  const generation = state.account.generation; const id = state.account.editingCardId; const text = state.account.customDraft.trim(); const r18 = state.account.customDraftR18 === true;
+  const generation = state.account.generation; const id = state.account.editingCardId; const text = state.account.customDraft.trim(); const r18 = state.account.customDraftR18 === true && ageConfirmed();
   state.account.busy = true; state.account.error = "";
   state.account.status = ""; render();
   try {
@@ -1005,8 +1127,8 @@ async function adoptStudioQuestions() {
     state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = "";
     state.account.customDraftR18 = false;
     state.account.status = "質問カードを保存しました。";
-  } catch {
-    if (generation === state.account.generation) state.account.error = "質問カードを保存できませんでした。"; }
+  } catch (error) {
+    if (generation === state.account.generation) state.account.error = adultErrorMessage(error, "質問カードを保存できませんでした。"); }
   finally { if (generation === state.account.generation) { state.account.busy = false; render(); } }
 }
 async function deleteAccount() {
@@ -1035,6 +1157,7 @@ async function deleteAccount() {
     state.feedbackBusy = false;
     state.pendingCustomResume = null;
     state.account.user = null;
+    state.account.ageConfirmedAt = null; state.account.adultConfirmationAvailable = false; state.account.ageRevokeOpen = false; state.account.ageConfirmChecked = false;
     state.account.favorites = new Set();
     state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.completionAvailable = false; state.account.studioRequestId += 1; state.account.studioItems = []; state.account.aiTheme = ""; state.account.aiTone = ""; state.account.aiR18 = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = [];
     state.account.customCardsAvailable = false;
@@ -1069,6 +1192,7 @@ async function deleteAccount() {
 function playSavedSet(set) {
   const ids = (Array.isArray(set?.card_ids) ? set.card_ids : Array.isArray(set?.cards) ? set.cards.map((entry) => entry.cardId || entry.card_id || entry) : []).filter((id) => typeof id === "string");
   const hasR18 = ids.some((id) => canonicalCard(id, state.account.customCards)?.r18 === true);
+  if (hasR18 && !ageConfirmed()) { state.account.pendingSet = null; state.error = "R18を含むセットは、アカウント設定で18歳以上の確認をすると遊べます。"; state.account.error = state.error; render(); return; }
   if (hasR18 && !state.account.pendingSet?.consented) { state.account.pendingSet = { set, consented: false }; state.account.open = true; state.account.libraryOpen = true; state.account.error = ""; render(); return; }
   state.session = createSavedSession({ participants: state.participants, cardIds: ids, customCards: state.account.customCards, ownerUserId: state.account.user?.id || null, adultConfirmed: state.account.pendingSet?.consented === true,
   });
@@ -1095,11 +1219,13 @@ async function startSharedSet() {
     return;
   }
   const adultConfirmed = state.adultConfirmed === true;
-  if (!venueMode && shared.adultOnly === true && !isRegisteredUser()) {
-    state.error = "R18の共有セットは無料登録後に使えます。";
-    state.account.open = true;
-    state.account.status = state.error;
-    state.focusSelector = "[data-account-email]";
+  if (!venueMode && sharedBlocked()) {
+    state.error = AGE_REQUIRED_MESSAGE;
+    render();
+    return;
+  }
+  if (venueMode && shared.adultOnly === true && state.venue.ageTapped !== true) {
+    state.error = "18歳以上であることの確認が必要です。";
     render();
     return;
   }
@@ -1114,7 +1240,7 @@ async function startSharedSet() {
   state.error = "";
   render();
   try {
-    const result = venueMode ? await accountApi.startVenue(token, state.selectedVenueSetId, participants, adultConfirmed) : await accountApi.startSharedSet(token, participants, adultConfirmed);
+    const result = venueMode ? await accountApi.startVenue(token, state.selectedVenueSetId, participants, adultConfirmed, state.venue?.ageTapped === true) : await accountApi.startSharedSet(token, participants, adultConfirmed);
     const cards = Array.isArray(result.cards) ? result.cards : [];
     const customCards = cards.filter((card) => card.id?.startsWith("custom:"));
     if (requestId !== state.sharedRequestId || !state.shared || state.shared.token !== token) {
@@ -1149,8 +1275,8 @@ async function startSharedSet() {
     render();
   } catch (error) {
     if (requestId !== state.sharedRequestId) return;
-    if (error?.status === 401 && shared.adultOnly === true && state.account.enabled) { state.account.open = true; state.account.status = "R18の共有セットは、無料登録後に年齢同意を確認して遊べます。"; state.focusSelector = "[data-account-email]"; state.error = "ログインまたは新規登録してください。"; }
-    else state.error = error?.status === 403 ? "R18の話題には参加者全員の同意が必要です。" : "共有セットを開始できませんでした。リンクが停止された可能性があります。";
+    if (error?.status === 401 && shared.adultOnly === true && !venueMode && state.account.enabled) { state.account.open = true; state.account.status = "R18の共有セットは、ログインして18歳以上の確認をしたアカウントで遊べます。"; state.focusSelector = "[data-account-email]"; state.error = "ログインまたは新規登録してください。"; }
+    else state.error = adultErrorMessage(error, error?.status === 403 ? "R18の話題には参加者全員の同意が必要です。" : "共有セットを開始できませんでした。リンクが停止された可能性があります。");
     state.busy = false;
     render();
   }
@@ -1160,7 +1286,13 @@ function submitParticipants() {
     state.participants = normalizeParticipants(state.participants);
     state.screen = "decks";
     state.error = ""; render(); } catch (error) { state.error = error.message; const invalidIndex = state.participants.findIndex((name) => typeof name !== "string" || !name.trim() || Array.from(name.trim()).length > MAX_NAME_LENGTH); state.focusSelector = `input[data-index="${Math.max(0, invalidIndex)}"]`; render(); } }
-function updateAdultButton() { if (state.themeMode === "mixed") return;
+function groupRoomArgs(deck, mySet) { return { deckId: deck?.id, adultOnly: deck?.adultOnly === true, setId: mySet?.id || null, setHasR18: mySet?.hasR18 === true, offerR18: canOfferR18(deck), adultConfirmed: state.adultConfirmed }; }
+function updateGroupLink() {
+  const link = root.querySelector(".group-room-link"); if (!link) return;
+  const mySet = playableSavedSets(state.account.sets, state.account.customCards).find((set) => set.id === state.selectedMySetId && (!set.hasR18 || ageConfirmed())) || null;
+  link.setAttribute("href", groupRoomHref(groupRoomArgs(decks.find((deck) => deck.id === state.selectedDeckId && canUseDeck(deck)) ?? decks.find((deck) => canUseDeck(deck)) ?? decks[0], mySet)));
+}
+function updateAdultButton() { updateGroupLink(); if (state.themeMode === "mixed") return;
   const button = root.querySelector(".selected-start"); const selected = decks.find((deck) => deck.id === state.selectedDeckId); const selectedMySet = playableSavedSets(state.account.sets, state.account.customCards).find((set) => set.id === state.selectedMySetId); if (button && (selected?.adultOnly || selectedMySet?.hasR18)) button.disabled = !state.adultConfirmed || state.busy; }
 function ensureSession() { if (!state.session) throw new Error("セッションが始まっていません");
   return state.session;
@@ -1172,7 +1304,7 @@ function persist(previous = null) { if (!state.session) return; if (previous) tr
   if (state.session.cursor >= state.session.questions.length) clearSession();
   else saveCurrentSession(state.session); }
 function advanceGuarded(action) { ensureSession(); const now = Date.now(); if (now - state.lastAdvanceAt < 300) return false; state.lastAdvanceAt = now; const previous = state.session; state.busy = true; render(); state.session = action(state.session); state.busy = false; persist(previous); if (isActiveVenueSession() && previous.cursor < state.session.cursor && state.session.cursor > 0 && state.session.cursor % ROUND_SIZE === 0) accountApi.venueEvent(state.venue.token, { eventType: "completed_round", setId: state.session.venueSetId, session: state.session.venueSession, roundIndex: state.session.cursor / ROUND_SIZE }).catch(() => {}); render(); return true; }
-function resumeSaved(snapshot = null) { const fresh = snapshot || loadResumeForCurrentUser(); if (!fresh) { state.resume = null; state.error = "保存期限が切れています。"; render(); return; } const needsAuth = fresh.cursor >= 6 && fresh.unlockedUntil > 6; const lockedTheme = sessionNeedsRegistration(fresh); if ((needsAuth || lockedTheme) && !state.account.authReady) { state.resume = fresh; state.error = "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; } if ((needsAuth || lockedTheme) && !state.account.user) { state.resume = fresh; if (!state.account.enabled) { state.error = "ログイン設定を利用できないため、続きを再開できません。"; render(); return; } state.continuePending = { kind: "resume", sessionId: fresh.sessionId, snapshot: fresh }; state.account.open = true; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.error = ""; state.account.status = lockedTheme ? "このテーマは無料登録で使えます。ログインまたは新規登録してください。" : "ログインまたは新規登録で、続きを無料で楽しめます。"; state.focusSelector = "[data-account-email]"; render(); return; } state.resume = fresh; state.session = fresh; state.participantNameOrigin = null; state.participantNameAutoValue = ""; state.participantNameUserEdited = true; state.participants = [...state.session.participants]; state.selectedDeckIds = [...(state.session.deckIds || [state.session.deckId])]; state.selectedDeckId = state.session.mixed ? state.selectedDeckIds[0] : state.session.deckId; state.themeMode = state.session.mixed ? "mixed" : "single"; state.includeChallenges = state.session.includeChallenges === true; state.adultConfirmed = state.session.adultConfirmed === true; state.screen = "play";
+function resumeSaved(snapshot = null) { const fresh = snapshot || loadResumeForCurrentUser(); if (!fresh) { state.resume = null; state.error = "保存期限が切れています。"; render(); return; } if (!canAccessSessionContent(fresh, state.account)) { state.error = state.account.authReady ? "続きを再開できません。" : "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; } const needsAuth = fresh.cursor >= 6 && fresh.unlockedUntil > 6; const lockedTheme = sessionNeedsRegistration(fresh); if ((needsAuth || lockedTheme) && !state.account.authReady) { state.resume = fresh; state.error = "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; } if ((needsAuth || lockedTheme) && !state.account.user) { state.resume = fresh; if (!state.account.enabled) { state.error = "ログイン設定を利用できないため、続きを再開できません。"; render(); return; } state.continuePending = { kind: "resume", sessionId: fresh.sessionId, snapshot: fresh }; state.account.open = true; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.error = ""; state.account.status = lockedTheme ? "このテーマは無料登録で使えます。ログインまたは新規登録してください。" : "ログインまたは新規登録で、続きを無料で楽しめます。"; state.focusSelector = "[data-account-email]"; render(); return; } state.resume = fresh; state.session = fresh; state.participantNameOrigin = null; state.participantNameAutoValue = ""; state.participantNameUserEdited = true; state.participants = [...state.session.participants]; state.selectedDeckIds = [...(state.session.deckIds || [state.session.deckId])]; state.selectedDeckId = state.session.mixed ? state.selectedDeckIds[0] : state.session.deckId; state.themeMode = state.session.mixed ? "mixed" : "single"; state.includeChallenges = state.session.includeChallenges === true; state.adultConfirmed = state.session.adultConfirmed === true; state.screen = "play";
   state.resume = null;
   state.error = ""; render(); }
 
@@ -1249,6 +1381,37 @@ async function continueCurrentRound() {
     render();
   }
 }
+async function confirmAge() {
+  if (state.account.ageBusy || !state.account.user || state.account.ageConfirmedAt || !state.account.ageConfirmChecked) return;
+  const generation = state.account.generation;
+  state.account.ageBusy = true; state.account.error = ""; state.account.status = ""; render();
+  try {
+    const result = await accountApi.confirmAdult("settings");
+    if (generation !== state.account.generation) return;
+    if (typeof result?.adultConfirmedAt !== "string" || !result.adultConfirmedAt) throw new Error("age_confirmation_failed");
+    state.account.ageConfirmedAt = result.adultConfirmedAt; state.account.adultConfirmationAvailable = true; state.account.ageConfirmChecked = false;
+    state.account.status = "年齢の確認を保存しました。";
+    if (!state.venue && state.shared?.ageConfirmationRequired === true) refreshSharedAfterAccountChange();
+  } catch (error) { if (generation === state.account.generation) state.account.error = error?.message === "FEATURE_UNAVAILABLE" ? "年齢の確認は現在利用できません。" : "年齢の確認を保存できませんでした。"; }
+  finally { if (generation === state.account.generation) { state.account.ageBusy = false; render(); } }
+}
+async function revokeAge() {
+  if (state.account.ageBusy || !state.account.user || !state.account.ageConfirmedAt) return;
+  const generation = state.account.generation;
+  state.account.ageBusy = true; state.account.error = ""; state.account.status = ""; render();
+  try {
+    await accountApi.revokeAdult();
+    if (generation !== state.account.generation) return;
+    state.account.ageConfirmedAt = null; state.account.ageRevokeOpen = false; state.account.ageConfirmChecked = false;
+    clearAccountShare({ close: true });
+    state.account.libraryOpen = false;
+    state.account.revealAdult = false; state.account.aiR18 = false; state.account.customDraftR18 = false; state.account.pendingSet = null;
+    state.account.aiQuestions = state.account.aiQuestions.filter((question) => question.r18 !== true);
+    purgeAdultSessions();
+    state.account.status = "年齢の確認を取り消しました。";
+  } catch { if (generation === state.account.generation) state.account.error = "確認を取り消せませんでした。"; }
+  finally { if (generation === state.account.generation) { state.account.ageBusy = false; render(); } }
+}
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
   if (action === "audio-toggle") { event.stopPropagation(); state.focusAction = "audio-toggle"; toggleCardAudio(); render(); return; }
@@ -1286,6 +1449,7 @@ async function handleAction(event) {
   if (action === "google-login") {
     try {
       saveAuthReturnIntent();
+      saveAdultIntent();
       await accountApi.google();
     } catch {
       state.account.error = "Googleログインを開始できませんでした。";
@@ -1324,7 +1488,7 @@ async function handleAction(event) {
   if (action === "account-settings-open") {
     clearAccountShare();
     state.account.error = "";
-    state.account.status = ""; state.account.settingsOpen = true; state.account.libraryOpen = false; state.account.deleteOpen = false; state.account.profileDraft = state.account.user?.displayName || "";
+    state.account.status = ""; state.account.ageRevokeOpen = false; state.account.ageConfirmChecked = false; state.account.settingsOpen = true; state.account.libraryOpen = false; state.account.deleteOpen = false; state.account.profileDraft = state.account.user?.displayName || "";
     state.focusSelector = "[data-profile-name]";
     render();
     return;
@@ -1355,6 +1519,11 @@ async function handleAction(event) {
     deleteAccount();
     return;
   }
+  if (action === "age-confirm") { confirmAge(); return; }
+  if (action === "age-revoke-open") { if (state.account.ageBusy) return; state.account.ageRevokeOpen = true; state.account.error = ""; state.account.status = ""; state.focusAction = "age-revoke-cancel"; render(); return; }
+  if (action === "age-revoke-cancel") { if (state.account.ageBusy) return; state.account.ageRevokeOpen = false; state.focusAction = "age-revoke-open"; render(); return; }
+  if (action === "age-revoke-confirm") { revokeAge(); return; }
+  if (action === "age-settings-open") { if (!state.account.user) return; clearAccountShare(); state.account.open = true; state.account.settingsOpen = true; state.account.libraryOpen = false; state.account.deleteOpen = false; state.account.ageRevokeOpen = false; state.account.ageConfirmChecked = false; state.account.profileDraft = state.account.user?.displayName || ""; state.focusSelector = "[data-age-confirm]"; render(); return; }
   if (action === "account-menu") {
     if (state.account.busy) return;
     resetStudioEntryState(state.account);
@@ -1396,7 +1565,7 @@ async function handleAction(event) {
     state.sharedRequestId += 1;
     state.shared = null;
     state.sharedLoading = false;
-    const generation = ++state.account.generation; try { const privateSession = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (privateSession) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === "play") state.screen = "participants"; } await accountApi.logout(); if (generation !== state.account.generation) return; state.account.user = null; state.account.favorites = new Set(); state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = []; state.account.aiName = ""; state.account.aiR18 = false; state.account.studioReplaceIndex = null; state.account.customCardsAvailable = false; state.account.sets = []; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = "";
+    const generation = ++state.account.generation; try { const privateSession = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (privateSession) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === "play") state.screen = "participants"; } await accountApi.logout(); if (generation !== state.account.generation) return; state.account.user = null; state.account.ageConfirmedAt = null; state.account.adultConfirmationAvailable = false; state.account.ageRevokeOpen = false; state.account.ageConfirmChecked = false; purgeAdultSessions(); state.account.favorites = new Set(); state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = []; state.account.aiName = ""; state.account.aiR18 = false; state.account.studioReplaceIndex = null; state.account.customCardsAvailable = false; state.account.sets = []; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = "";
       state.account.customDraftR18 = false;
       state.account.pendingSet = null;
       state.account.avatarUrl = "";
@@ -1420,7 +1589,7 @@ async function handleAction(event) {
     render();
     return;
   }
-  if (action === "custom-card-edit") { if (state.account.busy) return; const id = String(event.currentTarget.dataset.cardId || ""); const card = state.account.customCards.find((item) => item.id === id); if (!card) return; state.account.customEditorOpen = true; state.account.editingCardId = id; state.account.customDraft = card.text; state.account.customDraftR18 = card.r18 === true; state.focusSelector = "[data-custom-text]";
+  if (action === "custom-card-edit") { if (state.account.busy) return; const id = String(event.currentTarget.dataset.cardId || ""); const card = state.account.customCards.find((item) => item.id === id); if (!card) return; if (card.r18 === true && !ageConfirmed()) { state.account.error = "R18の質問は、アカウント設定で18歳以上の確認をすると編集できます。"; render(); return; } state.account.customEditorOpen = true; state.account.editingCardId = id; state.account.customDraft = card.text; state.account.customDraftR18 = card.r18 === true; state.focusSelector = "[data-custom-text]";
     render();
     return;
   }
@@ -1455,7 +1624,7 @@ async function handleAction(event) {
       if (state.account.share.token) state.account.share.url = `${location.origin}/?share=${encodeURIComponent(state.account.share.token)}`;
       if (state.account.share.url) generateShareQr(state.account.share.url, generation, requestId);
     } catch (error) {
-      if (generation === state.account.generation && requestId === state.account.shareRequestId) state.account.error = error?.status === 404 ? "このセットは共有できません。" : "共有リンクを発行できませんでした。";
+      if (generation === state.account.generation && requestId === state.account.shareRequestId) state.account.error = error?.status === 404 ? "このセットは共有できません。" : adultErrorMessage(error, "共有リンクを発行できませんでした。");
     } finally {
       if (generation === state.account.generation && requestId === state.account.shareRequestId) {
         state.account.shareBusy = false;
@@ -1513,8 +1682,8 @@ async function handleAction(event) {
       if (state.account.share.token) state.account.share.url = `${location.origin}/?share=${encodeURIComponent(state.account.share.token)}`;
       if (state.account.share.url) generateShareQr(state.account.share.url, generation, requestId);
       state.account.status = "新しい共有リンクを発行しました。";
-    } catch {
-      if (generation === state.account.generation && requestId === state.account.shareRequestId) state.account.error = "共有リンクを発行できませんでした。";
+    } catch (error) {
+      if (generation === state.account.generation && requestId === state.account.shareRequestId) state.account.error = adultErrorMessage(error, "共有リンクを発行できませんでした。");
     } finally {
       if (generation === state.account.generation && requestId === state.account.shareRequestId) {
         state.account.shareBusy = false;
@@ -1638,7 +1807,7 @@ async function handleAction(event) {
     state.shareMenuOpen = false;
     state.shareStatus = "";
     state.shareFallbackText = "";
-    const deck = decks.find((item) => item.id === event.currentTarget.dataset.deck); const adultConfirmed = state.adultConfirmed; if (state.themeMode === "mixed" ? !state.selectedDeckIds.every((id) => canUseDeck(decks.find((item) => item.id === id))) : !canUseDeck(deck)) { state.error = "このテーマは無料登録後に使えます。ログイン / 新規登録してください。"; state.account.open = true; state.account.error = ""; state.account.status = state.error; state.focusSelector = "[data-account-email]"; render(); return; } const includeR18 = Boolean(state.themeMode !== "mixed" && deck?.r18Available && adultConfirmed);
+    const deck = decks.find((item) => item.id === event.currentTarget.dataset.deck); const adultConfirmed = state.adultConfirmed; const unseen = state.themeMode === "mixed" ? !state.selectedDeckIds.every((id) => canSeeDeck(decks.find((item) => item.id === id))) : !canSeeDeck(deck); if (unseen) { state.error = "このテーマは利用できません。"; render(); return; } if (state.themeMode === "mixed" ? !state.selectedDeckIds.every((id) => canUseDeck(decks.find((item) => item.id === id))) : !canUseDeck(deck)) { state.error = "このテーマは無料登録後に使えます。ログイン / 新規登録してください。"; state.account.open = true; state.account.error = ""; state.account.status = state.error; state.focusSelector = "[data-account-email]"; render(); return; } const includeR18 = Boolean(state.themeMode !== "mixed" && canOfferR18(deck) && adultConfirmed);
     if (includeR18 && !isRegisteredUser()) { state.error = "R18を含めるには無料登録が必要です。"; render(); return; }
     try {
       state.session =
@@ -1762,7 +1931,7 @@ function registerWebMcp() {
         },
         required: ["participants"],
       }, annotations: { readOnlyHint: false, untrustedContentHint: true }, execute: (payload, { signal } = {}) => { if (signal?.aborted) throw new Error("中止されました");
-        if (payload?.deckId && Array.isArray(payload?.deckIds)) throw new Error("deckIdとdeckIdsは同時に指定できません"); const ids = Array.isArray(payload?.deckIds) ? payload.deckIds : []; if (ids.length && payload?.includeR18 === true) throw new Error("ミックスではR18を選べません"); const next = ids.length ? createMixedSession({ participants: payload?.participants, decks: ids.map((id) => decks.find((item) => item.id === id)), includeChallenges: payload?.includeChallenges === true, includeR18: payload?.includeR18 === true,
+        if (payload?.deckId && Array.isArray(payload?.deckIds)) throw new Error("deckIdとdeckIdsは同時に指定できません"); const ids = Array.isArray(payload?.deckIds) ? payload.deckIds : []; if (ids.length && payload?.includeR18 === true) throw new Error("ミックスではR18を選べません"); const requested = (ids.length ? ids : [payload?.deckId]).map((id) => decks.find((item) => item.id === id)); if (requested.some((deck) => !deck || !canUseDeck(deck)) || (payload?.includeR18 === true && !canOfferR18(requested[0]))) throw new Error("指定されたテーマは利用できません"); const next = ids.length ? createMixedSession({ participants: payload?.participants, decks: ids.map((id) => decks.find((item) => item.id === id)), includeChallenges: payload?.includeChallenges === true, includeR18: payload?.includeR18 === true,
             }) : createSession({ participants: payload?.participants, deck: decks.find((item) => item.id === payload?.deckId), adultConfirmed: payload?.adultConfirmed === true, includeR18: payload?.includeR18 === true, includeChallenges: payload?.includeChallenges === true,
             });
         state.participants = next.participants;
@@ -1808,6 +1977,8 @@ async function loadSharedLink() {
   state.shared = { token, name: "共有セット" };
   render();
   try {
+    await accountConfigReady;
+    if (requestId !== state.sharedRequestId) return;
     const result = await accountApi.sharedSet(token);
     if (requestId !== state.sharedRequestId) return;
     state.shared = { token, ...(result.share || result) };
@@ -1833,7 +2004,7 @@ async function loadVenueLink() {
     const result = await accountApi.venueInfo(token);
     if (requestId !== state.sharedRequestId) return;
     if (!Array.isArray(result.sets) || !result.sets.length) throw new Error("店舗テーマが見つかりません。");
-    state.venue = { token, venue: result.venue, table: result.table, sets: result.sets };
+    state.venue = { token, venue: result.venue, table: result.table, sets: result.sets, ageTapped: false };
     state.selectedVenueSetId = result.sets[0].id;
     state.shared = { token, name: result.venue.name, cardCount: result.sets[0].cardCount, adultOnly: result.sets[0].adultOnly };
     syncSelectedVenueSet();
@@ -1842,11 +2013,12 @@ async function loadVenueLink() {
   finally { if (requestId === state.sharedRequestId) { state.sharedLoading = false; render(); } }
 }
 
+const accountConfigReady = discoverAccountConfig();
 try { const saved = loadSession(); if (saved?.customSet && saved.ownerUserId) state.pendingCustomResume = saved; else state.resume = saved; } catch { state.resume = null; state.pendingCustomResume = null; }
 render();
 loadSharedLink();
 loadVenueLink();
-discoverAccountConfig().then(() => { state.account.enabled = accountConfig.enabled; state.account.google = accountConfig.google; if (!state.account.enabled && state.pendingCustomResume) { clearSession(); state.pendingCustomResume = null; } if (!state.account.enabled) state.account.authReady = true; if (state.account.enabled) { loadAccount(); accountApi.onAuthStateChange?.((event, session) => { setTimeout(() => { const nextUser = session?.user || null; const previousId = state.account.user?.id || null; const nextId = nextUser?.id || null; const identityChanged = Boolean(previousId && nextId && previousId !== nextId); if (event === "SIGNED_OUT" || identityChanged || (event === "SIGNED_IN" && !previousId)) state.account.authReady = false; if (event === "SIGNED_OUT" || identityChanged) {
+accountConfigReady.then(() => { state.account.enabled = accountConfig.enabled; state.account.google = accountConfig.google; if (!state.account.enabled && state.pendingCustomResume) { clearSession(); state.pendingCustomResume = null; } if (!state.account.enabled) state.account.authReady = true; if (state.account.enabled) { loadAccount(); accountApi.onAuthStateChange?.((event, session) => { setTimeout(() => { const nextUser = session?.user || null; const previousId = state.account.user?.id || null; const nextId = nextUser?.id || null; const identityChanged = Boolean(previousId && nextId && previousId !== nextId); if (event === "SIGNED_OUT" || identityChanged || (event === "SIGNED_IN" && !previousId)) state.account.authReady = false; if (event === "SIGNED_OUT" || identityChanged) {
             state.roundFavorite = null; state.continuePending = null;
             clearAccountShare({ close: true });
             state.shareStatus = "";
@@ -1857,7 +2029,7 @@ discoverAccountConfig().then(() => { state.account.enabled = accountConfig.enabl
             state.selectedVenueSetId = null;
             state.sharedLoading = false;
           }
-          const privateResume = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (event === "SIGNED_OUT" || identityChanged) clearAccountParticipantName();
+          const privateResume = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (event === "SIGNED_OUT" || identityChanged) { clearAccountParticipantName(); purgeAdultSessions(); }
           if ((event === "SIGNED_OUT" || identityChanged) && privateResume) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === "play") state.screen = "participants";
           }
           if (previousId === nextId && event !== "SIGNED_OUT") { if (nextId) state.account.user = normalizeAccountUser(nextUser, state.account.user); return; } state.account.generation += 1; state.account.profileRevision += 1; state.account.busy = false; state.account.user = normalizeAccountUser(nextUser); if (!state.account.user) state.account.authReady = true; state.account.favorites = new Set(); state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = []; state.account.aiName = ""; state.account.aiR18 = false; state.account.studioReplaceIndex = null; state.account.customCardsAvailable = false; state.account.sets = []; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ""; state.account.customDraftR18 = false; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.pendingSet = null; state.account.avatarUrl = "";
@@ -1866,5 +2038,6 @@ discoverAccountConfig().then(() => { state.account.enabled = accountConfig.enabl
           state.account.avatarBusy = false;
           state.account.avatarError = "";
           state.account.revealAdult = false;
+          state.account.ageConfirmedAt = null; state.account.adultConfirmationAvailable = false; state.account.ageRevokeOpen = false; state.account.ageConfirmChecked = false;
           state.account.status = "";
-          state.account.error = ""; const preserveRound = Boolean((state.roundFavorite?.loginPending || state.continuePending) && state.session && nextId && !previousId); if (!preserveRound) state.feedback = null; if (state.continuePending?.kind !== "resume") state.resume = null; if (state.account.user) { render(); loadAccount(); } else { state.account.favorites = new Set(); state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = []; state.account.aiName = ""; state.account.aiR18 = false; state.account.studioReplaceIndex = null; state.account.customCardsAvailable = false; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ""; state.account.customDraftR18 = false; state.account.sets = []; render(); } }, 0); }); } }).catch(() => { state.account.authReady = true; state.account.enabled = false; render(); });
+          state.account.error = ""; const preserveRound = Boolean((state.roundFavorite?.loginPending || state.continuePending) && state.session && nextId && !previousId); if (!preserveRound) state.feedback = null; if (state.continuePending?.kind !== "resume") state.resume = null; if (state.account.user) { render(); loadAccount(); } else { state.account.favorites = new Set(); state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = []; state.account.aiName = ""; state.account.aiR18 = false; state.account.studioReplaceIndex = null; state.account.customCardsAvailable = false; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ""; state.account.customDraftR18 = false; state.account.sets = []; state.account.ageConfirmedAt = null; state.account.adultConfirmationAvailable = false; render(); } }, 0); }); } }).catch(() => { state.account.authReady = true; state.account.enabled = false; render(); });

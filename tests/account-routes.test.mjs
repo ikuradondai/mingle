@@ -4,11 +4,12 @@ import { Readable } from 'node:stream';
 
 process.env.SUPABASE_URL = 'https://route-test.supabase.co';
 process.env.SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_route_test';
-const [favoriteRoute, setRoute, cardRoute, avatarRoute] = await Promise.all([
+const [favoriteRoute, setRoute, cardRoute, avatarRoute, adultRoute] = await Promise.all([
   import('../api/account/favorites/[cardId].js'),
   import('../api/account/sets/[setId].js'),
   import('../api/account/cards/[cardId].js'),
   import('../api/account/avatar.js'),
+  import('../api/account/adult-confirmation.js'),
 ]);
 const [shareRoute, shareStartRoute, shareSetRoute] = await Promise.all([
   import('../api/share/[token].js'),
@@ -39,4 +40,19 @@ test('share dynamic route entries export handlers for metadata, start, and owner
   assert.equal(typeof shareRoute.default, 'function');
   assert.equal(typeof shareStartRoute.default, 'function');
   assert.equal(typeof shareSetRoute.default, 'function');
+});
+
+test('adult-confirmation entry shares the account handler; unsupported methods get 405 and writes need a Bearer', async () => {
+  const { default: accountHandler } = await import('../api/account.js');
+  assert.equal(adultRoute.default, accountHandler);
+  for (const method of ['GET', 'POST', 'PATCH']) {
+    const output = sink(); const req = request('/api/account/adult-confirmation'); req.method = method;
+    await adultRoute.default(req, output.res);
+    assert.equal(output.result().status, 405, method);
+  }
+  for (const method of ['PUT', 'DELETE']) {
+    const output = sink(); const req = request('/api/account/adult-confirmation'); req.method = method;
+    await adultRoute.default(req, output.res);
+    assert.equal(output.result().status, 401, method); assert.equal(output.result().value.error, 'UNAUTHENTICATED', method);
+  }
 });
