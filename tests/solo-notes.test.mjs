@@ -33,7 +33,7 @@ function fakeFetch({ anonymous = false } = {}) {
 test('solo note PUT resolves canonical question and upserts only the owner', async () => {
   const fake = fakeFetch(); const service = createSoloNoteService({ env, fetchImpl: fake.fetchImpl });
   const result = await service.upsert(req('/api/account/solo-notes', 'PUT', { sessionId: session, sourceType: 'deck', sourceId: 'self-values', questionId: 'self-values-01', roundNumber: 1, slotKind: 'question', note: '一行目\r\n二行目' }));
-  assert.equal(result.note.questionText, '最近、自然に時間を使いたくなったことは？');
+  assert.equal(result.note.questionText, '最近、時間を忘れて没頭していたのは何をしていたとき？');
   assert.equal(JSON.parse(fake.calls.at(-1).options.body).note, '一行目\n二行目');
   await assert.rejects(() => service.upsert(req('/api/account/solo-notes', 'PUT', { sessionId: session, sourceType: 'deck', sourceId: 'date', questionId: 'date-01', roundNumber: 1, slotKind: 'question', note: 'x' })), (error) => error.code === 'SOLO_SOURCE_REQUIRED');
   await assert.rejects(() => service.upsert(req('/api/account/solo-notes', 'PUT', { sessionId: session, sourceType: 'deck', sourceId: 'self-values', questionId: 'self-values-01', roundNumber: 1, slotKind: 'question', note: 'x'.repeat(2001) })), (error) => error.status === 400);
