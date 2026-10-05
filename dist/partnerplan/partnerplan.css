@@ -326,7 +326,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .flow-grid { grid-template-columns: 1fr; gap: 14px; }
   .flow-grid h3, .flow-grid p { min-height: 0; }
   .flow-grid img { height: 190px; }
-}\n@media (max-width: 380px) {
+}
+@media (max-width: 380px) {
   .hero-copy { padding-inline: 20px; }
   .hero h1 { font-size: 36px; }
   .hero-lead { font-size: 18px; }
@@ -415,4 +416,30 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 @media (max-width: 380px) {
   .closing h2 { font-size: 27px; }
+}
+
+/* FAQ */
+.faq { padding: 74px clamp(24px, 7vw, 105px) 82px; background: var(--white); }
+.faq-heading { max-width: 960px; margin: 0 auto 28px; }
+.faq-heading h2 { margin: 0; color: var(--ink); font-size: clamp(32px, 3.2vw, 48px); line-height: 1.3; letter-spacing: -.06em; font-weight: 900; }
+.faq-list { max-width: 960px; margin: 0 auto; border-top: 1px solid var(--line); }
+.faq-list details { border-bottom: 1px solid var(--line); }
+.faq-list summary { min-height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 4px; color: var(--ink); cursor: pointer; font-size: 16px; line-height: 1.5; font-weight: 800; list-style: none; }
+.faq-list summary::-webkit-details-marker { display: none; }
+.faq-list summary::after { content: "+"; flex: 0 0 auto; color: var(--coral); font-size: 24px; line-height: 1; font-weight: 500; }
+.faq-list details[open] summary::after { content: "−"; }
+.faq-list summary:hover { color: var(--coral); }
+.faq-list summary:focus-visible { outline: 3px solid var(--navy); outline-offset: 3px; border-radius: 4px; }
+.faq-answer { max-width: 840px; padding: 0 42px 18px 4px; color: #244d7c; font-size: 15px; line-height: 1.8; }
+.faq-answer p { margin: 0; }
+.faq-answer p + p { margin-top: .75em; }
+.faq-answer a { color: var(--coral); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 900px) {
+  .faq { padding: 54px 24px 62px; }
+  .faq-heading { margin-bottom: 18px; }
+  .faq-list summary { min-height: 56px; padding: 14px 0; font-size: 15px; }
+  .faq-answer { padding: 0 28px 18px 0; font-size: 15px; }
+}
+@media (max-width: 380px) {
+  .faq { padding-inline: 20px; }
 }
