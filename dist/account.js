@@ -18,6 +18,15 @@ async function request(path, options = {}) {
   let data = null; try { data = await response.json(); } catch {}
   if (!response.ok) { const error = new Error(data?.error || 'account_request_failed'); error.status = response.status; throw error; } return data || {};
 }
+export async function marketplaceRequest(path = '', options = {}) {
+  const token = await sessionToken();
+  const headers = { ...(options.body === undefined ? {} : { 'content-type': 'application/json' }), ...(options.headers || {}) };
+  if (token) headers.authorization = `Bearer ${token}`;
+  const response = await fetcher(`/api/marketplace${path}`, { ...options, credentials: 'same-origin', headers, body: options.body === undefined ? undefined : JSON.stringify(options.body) });
+  let data = null; try { data = await response.json(); } catch {}
+  if (!response.ok) { const error = new Error(data?.error || 'marketplace_request_failed'); error.status = response.status; throw error; }
+  return data || {};
+}
 async function venueRequest(path, options = {}) {
   const token = await sessionToken(); if (!token) throw authError();
   const response = await fetcher(`/api/venue${path}`, { ...options, credentials: 'same-origin', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, ...(options.headers || {}) }, body: options.body === undefined ? undefined : JSON.stringify(options.body) });
@@ -78,6 +87,13 @@ export const accountApi = {
   revokeVenueTable: (id) => venueRequest(`/tables/${encodeURIComponent(id)}/revoke`, { method: 'POST', body: {} }),
   rotateVenueTable: (id) => venueRequest(`/tables/${encodeURIComponent(id)}/rotate`, { method: 'POST', body: {} }),
   venueStats: (id) => venueRequest(`/${encodeURIComponent(id)}/stats`),
+  marketplaceList: (query = '') => marketplaceRequest(query ? `?${query}` : ''),
+  marketplaceDetail: (id, query = '') => marketplaceRequest(`/${encodeURIComponent(id)}${query ? `?${query}` : ''}`),
+  marketplaceOwner: (query = '') => marketplaceRequest(`/owner${query ? `?${query}` : ''}`),
+  marketplacePublish: (payload) => marketplaceRequest('/publish', { method: 'POST', body: payload }),
+  marketplaceImport: (payload) => marketplaceRequest('/import', { method: 'POST', body: payload }),
+  marketplaceLike: (payload) => marketplaceRequest('/like', { method: 'POST', body: payload }),
+  marketplaceWithdraw: (payload) => marketplaceRequest('/withdraw', { method: 'POST', body: payload }),
   createGroupRoom: (deckId, hostName, setId, includeR18, adultConfirmed, participantsAdultAttested) => groupRequest('/rooms', { method: 'POST', body: { ...(deckId ? { deckId } : {}), ...(setId ? { setId } : {}), hostName, includeR18: includeR18 === true, adultConfirmed: adultConfirmed === true, participantsAdultAttested: participantsAdultAttested === true } }),
   groupState: (id, memberToken) => groupRequest(`/rooms/${encodeURIComponent(id)}`, memberToken ? { headers: { 'x-group-member-token': memberToken } } : {}),
   joinGroupRoom: (id, inviteToken, name, adultConfirmed, memberSecret, ageConfirmed) => groupRequest(`/rooms/${encodeURIComponent(id)}/join`, { method: 'POST', body: { inviteToken, name, ageConfirmed: ageConfirmed === true, adultConfirmed: adultConfirmed === true, ...(memberSecret ? { memberSecret } : {}) } }),

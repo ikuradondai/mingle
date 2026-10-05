@@ -2,7 +2,7 @@
 
 この機能は既存機能への追加です。グループ同時プレイは別の `/group-room.html` と専用APIで動作し、店舗QRのプレイ経路には含まれません。`supabase/migrations/202610070001_venues.sql` は自動適用されないため、既存のアカウント/共有セット用migrationの後に、内容をレビューしてからSupabaseへ適用してください。本タスクではproduction DBへ適用していません。`auth.users`、`auth.uid()`、既存のアカウントサービス設定で使うservice role（`SUPABASE_SERVICE_ROLE_KEY`等）が必要です。秘密情報はリポジトリに保存しません。
 
-店舗向けLPは `https://business.mingle.cards` に配置し、LPの「店舗アカウントを作成・ログイン」CTAから `https://mingle.cards/?venueOnboarding=1` を開きます。こちらでは既存のEmail OTP/Google認証を使って同一originの `/venue.html` に戻ります。初回は店舗名、任意の業種・所在地（所在地は店舗管理用で公開しません）、歓迎文を入力し、提供テーマ、卓上QRの順に進めます。店舗管理入口へ直接アクセスした未ログイン利用者にも同じ導線を表示します。卓上QRは `/?venue=<opaque-token>` へ遷移し、通常のMingle参加者・テーマ・カード・音声・パス・6枚区切りのプレイ体験を使います。QRはランダムtokenのSHA-256 hashと、所有者が別端末でも再印刷できるAES-GCM暗号化payloadを保存します。rotate後は旧QRで新しい開始ができず、revoke後は新しい読み込み/開始ができません。すでにブラウザへ読み込まれたカードを取り消す機能ではありません。service keyを変更して暗号payloadを復号できなくなった場合は、対象QRを再発行してください。
+店舗向けLPは `https://partnerplan.mingle.cards` に配置し、LPの「店舗アカウントを作成・ログイン」CTAから `https://mingle.cards/?venueOnboarding=1` を開きます。こちらでは既存のEmail OTP/Google認証を使って同一originの `/venue.html` に戻ります。初回は店舗名、任意の業種・所在地（所在地は店舗管理用で公開しません）、歓迎文を入力し、提供テーマ、卓上QRの順に進めます。店舗管理入口へ直接アクセスした未ログイン利用者にも同じ導線を表示します。卓上QRは `/?venue=<opaque-token>` へ遷移し、通常のMingle参加者・テーマ・カード・音声・パス・6枚区切りのプレイ体験を使います。QRはランダムtokenのSHA-256 hashと、所有者が別端末でも再印刷できるAES-GCM暗号化payloadを保存します。rotate後は旧QRで新しい開始ができず、revoke後は新しい読み込み/開始ができません。すでにブラウザへ読み込まれたカードを取り消す機能ではありません。service keyを変更して暗号payloadを復号できなくなった場合は、対象QRを再発行してください。
 
 テーブルは店舗単位で管理し、公開ランディングで店舗が提供する有効なテーマを選べます。標準テーマまたは完成済みマイセットのスナップショットを保存するため、個人側の編集/削除後も店舗用コピーは変わりません。店舗所有者のアカウント削除時は、設定・提供テーマ・QR・利用集計をschemaのcascadeで削除します。
 
