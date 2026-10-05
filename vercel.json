@@ -9,8 +9,8 @@
     },
     {
       "src": "/",
-      "has": [{ "type": "host", "value": "business.mingle.cards" }],
-      "dest": "/business/index.html"
+      "has": [{ "type": "host", "value": "partnerplan.mingle.cards" }],
+      "dest": "/partnerplan/index.html"
     },
     { "src": "/admin/?", "dest": "/admin.html" },
     { "handle": "filesystem" }
