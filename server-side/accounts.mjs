@@ -128,7 +128,8 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
       const draftRows = await rows('my_set_drafts', user.id, authorization, '&select=*&order=updated_at.desc');
       drafts = draftRows.map(mapDraft);
     } catch (error) { if (missingDraftTable(error)) draftsAvailable = false; else throw error; }
-    return { user: { id: user.id, email: user.email || null, displayName: userDisplayName(user), avatarUrl: avatarUrlValue }, account: { deletionAvailable: Boolean(config.serviceKey), completionAvailable: Boolean(config.serviceKey), adultConfirmedAt: adultState.confirmedAt, adultConfirmationAvailable: adultState.available }, favorites, sets, customCards, customCardsAvailable, drafts, draftsAvailable, aiGenerationAvailable: Boolean(openAiKey && (persistentStoreAvailable() || rateLimitImpl !== consumeAiQuota)) };
+    let hasVenue = false; try { const ownedVenues = await supabaseFetch(config, `/rest/v1/venues?owner_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, { headers: { Authorization: authorization } }, fetchImpl); hasVenue = Array.isArray(ownedVenues) && ownedVenues.length > 0; } catch { /* Older deployments without venue tables keep the generic menu. */ }
+    return { user: { id: user.id, email: user.email || null, displayName: userDisplayName(user), avatarUrl: avatarUrlValue }, account: { deletionAvailable: Boolean(config.serviceKey), completionAvailable: Boolean(config.serviceKey), adultConfirmedAt: adultState.confirmedAt, adultConfirmationAvailable: adultState.available, hasVenue }, favorites, sets, customCards, customCardsAvailable, drafts, draftsAvailable, aiGenerationAvailable: Boolean(openAiKey && (persistentStoreAvailable() || rateLimitImpl !== consumeAiQuota)) };
   }
   async function ensureAdult(user, authorization) { return requireAdultConfirmed({ config, userId: user.id, authorization, fetchImpl }); }
   async function adultConfirmation(req) {

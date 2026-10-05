@@ -62,6 +62,35 @@ test('avatar upload validates JPEG bytes, uses owner storage path, and returns s
   await assert.rejects(() => service.avatar({ ...request('/api/account/avatar', { method: 'PUT', body: { imageData: 'data:image/jpeg;base64,Zm9v' } }), body: { imageData: 'data:image/jpeg;base64,Zm9v' } }), (error) => error.status === 400);
 });
 
+test('account menu venue flag uses verified owner_id query and本人 bearer', async () => {
+  const calls = [];
+  const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url, options) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user' });
+    if (url.includes('/venues?')) return response(200, [{ id: 'venue-1' }]);
+    return response(200, []);
+  } });
+  const result = await service.account(request('/api/account'));
+  assert.equal(result.account.hasVenue, true);
+  const venueQuery = calls.find((call) => call.url.includes('/rest/v1/venues?'));
+  assert.match(venueQuery.url, /owner_id=eq.verified-user/);
+  assert.match(venueQuery.url, /select=id/);
+  assert.match(venueQuery.url, /limit=1/);
+  assert.equal(venueQuery.url.includes('user_id='), false);
+  assert.equal(venueQuery.options.headers.Authorization, 'Bearer user-token');
+});
+
+test('account menu venue flag is false when verified owner has no venues', async () => {
+  const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: 'verified-user-empty' });
+    return response(200, []);
+  } });
+  const result = await service.account(request('/api/account'));
+  assert.equal(result.account.hasVenue, false);
+});
+
 test('avatar deletion tolerates Storage not-found envelopes but surfaces real failures', async () => {
   const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
   const missingService = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url) => {

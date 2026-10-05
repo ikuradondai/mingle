@@ -1,0 +1,17 @@
+import { PGlite } from '@electric-sql/pglite';
+import { readFile } from 'node:fs/promises';
+const db = new PGlite(); await db.waitReady;
+const migration = await readFile(new URL('../../supabase/migrations/202610100003_venue_onboarding.sql', import.meta.url), 'utf8');
+await db.exec("create schema if not exists public; create table public.venues (id uuid primary key, owner_id uuid not null, name text not null, created_at timestamptz not null default now(), updated_at timestamptz not null default now());");
+await db.exec("insert into venues (id, owner_id, name) values ('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','既存店舗')");
+await db.exec(migration); await db.exec(migration);
+const columns = await db.query("select column_name from information_schema.columns where table_schema='public' and table_name='venues' and column_name in ('industry','address') order by column_name");
+if (columns.rows.length !== 2) throw new Error(`columns=${JSON.stringify(columns.rows)}`);
+const existing = await db.query("select name, industry, address from venues where id='00000000-0000-4000-8000-000000000001'");
+if (existing.rows[0]?.name !== '既存店舗') throw new Error('existing venue was not preserved');
+await db.exec("update venues set industry='バー', address='管理住所' where id='00000000-0000-4000-8000-000000000001'");
+await db.query("select 1 from venues where char_length(industry) <= 80 and char_length(address) <= 240");
+await db.exec("do $$ begin begin update venues set industry=repeat('あ',81) where id='00000000-0000-4000-8000-000000000001'; raise exception 'constraint did not reject'; exception when check_violation then null; end; end $$;");
+await db.exec("do $$ begin begin update venues set address=repeat('あ',241) where id='00000000-0000-4000-8000-000000000001'; raise exception 'constraint did not reject'; exception when check_violation then null; end; end $$;");
+console.log('PASS venue onboarding migration twice, columns, existing row, and length constraint');
+await db.close();
