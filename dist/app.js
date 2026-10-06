@@ -603,8 +603,10 @@ function render() {
   root.querySelector('[data-action="studio-ai-discard"]')?.addEventListener('click', () => { state.account.studioRequestId += 1; state.account.busy = false; state.account.aiQuestions = []; state.account.aiName = ''; state.account.aiTheme = ''; state.account.aiTone = ''; state.account.aiR18 = false; state.account.studioMode = state.account.studioAiReturnMode === 'editor' ? 'editor' : 'list'; render(); });
   root.querySelector('form[data-form="studio"]')?.addEventListener('submit', (event) => { event.preventDefault(); state.account.setName = root.querySelector('[data-set-name]')?.value || ''; saveStudioDraft(); });
   root.querySelector('.studio-save-footer button[type="submit"]')?.addEventListener('click', (event) => { event.preventDefault(); state.account.setName = root.querySelector('[data-set-name]')?.value || ''; saveStudioDraft(); });
-  root.querySelector(".card-back")?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === ' ') { event.preventDefault(); playFlipSound(); const previous = ensureSession(); state.session = revealCard(previous); persist(previous); render(); } });
+  root.querySelector(".shared-question-card[data-action='reveal']")?.addEventListener("keydown", (event) => {
+    if (event.target.closest("button")) return;
+    if (event.key === "Enter" || event.key === ' ') { event.preventDefault(); playFlipSound(); const previous = ensureSession(); state.session = revealCard(previous); persist(previous); render(); }
+  });
   updateAdultButton();
   const shareDialog = root.querySelector("[data-share-overlay]");
   const background = root.querySelectorAll(".topbar, .round-break");
@@ -625,8 +627,8 @@ function render() {
   if (focusTarget && shouldScrollToInput) focusTarget.scrollIntoView({ block: "nearest" });
   registerWebMcp();
 }
-function actionIcon(name) { const paths = { grid: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>', play: '<path d="m8 5 11 7-11 7Z"/>', pencil: '<path d="m5 17-1 4 4-1L19 9l-3-3Z"/><path d="m14 7 3 3"/>', check: '<path d="m5 12 4 4L19 6"/>', heart: '<path d="M12 20S4 15.5 4 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.5C20 15.5 12 20 12 20Z"/>', left: '<path d="m14 6-6 6 6 6"/>', right: '<path d="m10 6 6 6-6 6"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>', share: '<circle cx="18" cy="5" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="18" cy="19" r="2"/><path d="m8 11 8-5M8 13l8 5"/>', clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/>' }; return `<svg class="action-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name] || paths.grid}</svg>`; }function brandHomeButton() { return `<button type="button" class="brand app-brand-home" data-action="home" aria-label="ホームに戻る" title="ホームに戻る"><img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" /></button>`; }
-function frame(content, eyebrow = "Mingle.Cards", withHeader = true) { const soloFrame = state.screen === "play" && state.session?.mode === "solo"; const themeFrame = state.screen === "decks"; const quietText = soloFrame ? "自分とミングる" : state.session?.revealed && currentCard(state.session)?.kind === "challenge" ? "やりたくないお題はパスしてOK" : "話したくない質問はパスしてOK"; const header = themeFrame ? `<header class="topbar theme-frame-topbar">${brandHomeButton()}${accountButton(state.account)}</header>` : `<header class="topbar">${brandHomeButton()}<span class="quiet">${quietText}</span></header>`; return `${withHeader ? header : ""}<section class="content">${content}</section>`; }function sharedView() {
+function actionIcon(name) { const paths = { grid: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>', play: '<path d="m8 5 11 7-11 7Z"/>', pencil: '<path d="m5 17-1 4 4-1L19 9l-3-3Z"/><path d="m14 7 3 3"/>', check: '<path d="m5 12 4 4L19 6"/>', heart: '<path d="M12 20S4 15.5 4 9.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 2.5C20 15.5 12 20 12 20Z"/>', left: '<path d="m14 6-6 6 6 6"/>', right: '<path d="m10 6 6 6-6 6"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>', skip: '<path d="m5 5 7 7-7 7Z"/><path d="M19 5v14"/>', share: '<circle cx="18" cy="5" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="18" cy="19" r="2"/><path d="m8 11 8-5M8 13l8 5"/>', clock: '<circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/>' }; return `<svg class="action-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[name] || paths.grid}</svg>`; }function brandHomeButton() { return `<button type="button" class="brand app-brand-home" data-action="home" aria-label="ホームに戻る" title="ホームに戻る"><img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" /></button>`; }
+function frame(content, eyebrow = "Mingle.Cards", withHeader = true) { const soloFrame = state.screen === "play" && state.session?.mode === "solo"; const themeFrame = state.screen === "decks"; const playFrame = state.screen === "play"; const quietText = soloFrame ? "自分とミングる" : state.session?.revealed && currentCard(state.session)?.kind === "challenge" ? "やりたくないお題はパスしてOK" : "話したくない質問はパスしてOK"; const header = themeFrame ? `<header class="topbar theme-frame-topbar">${brandHomeButton()}${accountButton(state.account)}</header>` : `<header class="topbar${playFrame ? " play-frame-topbar" : ""}">${brandHomeButton()}<span class="quiet">${quietText}</span></header>`; return `${withHeader ? header : ""}<section class="content${playFrame ? " play-frame-content" : ""}">${content}</section>`; }function sharedView() {
   const shared = state.shared || {};
   const venueSet = syncSelectedVenueSet();
   const blocked = sharedBlocked();
@@ -965,62 +967,48 @@ function participantChips(session) { return session.participants.map((name, inde
     .join(""); }
 function cardAudioButton() { return `<button type="button" class="card-audio-toggle" data-action="audio-toggle" aria-label="カードをめくる音を${isCardAudioEnabled() ? "オフ" : "オン"}にする" aria-pressed="${isCardAudioEnabled()}">${isCardAudioEnabled() ? "🔊" : "🔇"}</button>`; }
 
+function sharedPlayView(session) {
+  if (venueR18Hidden(session)) return frame(venueR18Gate(session), "店舗カード", true);
+  const revealed = session.revealed === true;
+  const card = revealed ? currentCard(session) : null;
+  const solo = session.mode === "solo";
+  const roundPosition = session.cursor % ROUND_SIZE;
+  const roundTotal = Math.min(ROUND_SIZE, remaining(session) + roundPosition);
+  const playTitle = session.sharedGuest ? session.setName || "共有セット" : session.customSet ? "マイセット" : session.mixed ? `テーマミックス · ${session.deckIds.map((id) => [...decks, ...soloDecks].find((deck) => deck.id === id)?.title).filter(Boolean).join("・")}` : ([...decks, ...soloDecks].find((deck) => deck.id === session.deckId)?.title ?? "会話カード");
+  const cardDesign = cardDesignForSession(session);
+  const cardArtStyle = `--card-art-front:url('${cardDesign.front}');--card-art-back:url('${cardDesign.back}');--card-art-accent:${cardDesign.accent}`;
+  const currentIndex = currentParticipantIndex(session);
+  const speakerName = currentSpeaker(session);
+  const sourceDeckId = session.questions?.[session.cursor]?.sourceDeckId || session.deckId;
+  const cardDeck = [...decks, ...soloDecks].find((item) => item.id === sourceDeckId);
+  const cardThemeMark = card?.kind === "challenge" ? "" : solo ? soloMotifForDeck(sourceDeckId) : cardDeck ? topicIcon(cardDeck) : "";
+  const question = revealed ? esc(card?.text || "カードを読み込んでいます…") : (solo ? "タップしてめくる" : "タップしてめくる");
+  const isChallenge = Boolean(card?.kind === "challenge");
+  const favorite = revealed && !solo && state.account.user && state.account.enabled && card?.kind !== "challenge" && !card?.custom ? `<button type="button" class="favorite-card-button ${state.account.favorites.has(card.id) ? "is-saved" : ""}" data-action="favorite-card" aria-pressed="${state.account.favorites.has(card.id)}" aria-label="${state.account.favorites.has(card.id) ? "保存済み" : "質問を保存"}" title="${state.account.favorites.has(card.id) ? "保存済み" : "質問を保存"}" ${state.account.busy ? "disabled" : ""}>${state.account.favorites.has(card.id) ? "★" : "☆"}</button>` : `<span class="play-toolbar-slot" aria-hidden="true"></span>`;
+  const cardAudio = cardAudioButton();
+  const cardClass = revealed ? "shared-question-card is-revealed" : "shared-question-card is-face-down";
+  const primaryAction = revealed ? (solo ? "next-answer" : "next-answer") : "reveal";
+  const primaryLabel = revealed ? (solo ? "次へ" : session.answerIndex === session.participants.length - 1 ? "次のカード" : "次の人") : "めくる";
+  const actions = solo ? `<div class="shared-actions" role="group" aria-label="操作"><button class="primary-button" data-action="${primaryAction}" ${state.busy ? "disabled" : ""}>${primaryLabel}</button><button class="pass-button" data-action="pass" aria-label="パス" title="パス" ${state.busy ? "disabled" : ""}>${actionIcon("skip")}</button></div>` : `<div class="shared-actions" role="group" aria-label="回答操作"><button class="secondary-button" data-action="previous-answer" aria-label="前の人へ" ${state.busy || !revealed || session.answerIndex === 0 ? "disabled" : ""}>${actionIcon("left")}</button><button class="like-button" data-action="like" aria-label="いいね" ${state.busy || !revealed ? "disabled" : ""}>${actionIcon("heart")} <strong>${revealed ? currentAnswerLikes(session) : 0}</strong></button><button class="primary-button" data-action="${primaryAction}" ${state.busy ? "disabled" : ""}>${primaryLabel}</button><button class="pass-button" data-action="pass" aria-label="パス" title="パス" ${state.busy ? "disabled" : ""}>${actionIcon("skip")}</button></div>`;
+  const otherParticipants = session.participants.filter((_, index) => index !== currentIndex).join("・");
+  const speaker = solo ? "" : `<div class="shared-speaker"><span class="shared-speaker-avatar" aria-hidden="true">${esc(Array.from((speakerName || "・").trim())[0] || "")}</span><strong>${esc(speakerName)}の番</strong>${otherParticipants ? `<span class="shared-participants">${esc(otherParticipants)}</span>` : ""}</div>`;
+  const segments = Array.from({ length: roundTotal }, (_, index) => `<span class="round-segment ${index < roundPosition ? "is-done" : ""} ${index === roundPosition ? "is-current" : ""}"></span>`).join("");
+  const noteKey = card ? `${session.sessionId}:${card.id}` : "";
+  const noteDraft = card ? state.soloNoteDrafts[noteKey] ?? "" : "";
+  const noteStatus = card ? state.soloNoteStatuses[noteKey] || "" : "";
+  const noteError = card ? state.soloNoteErrors[noteKey] || "" : "";
+  const memo = solo ? `<details class="solo-memo" ${revealed && state.soloMemoOpen && state.soloMemoKey === noteKey ? "open" : ""}><summary>${actionIcon("pencil")}メモ</summary>${revealed && card ? `<label for="solo-note">この問いについて残すメモ</label><textarea id="solo-note" data-solo-note maxlength="2000" rows="4" placeholder="保存したいときだけ入力してください">${esc(noteDraft)}</textarea><button type="button" class="secondary-button" data-action="solo-note-save" ${state.busy ? "disabled" : ""}>${state.busy ? "保存中…" : `${actionIcon("check")}保存`}</button>${noteStatus ? `<p class="account-status" role="status">${esc(noteStatus)}</p>` : ""}${noteError ? `<p class="form-error" role="alert">${esc(noteError)}</p>` : ""}` : "<p class=\"solo-memo-locked\">めくった後にメモできます。</p>"}</details>` : "";
+  const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
+  const measurement = !revealed && currentCard(session)?.text ? `<span class="shared-card-measure" aria-hidden="true">${esc(currentCard(session).text)}</span>` : "";
+  return frame(`<div class="shared-play-shell ${solo ? "is-solo" : "is-group"}"><div class="shared-play-head"><div><p class="play-deck">${esc(playTitle)}</p><p class="progress-copy" aria-label="全${session.questions.length}枚中${session.cursor + 1}枚目">${roundPosition + 1} / ${roundTotal}</p></div><button type="button" class="icon-action theme-change-button" data-action="decks" aria-label="テーマを変更">${actionIcon("grid")}</button></div><div class="round-progress shared-round-progress" aria-label="今回の進み具合">${segments}</div><article style="${cardArtStyle}" data-card-family="${cardDesign.family}" class="${cardClass}" ${!revealed ? 'data-action="reveal" role="button" tabindex="0" aria-label="カードをめくる"' : ""} aria-live="polite"><span class="shared-art-rail" aria-hidden="true"></span><span class="shared-card-copy">${isChallenge ? '<span class="challenge-badge">やってみて</span>' : ""}${question}</span>${measurement}<span class="shared-card-motif" aria-hidden="true">${cardThemeMark || ""}</span><span class="shared-bubbles" aria-hidden="true"><i></i><i></i></span>${favorite}${cardAudio}</article>${speaker}${actions}<p class="shared-pass-hint">話したくない質問はパスしてOK</p>${memo}<p class="form-error" role="alert">${esc(state.error)}</p>${accountOverlay}</div>`, "Mingle.Cards", true);
+}
+
 function playView() {
   const session = state.session;
   if (venueR18Hidden(session)) return frame(venueR18Gate(session), "店舗カード", true);
   if (isFinished(session)) return finishView();
   if (isRoundComplete(session) && !session.revealed) return roundView();
-  if (!session.revealed) return backView(session);
-  const card = currentCard(session);
-  const currentIndex = currentParticipantIndex(session);
-  const progress = Math.round((session.cursor / session.questions.length) * 100);
-  const roundPosition = session.cursor % ROUND_SIZE;
-  const roundTotal = Math.min(ROUND_SIZE, remaining(session) + roundPosition);
-  const segments = Array.from({ length: roundTotal }, (_, index) => `<span class="round-segment ${index < roundPosition ? "is-done" : ""} ${index === roundPosition ? "is-current" : ""}"></span>`).join("");
-  const isChallenge = card.kind === "challenge";
-  const playTitle = session.sharedGuest
-    ? session.setName || "共有セット"
-    : session.customSet
-      ? "マイセット"
-      : session.mixed
-        ? `テーマミックス · ${session.deckIds
-            .map((id) => [...decks, ...soloDecks].find((deck) => deck.id === id)?.title)
-            .filter(Boolean)
-            .join("・")}`
-        : ([...decks, ...soloDecks].find((deck) => deck.id === session.deckId)?.title ?? "会話カード");
-  const favorite = state.account.user && state.account.enabled && card.kind !== "challenge" && !card.custom ? `<button type="button" class="favorite-card-button ${state.account.favorites.has(card.id) ? "is-saved" : ""}" data-action="favorite-card" aria-pressed="${state.account.favorites.has(card.id)}" ${state.account.busy ? "disabled" : ""}>${state.account.favorites.has(card.id) ? "★ 保存済み" : "☆ 保存"}</button>` : "";
-  const solo = session.mode === "solo";
-  const cardDesign = cardDesignForSession(session);
-  const sourceDeckId = session.questions?.[session.cursor]?.sourceDeckId || session.deckId;
-  const cardDeck = [...decks, ...soloDecks].find((item) => item.id === sourceDeckId);
-  const cardThemeMark = isChallenge ? "" : solo ? soloMotifForDeck(sourceDeckId) : cardDeck ? topicIcon(cardDeck) : "";
-  const cardCorners = cardDesign.corners;
-  const cardCornerMarkup = Object.entries(cardCorners).map(([position, src]) => `<img class="card-art-corner card-art-corner-${position}" src="${src}" alt="" aria-hidden="true" />`).join("");
-  const cardArtStyle = `--card-art-front:url('${cardDesign.front}');--card-art-back:url('${cardDesign.back}');--card-art-accent:${cardDesign.accent}`;
-  const noteKey = `${session.sessionId}:${card.id}`; const noteDraft = state.soloNoteDrafts[noteKey] ?? ""; const noteStatus = state.soloNoteStatuses[noteKey] || ""; const noteError = state.soloNoteErrors[noteKey] || "";
-  const memo = solo ? `<details class="solo-memo" ${state.soloMemoOpen && state.soloMemoKey === noteKey ? "open" : ""}><summary>${actionIcon("pencil")}メモ</summary><label for="solo-note">この問いについて残すメモ</label><textarea id="solo-note" data-solo-note maxlength="2000" rows="4" placeholder="保存したいときだけ入力してください">${esc(noteDraft)}</textarea><button type="button" class="secondary-button" data-action="solo-note-save" ${state.busy ? "disabled" : ""}>${state.busy ? "保存中…" : `${actionIcon("check")}保存`}</button>${noteStatus ? `<p class="account-status" role="status">${esc(noteStatus)}</p>` : ""}${noteError ? `<p class="form-error" role="alert">${esc(noteError)}</p>` : ""}</details>` : "";
-  const soloActions = `<div class="answer-actions solo-answer-actions" role="group" aria-label="操作"><button class="primary-button" data-action="next-answer" ${state.busy ? "disabled" : ""}>${actionIcon("right")}次へ</button><button class="pass-button" data-action="pass" ${state.busy ? "disabled" : ""}>スキップ</button></div>`;
-  const groupActions = `<div class="speaker-pill"><strong>${esc(currentSpeaker(session))}の番</strong><span>${session.answerIndex + 1} / ${session.participants.length}</span></div><div class="participant-strip" aria-label="参加者">${participantChips(session)}</div><div class="answer-actions" role="group" aria-label="回答操作"><button class="secondary-button" data-action="previous-answer" aria-label="前の人へ" title="前の人へ" ${session.answerIndex === 0 || state.busy ? "disabled" : ""}>${actionIcon("left")}</button><button class="like-button" data-action="like" aria-label="${esc(currentSpeaker(session))}の回答にいいね" title="${esc(currentSpeaker(session))}の回答にいいね" ${state.busy ? "disabled" : ""}>${actionIcon("heart")} <strong>${currentAnswerLikes(session)}</strong></button><button class="primary-button" data-action="next-answer" ${state.busy ? "disabled" : ""}>${actionIcon("right")}${session.answerIndex === session.participants.length - 1 ? "次のカード" : "次の人"}</button><button class="pass-button" data-action="pass" ${state.busy ? "disabled" : ""}>パス</button></div>`;
-  const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(state.session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
-  return frame(`<div class="play-head ${solo ? "solo-play-head" : ""}"><div><p class="play-deck">${esc(playTitle)}</p><p class="progress-copy" aria-label="全${session.questions.length}枚中${session.cursor + 1}枚目">${roundPosition + 1} / ${roundTotal}</p></div><button type="button" class="icon-action theme-change-button" data-action="decks" aria-label="テーマを変更" title="テーマを変更">${actionIcon("grid")}</button></div><div class="round-progress ${solo ? "solo-round-progress" : ""}" aria-label="今回の進み具合">${segments}</div><article style="${cardArtStyle}" data-card-family="${cardDesign.family}" class="question-card active-card ${solo ? "solo-question-card" : ""} ${isChallenge ? "challenge-card" : ""}" aria-live="polite">${isChallenge ? '<span class="challenge-badge">やってみて</span>' : ""}${solo ? "" : favorite}${cardAudioButton()}${cardThemeMark ? `<span class="card-theme-mark" aria-hidden="true">${cardThemeMark}</span>` : ""}${cardCornerMarkup}<p>${esc(card.text)}</p></article>${solo ? soloActions : groupActions}${memo}<p class="form-error" role="alert">${esc(state.error)}</p>${accountOverlay}`);
-}
-
-function backView(session) {
-  if (venueR18Hidden(session)) return frame(venueR18Gate(session), "店舗カード", true);
-  const solo = session.mode === "solo";
-  const cardDesign = cardDesignForSession(session);
-  const sourceDeckId = session.questions?.[session.cursor]?.sourceDeckId || session.deckId;
-  const cardDeck = [...decks, ...soloDecks].find((item) => item.id === sourceDeckId);
-  const cardThemeMark = solo ? soloMotifForDeck(sourceDeckId) : cardDeck ? topicIcon(cardDeck) : "";
-  const cardArtStyle = `--card-art-front:url('${cardDesign.front}');--card-art-back:url('${cardDesign.back}');--card-art-accent:${cardDesign.accent}`;
-  const roundPosition = session.cursor % ROUND_SIZE;
-  const roundTotal = Math.min(ROUND_SIZE, remaining(session) + roundPosition);
-  const playTitle = [...decks, ...soloDecks].find((item) => item.id === session.deckId)?.title || (session.customSet ? "マイセット" : "自分とミングる");
-  const soloHeader = solo ? `<div class="play-head solo-play-head"><div><p class="play-deck">${esc(playTitle)}</p><p class="progress-copy" aria-label="全${session.questions.length}枚中${session.cursor + 1}枚目">${roundPosition + 1} / ${roundTotal}</p></div><button type="button" class="icon-action theme-change-button" data-action="decks" aria-label="テーマを変更" title="テーマを変更">${actionIcon("grid")}</button></div><div class="round-progress solo-round-progress" aria-label="今回の進み具合">${Array.from({ length: roundTotal }, (_, index) => `<span class="round-segment ${index < roundPosition ? "is-done" : ""} ${index === roundPosition ? "is-current" : ""}"></span>`).join("")}</div>` : "";
-  const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
-  const mark = cardThemeMark ? `<span class="card-theme-mark" aria-hidden="true">${cardThemeMark}</span>` : "";
-  const label = solo ? "問いをめくる" : "タップしてめくる";
-  return frame(`${soloHeader}<div class="card-back-wrap ${solo ? "solo-card-back-wrap" : ""}"><div style="${cardArtStyle}" data-card-family="${cardDesign.family}" class="card-back ${solo ? "solo-card-back" : ""}" data-action="reveal" role="button" tabindex="0" aria-label="カードをめくる">${!solo ? `<span class="round-badge">${roundPosition + 1} / ${roundTotal}</span>` : ""}<div class="card-back-art" aria-hidden="true"></div><div class="card-back-copy"><img class="card-back-logo" src="/assets/mingle-cards-masthead.png" alt="" width="180" height="109" />${mark}<h1 tabindex="-1" data-focus>${label}</h1></div></div>${cardAudioButton()}</div>${accountOverlay}`);
+  return sharedPlayView(session);
 }
 
 function feedbackState(session) {

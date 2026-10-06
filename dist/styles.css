@@ -688,79 +688,33 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .icon-action:focus-visible,.app-brand-home:focus-visible{outline:3px solid var(--lime);outline-offset:3px}
 @media(max-width:680px){.theme-frame-topbar{padding-left:16px;padding-right:16px}.app-brand-home,.app-brand-home img{width:100px;height:52px}.theme-frame-topbar .account-button{width:44px;height:44px}}
 @media (orientation:landscape) and (max-height:560px){body.solo-play .app-shell[data-screen="play"] .content{display:block;grid-template-columns:none;grid-template-rows:none;gap:0;padding-left:16px;padding-right:16px}body.solo-play .app-shell[data-screen="play"] .solo-question-card,body.solo-play .app-shell[data-screen="play"] .solo-card-back{grid-column:auto;grid-row:auto}}
-/* Generated card art: HTML owns all copy; family art supplies paper, corners, and the reverse illustration. */
-.app-shell[data-screen="play"] .content { width:min(100%,728px); margin-inline:auto; }
-.app-shell[data-screen="play"] .question-card[data-card-family],
-.app-shell[data-screen="play"] .card-back[data-card-family] {
-  position: relative;
-  width: 100%;
-  max-width: 680px;
-  margin-inline: auto;
-  border: 1px solid color-mix(in srgb, var(--card-art-accent) 38%, #fff 62%);
-  border-radius: 24px;
-  background: #fffaf3;
-  box-shadow: 0 10px 24px rgba(20,33,61,.1);
-  overflow: hidden;
-  box-sizing: border-box;
-}
-.app-shell[data-screen="play"] .question-card[data-card-family] {
-  min-height: clamp(250px, 52dvh, 520px);
-  padding: clamp(72px, 8vw, 94px) clamp(90px, 10vw, 120px) 76px;
-  isolation: isolate;
-}
-.app-shell[data-screen="play"] .question-card[data-card-family] p { position: relative; z-index: 1; overflow-wrap: anywhere; }
-.app-shell[data-screen="play"] .question-card[data-card-family]::before,
-.app-shell[data-screen="play"] .question-card[data-card-family]::after { display:none; }
-.app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner {
-  position: absolute; z-index: 0; width: clamp(60px, 11vw, 110px); height: auto;
-  pointer-events: none; user-select: none;
-}
-.app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner-tl { top: 0; left: 0; mask-image:linear-gradient(90deg,#000 0 86%,transparent),linear-gradient(180deg,#000 0 86%,transparent); mask-composite:intersect; }
-.app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner-tr { top: 0; right: 0; mask-image:linear-gradient(270deg,#000 0 86%,transparent),linear-gradient(180deg,#000 0 86%,transparent); mask-composite:intersect; }
-.app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner-bl { bottom: 0; left: 0; mask-image:linear-gradient(90deg,#000 0 86%,transparent),linear-gradient(0deg,#000 0 86%,transparent); mask-composite:intersect; }
-.app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner-br { bottom: 0; right: 0; mask-image:linear-gradient(270deg,#000 0 86%,transparent),linear-gradient(0deg,#000 0 86%,transparent); mask-composite:intersect; }
-.app-shell[data-screen="play"] [data-card-family] .card-theme-mark {
-  position:absolute; top:16px; left:18px; right:auto; z-index:3; display:grid; place-items:center;
-  width:34px; height:34px; color:var(--card-art-accent); border-radius:12px;
-  background:rgba(255,253,248,.84); box-shadow:0 2px 8px rgba(20,33,61,.08);
-}
-.app-shell[data-screen="play"] [data-card-family] .card-theme-mark svg { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
-.app-shell[data-screen="play"] .card-back[data-card-family] {
-  min-height:370px; display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr); gap:18px; padding:18px;
-  color:var(--ink);
-}
-.app-shell[data-screen="play"] .card-back[data-card-family] .card-back-art {
-  min-height:320px; width:100%; border-radius:20px; background-image:var(--card-art-back);
-  background-repeat:no-repeat; background-position:center; background-size:contain; background-color:#fffaf3;
-}
-.app-shell[data-screen="play"] .card-back[data-card-family] .card-back-copy {
-  display:flex; flex-direction:column; justify-content:center; align-items:center; gap:14px; min-width:0;
-  padding:24px 18px; border-radius:20px; background:rgba(255,250,243,.94); text-align:center;
-}
-.app-shell[data-screen="play"] .card-back[data-card-family] .card-back-logo { width:min(180px,74%); height:auto; object-fit:contain; }
-.app-shell[data-screen="play"] .card-back[data-card-family] .card-theme-mark { position:static; width:36px; height:36px; }
-.app-shell[data-screen="play"] .card-back[data-card-family] .card-back-copy h1 { margin:0; color:var(--ink); font-size:clamp(24px,3vw,34px); }
-.app-shell[data-screen="play"] .card-back[data-card-family] .card-back-copy p { display:none; }
-.app-shell[data-screen="play"] .card-back[data-card-family] .round-badge { z-index:3; color:var(--ink); background:var(--lime); }
-.app-shell[data-screen="play"] .solo-card-back[data-card-family] { width:100%; max-width:680px; }
-.app-shell[data-screen="play"] .solo-card-motif { color:var(--card-art-accent); }
-@media (max-width:680px) {
-  .app-shell[data-screen="play"] .question-card[data-card-family] { min-height:clamp(240px,42dvh,390px); padding:58px 50px 66px; border-radius:21px; }
-  .app-shell[data-screen="play"] .question-card[data-card-family] .card-art-corner { width:clamp(60px,19vw,75px); }
-  .app-shell[data-screen="play"] .card-back[data-card-family] { position:relative; display:block; min-height:clamp(380px,58dvh,430px); max-width:680px; padding:0; border-radius:22px; }
-  .app-shell[data-screen="play"] .card-back[data-card-family] .card-back-art { position:absolute; inset:0; width:100%; min-height:0; border-radius:21px; background-size:cover; }
-  .app-shell[data-screen="play"] .card-back[data-card-family] .card-back-copy { position:absolute; left:50%; bottom:18px; z-index:2; width:auto; min-width:180px; transform:translateX(-50%); gap:6px; padding:10px 20px; border-radius:999px; background:#fffaf3; box-shadow:0 4px 14px rgba(20,33,61,.16); }
-  .app-shell[data-screen="play"] .card-back[data-card-family] .card-back-logo { display:none; }
-  .app-shell[data-screen="play"] .card-back[data-card-family] .card-back-copy h1 { font-size:20px; white-space:nowrap; }
-  .app-shell[data-screen="play"] .solo-card-back[data-card-family] { min-height:clamp(380px,58dvh,430px); padding:0; }
-}
-/* Solo's older question-card rules remain available for the non-art fallback, but
-   they must not override the art card's measured surface. */
-body.solo-play .app-shell[data-screen="play"] .question-card[data-card-family] { min-height:clamp(240px,42dvh,390px); padding:58px 50px 66px; border:1px solid color-mix(in srgb,var(--card-art-accent) 38%,#fff 62%); border-radius:24px; background:#fffaf3; box-shadow:0 10px 24px rgba(20,33,61,.1); }
-body.solo-play .app-shell[data-screen="play"] .card-back[data-card-family] { width:100%; max-width:680px; min-height:370px; padding:18px; }
-body.solo-play .app-shell[data-screen="play"] .question-card[data-card-family]::before,
-body.solo-play .app-shell[data-screen="play"] .question-card[data-card-family]::after { display:none; }
-@media (max-width:680px) {
-  body.solo-play .app-shell[data-screen="play"] .question-card[data-card-family] { min-height:clamp(240px,42dvh,390px); padding:58px 50px 66px; }
-  body.solo-play .app-shell[data-screen="play"] .card-back[data-card-family] { min-height:clamp(380px,58dvh,430px); padding:0; }
-}
+
+/* Shared play shell: one stable geometry for unrevealed and revealed cards. */
+.play-frame-topbar,.play-frame-content{width:min(100%,792px);margin-inline:auto;padding-inline:16px}
+.play-frame-content{display:block!important;grid-template-columns:none!important;grid-template-rows:none!important;gap:0!important}
+.shared-play-shell{width:min(100%,760px);margin-inline:auto}
+.shared-play-head{display:flex;align-items:center;justify-content:space-between;min-height:44px}
+.shared-play-head>div{min-width:0}.shared-play-head .play-deck{margin:0;color:var(--ink);font-size:clamp(17px,2.1vw,22px);font-weight:800;line-height:1.2;overflow-wrap:anywhere}.shared-play-head .progress-copy{margin:3px 0 0;color:var(--muted);font-size:14px;font-weight:800}
+.shared-round-progress{height:4px;margin:8px 0 12px}
+.shared-question-card{position:relative;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:1fr;align-items:center;min-height:300px;width:100%;box-sizing:border-box;overflow:visible;border:1px solid rgba(20,33,61,.12);border-radius:24px;background:#fffaf3;box-shadow:0 12px 28px rgba(20,33,61,.1);isolation:isolate}
+.shared-art-rail{position:absolute;z-index:0;inset:0 auto 0 0;width:18%;border-radius:23px 0 0 23px;background-image:var(--card-art-back);background-repeat:no-repeat;background-position:center;background-size:auto 116%;mix-blend-mode:multiply;opacity:.96;pointer-events:none;-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 0H100C88 8 84 18 92 29C100 40 82 48 89 59C96 70 80 80 87 90C91 95 96 98 100 100H0Z'/%3E%3C/svg%3E");mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'%3E%3Cpath d='M0 0H100C88 8 84 18 92 29C100 40 82 48 89 59C96 70 80 80 87 90C91 95 96 98 100 100H0Z'/%3E%3C/svg%3E");-webkit-mask-size:100% 100%;mask-size:100% 100%;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat}
+.shared-card-copy,.shared-card-measure{grid-area:1 / 1;position:relative;z-index:2;width:70%;margin-left:14%;padding:52px 0 66px;text-align:center;color:var(--ink);font-size:clamp(26px,3vw,36px);font-weight:800;line-height:1.35;letter-spacing:-.04em;overflow-wrap:anywhere}.shared-card-measure{visibility:hidden;pointer-events:none}
+.shared-question-card.is-face-down .shared-card-copy{color:var(--blue);font-size:clamp(19px,2.5vw,28px)}
+.shared-card-motif{position:absolute;z-index:3;left:16px;top:16px;width:24px;height:24px;display:grid;place-items:center;color:var(--blue);font-size:22px;opacity:.9;pointer-events:none}.shared-card-motif svg{width:22px;height:22px}
+.shared-bubbles{display:none;position:absolute;z-index:3;left:50%;top:16%;width:84px;height:42px;transform:translateX(-50%);pointer-events:none}.shared-question-card.is-face-down .shared-bubbles{display:block}.shared-bubbles i{position:absolute;display:block;width:36px;height:25px;border-radius:50% 50% 45% 45%;background:var(--blue);transform:rotate(-12deg)}.shared-bubbles i:first-child{left:4px;top:8px}.shared-bubbles i:last-child{right:4px;top:0;background:var(--lime);transform:rotate(12deg)}
+.shared-question-card .favorite-card-button,.shared-question-card .card-audio-toggle{position:absolute;z-index:4;top:auto;left:auto;bottom:14px;width:44px;height:44px;margin:0;border:1px solid var(--line);border-radius:50%;background:#fff;box-shadow:0 3px 10px rgba(20,33,61,.1);display:grid;place-items:center}.shared-question-card .favorite-card-button{right:64px;color:var(--coral);font-size:20px}.shared-question-card .card-audio-toggle{right:14px;font-size:16px}.play-toolbar-slot{position:absolute;z-index:2;right:64px;bottom:14px;width:44px;height:44px;border:1px solid transparent;border-radius:50%;background:transparent;box-shadow:none;opacity:0}
+.shared-speaker{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-height:38px;margin-top:8px;color:var(--ink);overflow-wrap:anywhere}.shared-speaker-avatar{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:50%;color:#fff;background:var(--coral);font-weight:900}.shared-speaker strong{font-size:17px;overflow-wrap:anywhere}.shared-participants{color:var(--muted);font-size:14px;overflow-wrap:anywhere}
+.shared-actions{display:grid;grid-template-columns:44px 64px minmax(0,1fr) 44px;gap:8px;align-items:center;min-height:48px;max-width:600px;margin:8px auto 0}.shared-actions button{grid-column:auto;grid-row:auto;min-height:48px}.shared-actions .like-button,.shared-actions .pass-button{min-width:0;padding-inline:8px}.shared-actions .pass-button{display:grid;place-items:center}.shared-actions .pass-button .action-icon{width:18px;height:18px}.shared-play-shell.is-solo .shared-actions{grid-template-columns:minmax(0,1fr) 48px}.shared-pass-hint{margin:7px 0 0;color:var(--muted);font-size:12px;text-align:center}.shared-question-card:focus-visible{outline:3px solid var(--lime);outline-offset:3px}
+@media(max-width:680px){.shared-play-shell{width:100%}.shared-play-head{min-height:40px}.shared-play-head .play-deck{font-size:17px}.shared-round-progress{margin:6px 0 8px}.shared-question-card{min-height:280px;border-radius:20px}.shared-art-rail{border-radius:19px 0 0 19px}.shared-card-copy,.shared-card-measure{width:72%;margin-left:14%;padding:48px 0 60px;font-size:clamp(24px,7vw,29px)}.shared-question-card.is-face-down .shared-card-copy{font-size:19px}.shared-question-card .favorite-card-button,.shared-question-card .card-audio-toggle,.play-toolbar-slot{bottom:10px}.shared-question-card .favorite-card-button,.play-toolbar-slot{right:62px}.shared-question-card .card-audio-toggle{right:10px}.shared-speaker{min-height:38px;margin-top:7px}.shared-speaker strong{font-size:16px}.shared-actions{grid-template-columns:44px 64px minmax(0,1fr) 44px;gap:6px;margin-top:7px}.shared-actions .primary-button{font-size:16px;padding-inline:8px}.shared-pass-hint{margin-top:6px}}
+@media(max-width:380px){.shared-card-copy,.shared-card-measure{font-size:23px}.shared-question-card.is-face-down .shared-card-copy{font-size:18px}.shared-actions{grid-template-columns:44px 60px minmax(0,1fr) 44px;gap:5px}}
+
+/* Final play polish. */
+.shared-card-copy,.shared-card-measure{width:72%;margin-left:22%;text-wrap:balance}
+.shared-card-motif{left:12px;top:12px;width:32px;height:32px;border-radius:8px;background:#fffaf3}
+.shared-card-motif svg{width:22px;height:22px;fill:none;stroke:currentColor}
+.shared-actions .like-button{display:inline-flex;align-items:center;justify-content:center;gap:4px;height:48px;min-height:48px;padding:0;background:rgba(240,113,104,.14);color:var(--coral);border:0}
+.shared-actions .like-button strong{margin:0;padding:0;border-left:0}
+.shared-actions .like-button .action-icon{margin:0}
+.shared-bubbles i:after{content:"";position:absolute;bottom:-4px;left:9px;width:8px;height:8px;background:inherit;clip-path:polygon(0 0,100% 0,0 100%)}
+.play-frame-topbar{padding-top:12px;padding-bottom:6px}.play-frame-topbar .app-brand-home,.play-frame-topbar .app-brand-home img{width:100px;height:48px}.play-frame-topbar .quiet{display:none}
+@media(max-width:680px){.shared-card-copy,.shared-card-measure{width:72%;margin-left:22%}}
