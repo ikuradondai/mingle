@@ -72,6 +72,9 @@ test('host create, guest join, projection and CAS answer progression', async () 
   const { service, seen } = fixture();
   const created = await service.create(req({ deckId: 'date', hostName: '代表者' }));
   assert.equal(created.host, true);
+  assert.equal(created.room.participantRule, 'pair');
+  assert.equal(created.room.participantLimit, 2);
+  assert.ok(created.room.cards === undefined || created.room.participantRule === 'pair');
   assert.equal(created.room.members.length, 1);
   const joined = await service.join({ body: { inviteToken: created.inviteToken, name: '友だち' }, headers: {} }, roomId);
   assert.equal(joined.room.members.length, 2);
@@ -88,6 +91,27 @@ test('host create, guest join, projection and CAS answer progression', async () 
   assert.equal(secondSpeaker.room.answerIndex, 1);
   const guestAfterSpeaker = await service.state({ headers: { 'x-group-member-token': joined.memberToken }, url: 'http://localhost/api/group' }, roomId);
   assert.equal(guestAfterSpeaker.room.speakerName, '友だち');
+});
+
+test('pair rooms reject a third participant while preserving repeated-secret rejoin', async () => {
+  const { service } = fixture();
+  const created = await service.create(req({ deckId: 'date' }));
+  await assert.rejects(() => service.action(req({ action: 'start', revision: created.room.revision }), roomId), (error) => error.code === 'GROUP_PARTICIPANTS');
+  const first = await service.join({ body: { inviteToken: created.inviteToken, name: '友だち', memberSecret: 'A'.repeat(43) }, headers: {} }, roomId);
+  const repeated = await service.join({ body: { inviteToken: created.inviteToken, name: '友だち', memberSecret: 'A'.repeat(43) }, headers: {} }, roomId);
+  assert.equal(repeated.member.id, first.member.id);
+  await assert.rejects(() => service.join({ body: { inviteToken: created.inviteToken, name: '三人目', memberSecret: 'B'.repeat(43) }, headers: {} }, roomId), (error) => error.code === 'GROUP_FULL');
+  const started = await service.action(req({ action: 'start', revision: repeated.room.revision }), roomId);
+  assert.equal(started.room.status, 'playing');
+});
+
+test('pair metadata is carried by a saved pair source before the join cap', async () => {
+  const { service } = fixture();
+  const created = await service.create(req({ setId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }));
+  assert.equal(created.room.participantRule, 'pair');
+  assert.equal(created.room.participantLimit, 2);
+  await service.join({ body: { inviteToken: created.inviteToken, name: '友だち', memberSecret: 'C'.repeat(43) }, headers: {} }, roomId);
+  await assert.rejects(() => service.join({ body: { inviteToken: created.inviteToken, name: '三人目', memberSecret: 'D'.repeat(43) }, headers: {} }, roomId), (error) => error.code === 'GROUP_FULL');
 });
 
 test('unknown member and guest mutation are denied, stale CAS wins once', async () => {

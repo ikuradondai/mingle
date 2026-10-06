@@ -11,6 +11,7 @@ import { challenges } from './data/challenges.js';
 import { decks } from './data/decks.js';
 import { soloDecks } from './data/solo-decks.js';
 import { normalizeCreatorDesign, effectiveCreatorAdult } from './creator-metadata.js';
+import { participantCountAllowed } from './participant-rule.js';
 
 export function normalizeParticipants(participants) {
   if (!Array.isArray(participants) || participants.length < 2 || participants.length > MAX_PARTICIPANTS) throw new Error('参加者は2〜8人で入力してください');
@@ -21,15 +22,22 @@ export function normalizeParticipants(participants) {
   return names;
 }
 
-export function createSession({ participants, deck, adultConfirmed = false, includeR18 = false, includeChallenges = false, random = Math.random }) {
+function assertParticipantRule(rule, count) {
+  const normalized = ['pair', 'group', 'solo'].includes(rule) ? rule : 'group';
+  if (!participantCountAllowed(normalized, count)) throw new Error(normalized === 'pair' ? '2人専用テーマには2人で参加してください' : '参加人数がテーマに適合しません');
+  return normalized;
+}
+
+export function createSession({ participants, deck, participantRule = 'group', adultConfirmed = false, includeR18 = false, includeChallenges = false, random = Math.random }) {
   const names = normalizeParticipants(participants);
+  const normalizedRule = assertParticipantRule(participantRule, names.length);
   if (!deck || !Array.isArray(deck.questions) || deck.questions.length !== 40) throw new Error('デッキが不正です');
   if (deck.adultOnly && adultConfirmed !== true) throw new Error('成人向け確認が必要です');
   if (includeR18 && adultConfirmed !== true) throw new Error('R18の話題には成人確認が必要です');
   if (includeR18 && (!Array.isArray(deck.r18Questions) || deck.r18Questions.length < 6)) throw new Error('R18質問が不正です');
   const baseQuestions = includeR18 ? composeR18Questions(deck, random) : shuffle(deck.questions, random);
   const questions = includeChallenges ? composeChallenges(baseQuestions, random, includeR18 && !deck.adultOnly, deck.id, names.length) : baseQuestions;
-  return { sessionId: createSessionId(), participants: names, deckId: deck.id, deckIds: [deck.id], mixed: false, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+  return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: deck.id, deckIds: [deck.id], mixed: false, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 // One-person fixed-order session for ひとりで. Group participant rules
@@ -51,10 +59,11 @@ function normalizeCustomCards(customCards) {
   }));
 }
 
-export function createSavedSession({ mode = 'group', participants, cardIds, setId = null, setName = null, customCards = [], ownerUserId = null, adultConfirmed = false, questionOrder = 'shuffle', r18 = false, design = null, random = Math.random }) {
+export function createSavedSession({ mode = 'group', participants, cardIds, setId = null, setName = null, customCards = [], ownerUserId = null, adultConfirmed = false, questionOrder = 'shuffle', r18 = false, design = null, participantRule = mode === 'solo' ? 'solo' : 'group', random = Math.random }) {
   if (!['group', 'solo'].includes(mode)) throw new Error('マイセットのモードが不正です');
   if (mode === 'solo' && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerUserId || '') || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(setId || ''))) throw new Error('ソロマイセットの所有者が不正です');
   const names = mode === 'solo' ? ['自分'] : normalizeParticipants(participants);
+  const normalizedRule = assertParticipantRule(mode === 'solo' ? 'solo' : participantRule, names.length);
   if (!Array.isArray(cardIds) || cardIds.length < ROUND_SIZE || cardIds.length > 40 || new Set(cardIds).size !== cardIds.length || cardIds.some((id) => typeof id !== 'string')) throw new Error('マイセットの質問が不正です');
   const catalog = new Map();
   [...decks, ...soloDecks].forEach((deck) => {
@@ -70,11 +79,12 @@ export function createSavedSession({ mode = 'group', participants, cardIds, setI
   const hasCustom = questions.some((card) => card.sourceDeckId === 'custom');
   if (hasCustom && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerUserId || '')) throw new Error('マイセットの所有者が不正です');
   const owner = typeof ownerUserId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerUserId) ? ownerUserId : null;
-  return { sessionId: createSessionId(), mode, participants: names, deckId: 'my-set', deckIds: ['my-set'], setId: typeof setId === 'string' ? setId : null, setName: typeof setName === 'string' ? setName : null, questionOrder, r18: r18 === true, design: normalizeCreatorDesign(design), customSet: true, ownerUserId: owner, customQuestions: hasCustom ? questions.filter((card) => card.sourceDeckId === 'custom').map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true })) : [], mixed: false, questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+  return { sessionId: createSessionId(), mode, participants: names, participantRule: normalizedRule, deckId: 'my-set', deckIds: ['my-set'], setId: typeof setId === 'string' ? setId : null, setName: typeof setName === 'string' ? setName : null, questionOrder, r18: r18 === true, design: normalizeCreatorDesign(design), customSet: true, ownerUserId: owner, customQuestions: hasCustom ? questions.filter((card) => card.sourceDeckId === 'custom').map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true })) : [], mixed: false, questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
-export function createSharedSession({ participants, cards, adultConfirmed = false, questionOrder = 'shuffle', r18 = false, design = null, random = Math.random }) {
+export function createSharedSession({ participants, cards, adultConfirmed = false, questionOrder = 'shuffle', r18 = false, design = null, participantRule = 'group', random = Math.random }) {
   const names = normalizeParticipants(participants);
+  const normalizedRule = assertParticipantRule(participantRule, names.length);
   if (!Array.isArray(cards) || cards.length < ROUND_SIZE || cards.length > 40 || new Set(cards.map((card) => card?.id)).size !== cards.length) throw new Error('共有セットの質問が不正です');
   const questions = cards.map((card) => {
     if (!card || typeof card.id !== 'string' || typeof card.text !== 'string' || typeof card.r18 !== 'boolean' || card.kind === 'challenge' || !card.text.trim() || Array.from(card.text.trim()).length > 300 || /[\u0000-\u001f\u007f\u2028\u2029]/u.test(card.text)) throw new Error('共有セットの質問が不正です');
@@ -85,7 +95,7 @@ export function createSharedSession({ participants, cards, adultConfirmed = fals
   const includeR18 = effectiveCreatorAdult(r18 === true, questions);
   if (includeR18 && adultConfirmed !== true) throw new Error('成人向け確認が必要です');
   if (!['shuffle', 'fixed'].includes(questionOrder)) throw new Error('共有セットの並び順が不正です');
-  return { sessionId: createSessionId(), participants: names, deckId: 'shared-set', deckIds: ['shared-set'], questionOrder, r18: r18 === true, design: normalizeCreatorDesign(design), mixed: false, customSet: false, sharedGuest: true, ownerUserId: null, customQuestions: [], questions: questionOrder === 'fixed' ? questions : shuffle(questions, random), cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+  return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: 'shared-set', deckIds: ['shared-set'], questionOrder, r18: r18 === true, design: normalizeCreatorDesign(design), mixed: false, customSet: false, sharedGuest: true, ownerUserId: null, customQuestions: [], questions: questionOrder === 'fixed' ? questions : shuffle(questions, random), cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 function composeChallenges(cards, random, preserveR18 = false, deckId, participantCount) {
@@ -102,8 +112,9 @@ function composeChallenges(cards, random, preserveR18 = false, deckId, participa
   return composed;
 }
 
-export function createMixedSession({ participants, decks, includeChallenges = false, includeR18 = false, random = Math.random }) {
+export function createMixedSession({ participants, decks, participantRule = 'group', includeChallenges = false, includeR18 = false, random = Math.random }) {
   const names = normalizeParticipants(participants);
+  const normalizedRule = assertParticipantRule(participantRule, names.length);
   if (includeR18) throw new Error('ミックスではR18を選べません');
   if (!Array.isArray(decks) || (decks.length !== 2 && decks.length !== 3)) throw new Error('ミックスは2〜3テーマで選んでください');
   const ids = decks.map((deck) => deck?.id);
@@ -130,7 +141,7 @@ export function createMixedSession({ participants, decks, includeChallenges = fa
   questions.push(...shuffle(tail, random));
   if (questions.length !== 40 || new Set(questions.map((question) => question.id)).size !== 40) throw new Error('ミックス質問が不正です');
   const finalQuestions = includeChallenges ? composeChallenges(questions, random, false, ids, names.length) : questions;
-  return { sessionId: createSessionId(), participants: names, deckId: 'mix', deckIds: ids, mixed: true, questions: finalQuestions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: false, includeR18: false, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+  return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: 'mix', deckIds: ids, mixed: true, questions: finalQuestions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: false, includeR18: false, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 function composeR18Questions(deck, random) {

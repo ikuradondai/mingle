@@ -5,6 +5,7 @@ import { createSession, createSavedSession } from '../dist/engine.js';
 import { accountConfig } from './accounts.mjs';
 import { AGE_ERRORS, requireAdultConfirmed } from './age-confirmation.mjs';
 import { normalizeCreatorDesign } from '../dist/creator-metadata.js';
+import { participantRuleForDeck, participantRuleForSavedSet } from '../dist/participant-rule.js';
 
 const MIN = 2;
 const MAX = 8;
@@ -56,6 +57,12 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     return { id: user.id, bearer };
   }
   function validId(id) { if (!UUID.test(String(id || ''))) throw fail(400, 'INVALID_REQUEST'); return String(id); }
+  function roomParticipantRule(room) {
+    if (room?.participant_rule === 'pair') return 'pair';
+    if (room?.participant_rule === 'group') return 'group';
+    if (Array.isArray(room?.cards) && room.cards.some((card) => card?.participantRule === 'pair')) return 'pair';
+    return 'group';
+  }
   async function cleanupExpired() {
     if (now() - lastCleanup < 5 * 60 * 1000) return;
     lastCleanup = now();
@@ -78,7 +85,8 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     const card = includeCard && room.status === 'playing' && room.revealed && cards[room.cursor] ? cards[room.cursor] : null;
     const memberCount = Number(room.member_count ?? list.length);
     const speaker = list.length ? list[(Number(room.cursor || 0) + Number(room.answer_index || 0)) % list.length] : null;
-    return { room: { id: room.id, deckId: room.deck_id, deckName: room.deck_name, adultOnly: Boolean(room.adult_only), design: normalizeCreatorDesign(room.design), status: room.status, cursor: room.cursor, total: cards.length, revealed: Boolean(room.revealed), answerIndex: room.answer_index, speakerIndex: speaker ? list.indexOf(speaker) : null, speakerName: speaker?.display_name || null, revision: room.revision, expiresAt: room.expires_at, adultAttestedAt: isoOrNull(room.adult_attested_at), memberCount, members: list.map((item) => ({ id: item.id, name: item.display_name, role: item.role, adultConfirmed: item.adult_confirmed, ageConfirmed: Boolean(item.age_confirmed_at) })) }, member: member ? { id: member.id, name: member.display_name, role: member.role, adultConfirmed: member.adult_confirmed, ageConfirmed: Boolean(member.age_confirmed_at) } : null, card: card ? { id: card.id, text: card.text, r18: Boolean(card.r18) } : null };
+    const participantRule = roomParticipantRule(room);
+    return { room: { id: room.id, deckId: room.deck_id, deckName: room.deck_name, adultOnly: Boolean(room.adult_only), design: normalizeCreatorDesign(room.design), participantRule, participantLimit: participantRule === 'pair' ? 2 : 8, status: room.status, cursor: room.cursor, total: cards.length, revealed: Boolean(room.revealed), answerIndex: room.answer_index, speakerIndex: speaker ? list.indexOf(speaker) : null, speakerName: speaker?.display_name || null, revision: room.revision, expiresAt: room.expires_at, adultAttestedAt: isoOrNull(room.adult_attested_at), memberCount, members: list.map((item) => ({ id: item.id, name: item.display_name, role: item.role, adultConfirmed: item.adult_confirmed, ageConfirmed: Boolean(item.age_confirmed_at) })) }, member: member ? { id: member.id, name: member.display_name, role: member.role, adultConfirmed: member.adult_confirmed, ageConfirmed: Boolean(member.age_confirmed_at) } : null, card: card ? { id: card.id, text: card.text, r18: Boolean(card.r18) } : null };
   }
   async function projected(room, member, includeCard) { return publicRoom(room, member, includeCard, await members(room.id)); }
   async function resolveSet(ownerId, setId) {
@@ -106,16 +114,17 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     if (setId) {
       source = await resolveSet(owner.id, setId);
       if (source.adultOnly) { await adultGate(owner, input); gated = true; }
-      const session = createSavedSession({ participants: [hostName, '参加者2'], cardIds: source.cardIds, customCards: source.customCards, ownerUserId: owner.id, questionOrder: source.questionOrder, r18: source.r18 === true, design: source.design, adultConfirmed: input.adultConfirmed === true });
-      source.cards = session.questions.map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true }));
+      const session = createSavedSession({ participants: [hostName, '参加者2'], cardIds: source.cardIds, customCards: source.customCards, ownerUserId: owner.id, questionOrder: source.questionOrder, r18: source.r18 === true, design: source.design, participantRule: participantRuleForSavedSet(source, 'group'), adultConfirmed: input.adultConfirmed === true });
+      source.cards = session.questions.map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true, sourceDeckId: card.sourceDeckId || null, participantRule: participantRuleForSavedSet(source, 'group') }));
       source.adultOnly = session.includeR18 === true;
     } else {
       if (!deck) throw fail(400, soloDecks.some((item) => item.id === deckId) ? 'SOLO_ONLY_SOURCE' : 'GROUP_THEME_UNAVAILABLE');
       const includeR18 = input.includeR18 === true && deck.adultOnly !== true;
       if (input.includeR18 !== undefined && typeof input.includeR18 !== 'boolean') throw fail(400, 'INVALID_REQUEST');
       if (includeR18 || deck.adultOnly) { await adultGate(owner, input); gated = true; }
-      const session = createSession({ participants: [hostName, '参加者2'], deck, adultConfirmed: input.adultConfirmed === true, includeR18 });
-      source = { id: deck.id, name: deck.title, cards: session.questions.map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true })), adultOnly: session.includeR18 === true || deck.adultOnly === true };
+      const session = createSession({ participants: [hostName, '参加者2'], deck, participantRule: participantRuleForDeck(deck), adultConfirmed: input.adultConfirmed === true, includeR18 });
+      const participantRule = participantRuleForDeck(deck);
+      source = { id: deck.id, name: deck.title, cards: session.questions.map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true, sourceDeckId: deck.id, participantRule })), adultOnly: session.includeR18 === true || deck.adultOnly === true, participantRule };
     }
     const cards = source.cards;
     if (cards.length < 6 || cards.length > 40) throw fail(400, 'GROUP_THEME_UNAVAILABLE');
@@ -137,6 +146,10 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     if (room.adult_only && input.adultConfirmed !== true) throw fail(403, 'ADULT_CONSENT_REQUIRED');
     const secret = text(input.memberSecret, 64) || token();
     if (!/^[A-Za-z0-9_-]{43}$/.test(secret)) throw fail(400, 'INVALID_REQUEST');
+    if (roomParticipantRule(room) === 'pair') {
+      const existing = await rest(service, `/rest/v1/group_members?room_id=eq.${encodeURIComponent(room.id)}&secret_hash=eq.${encodeURIComponent(hash(secret))}&select=id`, {}, fetchImpl);
+      if (!existing?.length && (await members(room.id)).length >= 2) throw fail(409, 'GROUP_FULL');
+    }
     let rows;
     try { rows = await rest(service, '/rest/v1/rpc/group_join_member', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_secret_hash: hash(secret), p_display_name: name, p_adult_confirmed: input.adultConfirmed === true, p_age_confirmed: input.ageConfirmed === true }) }, fetchImpl); }
     catch (error) { if (error.code === 'GROUP_FULL') throw fail(409, 'GROUP_FULL'); if (error.code === 'GROUP_ALREADY_STARTED') throw fail(409, 'GROUP_ALREADY_STARTED'); if (error.code === 'ADULT_CONSENT_REQUIRED') throw fail(403, 'ADULT_CONSENT_REQUIRED'); if (error.code === AGE_ERRORS.participant) throw fail(403, AGE_ERRORS.participant); throw error; }
@@ -170,7 +183,8 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     const update = { revision: room.revision + 1, updated_at: new Date(now()).toISOString() };
     if (input.action === 'start') {
       if (room.status !== 'lobby') throw fail(409, 'GROUP_ALREADY_STARTED');
-      if (Number(room.member_count) < MIN || Number(room.member_count) > MAX) throw fail(400, 'GROUP_PARTICIPANTS');
+      const participantRule = roomParticipantRule(room);
+      if (participantRule === 'pair' ? Number(room.member_count) !== 2 : Number(room.member_count) < MIN || Number(room.member_count) > MAX) throw fail(400, 'GROUP_PARTICIPANTS');
       const roster = await members(room.id);
       if (room.adult_only && roster.some((item) => !item.age_confirmed_at)) throw fail(403, AGE_ERRORS.participant);
       if (room.adult_only && roster.some((item) => item.adult_confirmed !== true)) throw fail(403, 'ADULT_CONSENT_REQUIRED');

@@ -2,6 +2,7 @@ import { accountApi, discoverAccountConfig } from './account.js';
 import { toDataURL } from './vendor/qr.js';
 import { decks } from './data/decks.js';
 import { cardDesignForSession } from './card-design.js';
+import { displayQuestionText } from './participant-rule.js';
 
 const app = document.querySelector('#group-room-app');
 const query = new URLSearchParams(location.search);
@@ -32,6 +33,8 @@ function groupErrorMessage(e, fallback) {
   if (code === 'AGE_CONFIRMATION_REQUIRED') return 'R18は、アカウント設定で18歳以上の確認をすると利用できます。';
   if (code === 'ADULT_ATTESTATION_REQUIRED') return '参加者全員が18歳以上であることの確認が必要です。';
   if (code === 'PARTICIPANT_AGE_REQUIRED') return '18歳以上であることの確認が必要です。';
+  if (code === 'GROUP_FULL') return 'このルームの参加人数上限に達しています。';
+  if (code === 'GROUP_PARTICIPANTS') return 'このテーマに必要な参加人数を満たしていません。';
   if (code === 'FEATURE_UNAVAILABLE') return '現在利用できません。';
   return fallback;
 }
@@ -59,7 +62,9 @@ function renderPlayView(room, member, card, host) {
   const revealed = Boolean(room.revealed && card);
   const art = cardDesignForSession({ mode: 'group', deckId: room.deckId, design: room.design, sharedGuest: true });
   const artStyle = `--card-art-front:url('${art.front}');--card-art-back:url('${art.back}');--card-art-accent:${art.accent}`;
-  const cardLabel = loading ? 'カードを読み込んでいます…' : (revealed ? esc(card.text) : (host ? 'タップしてめくる' : '代表者がカードをめくるまでお待ちください'));
+  const roomParticipants = (room.members || []).map((member) => member.name);
+  const displayText = card ? displayQuestionText(card.text, { participants: roomParticipants, participantIndex: room.speakerIndex, rule: room.participantRule || 'group' }) : '';
+  const cardLabel = loading ? 'カードを読み込んでいます…' : (revealed ? esc(displayText) : (host ? 'タップしてめくる' : '代表者がカードをめくるまでお待ちください'));
   const cardClass = `shared-question-card ${revealed ? 'is-revealed' : 'is-face-down'}${loading ? ' is-loading' : ''}`;
   const primary = loading ? '読み込み中…' : (revealed ? '次の人' : 'めくる');
   const primaryAction = revealed ? 'next' : 'reveal';
@@ -81,8 +86,12 @@ function render() {
   let body;
   if (room.status === 'lobby') {
     const people = (room.members || []).map((m) => `<li>${esc(m.name)}${m.role === 'host' ? '（代表者）' : ''}</li>`).join('');
-    const participation = plannedParticipantCount ? `参加状況：${room.memberCount} / ${plannedParticipantCount}人` : `参加済み：${room.memberCount}人`;
-    body = `<p class="group-status">${esc(deckTitle(room))}・${room.total}枚</p><p>${participation}</p><ul class="group-members">${people || `<li>${esc(member?.name || '代表者')}</li>`}</ul>${host ? `<button class="primary-button" data-action="start" ${state.busy || room.memberCount < 2 ? 'disabled' : ''}>開始する</button><button class="secondary-button" data-action="finish">終了</button>` : '<p class="group-wait">代表者が開始するまでお待ちください。</p>'}`;
+    const participantLimit = room.participantRule === 'pair' ? 2 : 8;
+    const plannedDisplayCount = room.participantRule === 'pair' ? 2 : plannedParticipantCount;
+    const participantValid = room.participantRule === 'pair' ? room.memberCount === 2 : room.memberCount >= 2 && room.memberCount <= participantLimit;
+    const participation = plannedDisplayCount ? `参加状況：${room.memberCount} / ${plannedDisplayCount}人` : `参加済み${room.memberCount}人`;
+    const participantHint = room.participantRule === 'pair' && room.memberCount !== 2 ? '<p class="group-error" role="alert">このテーマは2人専用です。</p>' : '';
+    body = `<p class="group-status">${esc(deckTitle(room))}・${room.total}枚</p><p>${participation}</p>${participantHint}<ul class="group-members">${people || `<li>${esc(member?.name || '代表者')}</li>`}</ul>${host ? `<button class="primary-button" data-action="start" ${state.busy || !participantValid ? 'disabled' : ''}>開始する</button><button class="secondary-button" data-action="finish">終了</button>` : '<p class="group-wait">代表者が開始するまでお待ちください。</p>'}`;
   } else if (room.status === 'ended') body = '<p class="group-status">このルームは終了しました。</p>';
   else if (room.status === 'break') body = `<p class="group-status">${room.cursor}枚終了</p><p>ここでひと休みできます。</p>${host ? '<button class="primary-button" data-action="continue">続ける</button><button class="secondary-button" data-action="finish">終了</button>' : '<p class="group-wait">代表者が続行するまでお待ちください。</p>'}`;
   else { body = renderPlayView(room, member, card, host); }
