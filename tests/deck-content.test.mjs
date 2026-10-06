@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { decks } from '../dist/data/decks.js';
-import { challenges } from '../dist/data/challenges.js';
+import { DECK_TOUCH_POLICY } from '../dist/data/challenges.js';
 import { groupLabels, themeGroups } from '../dist/data/theme-groups.js';
 
 const NEW_DECK_IDS = [
@@ -20,7 +20,16 @@ const newDecks = NEW_DECK_IDS.map((id) => {
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const appSource = read('../dist/app.js');
 const cssSource = read('../dist/styles.css');
-const challengeEligible = new Set(challenges.flatMap((card) => card.eligibleDeckIds ?? []));
+// 設計書 §2.2 の接触上限の表（新しい 12 デッキの期待値）
+const expectedNewDeckTouchLimit = {
+  'engaged-couple': 2,
+  'promotion-rivals': 1, 'love-rivals': 1, 'arch-enemies': 1, 'hero-and-demon-king': 1, 'assassin-and-target': 1, 'detective-and-phantom-thief': 1,
+  'ex-lovers': 0,
+  'same-oshi-fans': 1, roommates: 1, 'late-night-diner': 1, 'travel-companions': 1,
+  'grandparents-and-grandchildren': 1, classmates: 1,
+  'in-laws': 1, 'business-meetup': 1, 'sports-teammates': 1,
+  'party-first-meeting': 0, 'bar-first-meeting': 0, 'group-mixer': 0, neighbors: 0,
+};
 
 test('every deck belongs to defined theme groups', () => {
   for (const deck of decks) {
@@ -64,7 +73,8 @@ test('new decks are regular, non-R18 40-card decks', () => {
     deck.questions.forEach((question, index) => {
       assert.equal(question.id, `${deck.id}-${String(index + 1).padStart(2, '0')}`);
     });
-    assert.equal(challengeEligible.has(deck.id), false, `${deck.id} must not receive touch challenges`);
+    if (Object.hasOwn(expectedNewDeckTouchLimit, deck.id)) assert.equal(DECK_TOUCH_POLICY[deck.id], expectedNewDeckTouchLimit[deck.id], `${deck.id} touch limit`);
+    assert.equal(Number.isInteger(DECK_TOUCH_POLICY[deck.id]), true, `${deck.id} must have a touch limit`);
   }
 });
 
@@ -106,4 +116,11 @@ test('new decks have icons and colors defined', () => {
     assert.ok(cssSource.includes(`.topic-${id} `), `.topic-${id}`);
     assert.ok(cssSource.includes(`.theme-card-${id} `), `.theme-card-${id}`);
   }
+});
+
+test('together challenges show ふたりで / みんなで instead of a single speaker', () => {
+  assert.match(appSource, /isTogetherCard\(card\)/);
+  assert.match(appSource, /"ふたりで"/);
+  assert.match(appSource, /"みんなで"/);
+  assert.match(appSource, /together \|\| session\.answerIndex === session\.participants\.length - 1 \? "次のカード"/);
 });

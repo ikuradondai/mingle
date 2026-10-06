@@ -1,4 +1,4 @@
-import { challenges } from './data/challenges.js';
+import { challenges, challengePoolFor } from './data/challenges.js';
 import { decks } from './data/decks.js';
 import { soloDecks } from './data/solo-decks.js';
 import { normalizeCreatorDesign, effectiveCreatorAdult } from './creator-metadata.js';
@@ -98,6 +98,7 @@ function hydrate(record, now, options = {}) {
   const index = cardIndex();
   const customIndex = new Map((record.customQuestions || []).map((card) => [card.id, { ...card, sourceDeckId: 'custom', custom: true }]));
   const sources = Array.isArray(record.questionSources) ? record.questionSources : [];
+  let challengePool = null;
   const questions = record.questionIds.map((id, i) => {
     const card = index.get(id) || customIndex.get(id); if (!card) throw new Error('question');
     if (card.kind === 'challenge' && !record.includeChallenges) throw new Error('challenge');
@@ -114,7 +115,7 @@ function hydrate(record, now, options = {}) {
       const sourceDeck = source && sourceDecks.find((deck) => deck.id === source);
       if (!source || !sourceDeck || (card.kind !== 'challenge' && !sourceDeck.questions.some((item) => item.id === id))) throw new Error('question-source');
     }
-    if (card.touch && (!record.includeChallenges || record.participants.length !== 2 || !deckIds.every((id) => card.eligibleDeckIds?.includes(id)))) throw new Error('touch');
+    if (card.kind === 'challenge' && !(challengePool ??= new Set(challengePoolFor({ deckIds, participantCount: record.participants.length, includeR18: record.adultConfirmed === true }).map((item) => item.id))).has(card.id)) throw new Error('challenge-pool');
     if (card.r18 && record.adultConfirmed !== true) throw new Error('r18');
     return { ...card, ...(sources[i] ? { sourceDeckId: sources[i] } : {}) };
   });
@@ -135,7 +136,7 @@ function hydrate(record, now, options = {}) {
   const expectedRoundStart = record.unlockedUntil === finalLength ? Math.max(0, finalLength - (finalLength % 6 || 6)) : Math.max(0, record.unlockedUntil - 6);
   if (!Number.isInteger(record.roundStart) || record.roundStart !== expectedRoundStart || !Number.isInteger(record.roundCount) || record.roundCount !== record.cursor % 6 || !Number.isInteger(record.roundNumber) || record.roundNumber !== Math.floor(record.cursor / 6) + 1) throw new Error('round');
   if (record.revealed && record.cursor === record.unlockedUntil) throw new Error('progress');
-  if (!Number.isInteger(record.answerIndex) || record.answerIndex < 0 || record.answerIndex >= record.participants.length || (!record.revealed && record.answerIndex !== 0)) throw new Error('answer');
+  if (!Number.isInteger(record.answerIndex) || record.answerIndex < 0 || record.answerIndex >= record.participants.length || (!record.revealed && record.answerIndex !== 0) || (record.answerIndex > 0 && questions[record.cursor]?.kind === 'challenge' && questions[record.cursor].perform === 'together')) throw new Error('answer');
   const likes = record.likes && typeof record.likes === 'object' && !Array.isArray(record.likes) ? record.likes : {};
   for (const [key, value] of Object.entries(likes)) {
     const match = key.match(/^([A-Za-z0-9._:-]+):(\d+)$/);

@@ -7,7 +7,7 @@ function createSessionId() {
   try { const fill = globalThis.crypto?.getRandomValues; if (typeof fill !== 'function') throw new Error('crypto unavailable'); const bytes = new Uint8Array(16); fill.call(globalThis.crypto, bytes); bytes[6] = (bytes[6] & 0x0f) | 0x40; bytes[8] = (bytes[8] & 0x3f) | 0x80; return [...bytes].map((value, index) => `${value.toString(16).padStart(2, '0')}${[3,5,7,9].includes(index) ? '-' : ''}`).join(''); } catch {}
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => { const value = Math.random() * 16 | 0; const next = char === 'x' ? value : (value & 0x3 | 0x8); return next.toString(16); });
 }
-import { challenges } from './data/challenges.js';
+import { challengePoolFor } from './data/challenges.js';
 import { decks } from './data/decks.js';
 import { soloDecks } from './data/solo-decks.js';
 import { normalizeCreatorDesign, effectiveCreatorAdult } from './creator-metadata.js';
@@ -36,7 +36,7 @@ export function createSession({ participants, deck, participantRule = 'group', a
   if (includeR18 && adultConfirmed !== true) throw new Error('R18の話題には成人確認が必要です');
   if (includeR18 && (!Array.isArray(deck.r18Questions) || deck.r18Questions.length < 6)) throw new Error('R18質問が不正です');
   const baseQuestions = includeR18 ? composeR18Questions(deck, random) : shuffle(deck.questions, random);
-  const questions = includeChallenges ? composeChallenges(baseQuestions, random, includeR18 && !deck.adultOnly, deck.id, names.length) : baseQuestions;
+  const questions = includeChallenges ? composeChallenges(baseQuestions, random, includeR18 && !deck.adultOnly, deck.id, names.length, { adultConfirmed: adultConfirmed === true }) : baseQuestions;
   return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: deck.id, deckIds: [deck.id], mixed: false, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
@@ -98,10 +98,26 @@ export function createSharedSession({ participants, cards, adultConfirmed = fals
   return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: 'shared-set', deckIds: ['shared-set'], questionOrder, r18: r18 === true, design: normalizeCreatorDesign(design), mixed: false, customSet: false, sharedGuest: true, ownerUserId: null, customQuestions: [], questions: questionOrder === 'fixed' ? questions : shuffle(questions, random), cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
-function composeChallenges(cards, random, preserveR18 = false, deckId, participantCount) {
-  const eligibleDeckIds = Array.isArray(deckId) ? deckId : [deckId];
-  const pool = challenges.filter((card) => !card.touch || (participantCount === 2 && eligibleDeckIds.every((id) => card.eligibleDeckIds?.includes(id))));
-  const selected = shuffle(pool, random).slice(0, 6);
+// 6 枚のお題を選ぶ。テーマ別を最大 4 枚（ミックスは各デッキに均等）、残りを共通お題で埋める。
+// 候補の絞り込み（接触の上限・人数・場所・R18）は challengePoolFor が行う。
+function pickChallenges(deckIds, participantCount, adultConfirmed, random) {
+  const pool = challengePoolFor({ deckIds, participantCount, includeR18: adultConfirmed === true, place: 'inPerson' });
+  const perDeck = Math.floor(4 / deckIds.length);
+  const selected = [];
+  for (const id of deckIds) selected.push(...shuffle(pool.filter((card) => card.deckIds?.includes(id)), random).slice(0, perDeck));
+  const taken = new Set(selected.map((card) => card.id));
+  const common = shuffle(pool.filter((card) => !card.deckIds && !taken.has(card.id)), random);
+  selected.push(...common.slice(0, 6 - selected.length));
+  if (selected.length < 6) {
+    const used = new Set(selected.map((card) => card.id));
+    selected.push(...shuffle(pool.filter((card) => !used.has(card.id)), random).slice(0, 6 - selected.length));
+  }
+  return shuffle(selected, random);
+}
+
+function composeChallenges(cards, random, preserveR18 = false, deckId, participantCount, { adultConfirmed = false } = {}) {
+  const deckIds = Array.isArray(deckId) ? deckId : [deckId];
+  const selected = pickChallenges(deckIds, participantCount, adultConfirmed, random);
   const composed = [...cards];
   for (let round = 0; round < 6; round += 1) {
     const start = round * ROUND_SIZE;
@@ -140,7 +156,7 @@ export function createMixedSession({ participants, decks, participantRule = 'gro
   }
   questions.push(...shuffle(tail, random));
   if (questions.length !== 40 || new Set(questions.map((question) => question.id)).size !== 40) throw new Error('ミックス質問が不正です');
-  const finalQuestions = includeChallenges ? composeChallenges(questions, random, false, ids, names.length) : questions;
+  const finalQuestions = includeChallenges ? composeChallenges(questions, random, false, ids, names.length, { adultConfirmed: false }) : questions;
   return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: 'mix', deckIds: ids, mixed: true, questions: finalQuestions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: false, includeR18: false, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
@@ -171,10 +187,15 @@ export function currentParticipantIndex(session) {
   return (session.cursor + (session.answerIndex ?? 0)) % session.participants.length;
 }
 
+// 「全員で1回」のお題のいいねは <cardId>:0 に固定する（個人の得点にはしない）。
+function likeParticipantIndex(session, card) {
+  return isTogetherCard(card) ? 0 : currentParticipantIndex(session);
+}
+
 export function currentAnswerLikes(session) {
   const card = currentCard(session);
   if (!card || !session.revealed) return 0;
-  return session.likes?.[`${card.id}:${currentParticipantIndex(session)}`] ?? 0;
+  return session.likes?.[`${card.id}:${likeParticipantIndex(session, card)}`] ?? 0;
 }
 
 // Aggregate stored answer likes by participant for a question range. Question
@@ -188,7 +209,7 @@ export function sessionLikeTotals(session, start = 0, end = session?.cursor ?? 0
   const to = Math.max(from, Math.min(questions.length, Number.isFinite(end) ? Math.floor(end) : from));
   const totals = participants.map(() => 0);
   for (const question of questions.slice(from, to)) {
-    if (!question || typeof question.id !== 'string') continue;
+    if (!question || typeof question.id !== 'string' || isTogetherCard(question)) continue;
     participants.forEach((_, participantIndex) => {
       const value = likes[`${question.id}:${participantIndex}`];
       if (Number.isSafeInteger(value) && value >= 0) totals[participantIndex] += value;
@@ -213,13 +234,17 @@ export function revealCard(session) {
 export function likeCurrentAnswer(session) {
   if (!session.revealed || isFinished(session) || !currentCard(session)) return session;
   const card = currentCard(session);
-  const key = `${card.id}:${currentParticipantIndex(session)}`;
+  const key = `${card.id}:${likeParticipantIndex(session, card)}`;
   return { ...session, likes: { ...session.likes, [key]: (session.likes?.[key] ?? 0) + 1 } };
+}
+
+export function isTogetherCard(card) {
+  return card?.kind === 'challenge' && card.perform === 'together';
 }
 
 function moveToNextAnswer(session) {
   if (!session.revealed || isFinished(session) || !currentCard(session)) return session;
-  if (session.answerIndex < session.participants.length - 1) {
+  if (!isTogetherCard(currentCard(session)) && session.answerIndex < session.participants.length - 1) {
     return { ...session, answerIndex: session.answerIndex + 1 };
   }
   const cursor = session.cursor + 1;
@@ -235,7 +260,7 @@ export function passAnswer(session) {
 }
 
 export function previousAnswer(session) {
-  if (!session.revealed || session.answerIndex <= 0 || isFinished(session)) return session;
+  if (!session.revealed || session.answerIndex <= 0 || isFinished(session) || isTogetherCard(currentCard(session))) return session;
   return { ...session, answerIndex: session.answerIndex - 1 };
 }
 

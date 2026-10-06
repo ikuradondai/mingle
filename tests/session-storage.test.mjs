@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createMixedSession, createSession, createSavedSession, continueRound, isFinished, isRoundComplete, nextAnswer, revealCard, likeCurrentAnswer, currentSpeaker } from '../dist/engine.js';
 import { loadSession, saveSession, clearSession } from '../dist/session-storage.js';
 import { decks } from '../dist/data/decks.js';
+import { challenges, commonChallenges, themeChallenges } from '../dist/data/challenges.js';
 
 const memory = () => ({ value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; }, removeItem() { this.value = null; } });
 const pick = (id) => decks.find((deck) => deck.id === id);
@@ -28,13 +29,78 @@ test('mixed sessions balance full rounds, keep unique source questions, and reje
   assert.throws(() => createMixedSession({ participants: ['A', 'B'], decks: [pick('friends'), pick('team')], includeR18: true }), /R18/);
 });
 
-test('mixed touch challenges require every source deck to be eligible', () => {
+test('mixed touch challenges follow the lowest touch limit of the source decks', () => {
   const pairEligible = createMixedSession({ participants: ['A', 'B'], decks: [pick('couples'), pick('new-couple')], includeChallenges: true, random: () => 0.5 });
-  for (const card of pairEligible.questions.filter((item) => item.touch)) assert.ok(card.eligibleDeckIds.includes('couples') && card.eligibleDeckIds.includes('new-couple'));
+  assert.equal(pairEligible.questions.filter((item) => item.touch).every((card) => card.touch <= 2), true);
   const group = createMixedSession({ participants: ['A', 'B', 'C'], decks: [pick('couples'), pick('new-couple')], includeChallenges: true, random: () => 0.5 });
-  assert.equal(group.questions.some((card) => card.touch), false);
-  const ineligible = createMixedSession({ participants: ['A', 'B'], decks: [pick('couples'), pick('friends')], includeChallenges: true, random: () => 0.5 });
-  assert.equal(ineligible.questions.some((card) => card.touch), false);
+  assert.equal(group.questions.some((card) => card.touch >= 2), false);
+  const lowest = createMixedSession({ participants: ['A', 'B'], decks: [pick('couples'), pick('friends')], includeChallenges: true, random: () => 0.5 });
+  assert.equal(lowest.questions.some((card) => card.touch >= 2), false);
+  const noTouch = createMixedSession({ participants: ['A', 'B'], decks: [pick('couples'), pick('neighbors')], includeChallenges: true, random: () => 0.5 });
+  assert.equal(noTouch.questions.some((card) => card.touch >= 1), false);
+});
+
+const challengeRestoreRecord = (session) => { const storage = memory(); assert.equal(saveSession(session, { storage }), true); return { storage, record: JSON.parse(storage.value) }; };
+// 先頭のお題の位置に指定の ID を差し込んだ保存データを復元する。復元できなければ null。
+function restoreWithChallengeId(session, id) {
+  const { storage, record } = challengeRestoreRecord(session);
+  const target = session.questions.findIndex((card) => card.kind === 'challenge');
+  assert.ok(target >= 0);
+  assert.equal(record.questionIds.includes(id), false, `${id} is already in the session`);
+  record.questionIds[target] = id;
+  storage.value = JSON.stringify(record);
+  return loadSession({ storage, now: record.savedAt + 1 });
+}
+const challengeSession = (deckId, participants, extra = {}) => createSession({ participants, deck: pick(deckId), includeChallenges: true, random: () => 0.5, ...extra });
+
+test('theme, common, and legacy challenge cards restore when they are in the pool', () => {
+  const couples = challengeSession('couples', ['A', 'B']);
+  const { storage, record } = challengeRestoreRecord(couples);
+  assert.equal(loadSession({ storage, now: record.savedAt + 1 })?.questions.length, 40);
+  const unused = (id) => !record.questionIds.includes(id);
+  // legacy ids (try-* with any players, touch-* level 2 for couples) restore
+  const legacy = ['try-01', 'try-02', 'try-20', 'touch-01', 'touch-06', 'touch-09'].filter(unused);
+  assert.ok(legacy.length >= 3);
+  for (const id of legacy) assert.notEqual(restoreWithChallengeId(couples, id), null, id);
+  // a new common card and a card of the same theme restore
+  const sameTheme = themeChallenges.couples.find((card) => unused(card.id) && card.touch <= 2 && card.place !== 'remote' && card.players !== 'group');
+  assert.ok(sameTheme);
+  assert.notEqual(restoreWithChallengeId(couples, sameTheme.id), null, sameTheme.id);
+  const newCommon = commonChallenges.find((card) => /^try-2\d$/.test(card.id) && card.players !== 'group' && card.place !== 'remote' && unused(card.id));
+  assert.ok(newCommon);
+  assert.notEqual(restoreWithChallengeId(couples, newCommon.id), null, newCommon.id);
+  assert.ok(challenges.length >= 29);
+});
+
+test('challenge cards outside the pool are rejected on restore', () => {
+  const cases = [
+    ['ch-intimacy-07 in classmates (3 people)', challengeSession('classmates', ['A', 'B', 'C']), 'ch-intimacy-07'],
+    ['ch-intimacy-02 (remote) in parent-under12', challengeSession('parent-under12', ['A', 'B', 'C']), 'ch-intimacy-02'],
+    ['ch-intimacy-01 in a date R18 session', createSession({ participants: ['A', 'B'], deck: pick('date'), adultConfirmed: true, includeR18: true, includeChallenges: true, random: () => 0.5 }), 'ch-intimacy-01'],
+    ['touch-02 (pair) in friends (3 people)', challengeSession('friends', ['A', 'B', 'C']), 'touch-02'],
+    ['ch-couples-04 (remote) in couples', challengeSession('couples', ['A', 'B']), 'ch-couples-04'],
+    ['touch level 2 in friends (limit 1)', challengeSession('friends', ['A', 'B']), 'touch-01'],
+  ];
+  for (const [label, session, id] of cases) {
+    assert.ok(challenges.some((card) => card.id === id), id);
+    if (label.includes('(remote)')) assert.equal(challenges.find((card) => card.id === id).place, 'remote', id);
+    assert.equal(restoreWithChallengeId(session, id), null, label);
+  }
+  // 同じカードでも、条件に合う側では復元できる（拒否の理由がプールの条件だけであることの対照）
+  assert.notEqual(restoreWithChallengeId(challengeSession('friends', ['A', 'B']), 'touch-02'), null);
+});
+
+test('a together challenge cannot be restored mid-way through the participants', () => {
+  const together = commonChallenges.find((card) => card.perform === 'together' && card.players === 'any');
+  const base = createSession({ participants: ['A', 'B', 'C'], deck: pick('friends'), includeChallenges: true, random: () => 0.5 });
+  const index = base.questions.findIndex((card) => card.kind === 'challenge');
+  const questions = base.questions.map((card, i) => (i === index ? { ...together, sourceDeckId: 'friends' } : card));
+  const roundStart = Math.floor(index / 6) * 6;
+  const session = { ...base, questions, cursor: index, unlockedUntil: roundStart + 6, roundStart, roundCount: index - roundStart, roundNumber: Math.floor(index / 6) + 1, revealed: true, answerIndex: 0 };
+  const storage = memory(); assert.equal(saveSession(session, { storage }), true);
+  assert.notEqual(loadSession({ storage, now: JSON.parse(storage.value).savedAt + 1 }), null);
+  const mid = JSON.parse(storage.value); mid.answerIndex = 1; storage.value = JSON.stringify(mid);
+  assert.equal(loadSession({ storage, now: mid.savedAt + 1 }), null);
 });
 
 test('session storage reloads progress, likes, and round boundaries without card text duplication', () => {

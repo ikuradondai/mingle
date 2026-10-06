@@ -157,6 +157,10 @@ test('challenge and adult consent filtering apply after a full round', () => {
   for (let i = 0; i < 6; i += 1) { challenge = revealCard(challenge); challenge = nextAnswer(challenge); challenge = nextAnswer(challenge); }
   assert.ok(challenge.revealedQuestionIds.every((id) => challenge.questions.find((card) => card.id === id)?.kind !== 'challenge'));
   assert.ok(completedRoundFavoriteCards(challenge).every((card) => card.kind !== 'challenge'));
+  const themedChallenge = { id: 'ch-date-01', text: 'お題', kind: 'challenge', deckIds: ['date'], sourceDeckId: 'date', touch: 0, players: 'any', perform: 'each', place: 'inPerson', r18: false };
+  const themedSession = revealCard({ ...challenge, questions: [themedChallenge, ...challenge.questions.slice(1)], cursor: 0, unlockedUntil: 6, roundStart: 0, roundCount: 0, revealed: false, revealedQuestionIds: [] });
+  assert.deepEqual(themedSession.revealedQuestionIds, []);
+  assert.equal(completedRoundFavoriteCards({ ...themedSession, cursor: 6, revealedQuestionIds: ['ch-date-01'] }).some((card) => card.id === 'ch-date-01'), false);
 
   const r18 = date.r18Questions[0].id;
   let adult = createSavedSession({ participants: ['A', 'B'], cardIds: [r18, ...allIds.slice(0, 5)], adultConfirmed: true, random: () => 0 });
