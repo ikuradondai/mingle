@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>マーケットプレイス | Mingle.Cards</title>
-  <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/marketplace.css">
+  <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/marketplace.css"><link rel="stylesheet" href="/creator-ui.css">
 </head>
 <body class="marketplace-page">
-  <header class="market-header"><a class="market-brand" href="/">Mingle.Cards</a><nav><a href="/">ホーム</a><a href="/?library=1">マイセット</a><button class="text-button" data-action="market-login">ログイン</button></nav></header>
+  <header class="market-header"><a class="market-brand" href="/" aria-label="Mingle.Cards ホーム">Mingle.Cards</a><nav><a href="/">ホーム</a><a href="/?library=1">マイセット</a><button class="text-button" data-action="market-login">ログイン</button></nav></header>
   <main id="market-app" aria-live="polite"><p class="market-loading">読み込み中…</p></main>
   <dialog id="market-auth" aria-labelledby="market-auth-title"><div class="market-dialog-form"><button type="button" class="dialog-close" data-action="market-auth-close" aria-label="閉じる">×</button><h2 id="market-auth-title">ログイン・新規登録</h2><p>テーマの取り込みや公開にはログインが必要です。</p><button type="button" class="primary-button" data-action="market-google">Googleで続ける</button><form id="market-otp"><label for="market-email">メールアドレス</label><input id="market-email" type="email" required autocomplete="email"><label for="market-otp-token" data-otp-label hidden>確認コード</label><input id="market-otp-token" data-otp-token inputmode="numeric" autocomplete="one-time-code" placeholder="確認コード" hidden><div class="market-auth-actions"><button class="secondary-button" type="submit" data-otp-submit>確認コードを送る</button><button class="text-button" type="button" data-action="market-otp-resend" hidden>再送</button><button class="text-button" type="button" data-action="market-otp-change" hidden>メールを変更</button></div></form><p id="market-auth-status" class="market-status"></p></div></dialog>
   <script type="module" src="/marketplace.js"></script>

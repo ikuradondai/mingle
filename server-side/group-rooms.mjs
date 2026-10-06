@@ -4,6 +4,7 @@ import { soloDecks } from '../dist/data/solo-decks.js';
 import { createSession, createSavedSession } from '../dist/engine.js';
 import { accountConfig } from './accounts.mjs';
 import { AGE_ERRORS, requireAdultConfirmed } from './age-confirmation.mjs';
+import { normalizeCreatorDesign } from '../dist/creator-metadata.js';
 
 const MIN = 2;
 const MAX = 8;
@@ -77,7 +78,7 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     const card = includeCard && room.status === 'playing' && room.revealed && cards[room.cursor] ? cards[room.cursor] : null;
     const memberCount = Number(room.member_count ?? list.length);
     const speaker = list.length ? list[(Number(room.cursor || 0) + Number(room.answer_index || 0)) % list.length] : null;
-    return { room: { id: room.id, deckId: room.deck_id, deckName: room.deck_name, adultOnly: Boolean(room.adult_only), status: room.status, cursor: room.cursor, total: cards.length, revealed: Boolean(room.revealed), answerIndex: room.answer_index, speakerIndex: speaker ? list.indexOf(speaker) : null, speakerName: speaker?.display_name || null, revision: room.revision, expiresAt: room.expires_at, adultAttestedAt: isoOrNull(room.adult_attested_at), memberCount, members: list.map((item) => ({ id: item.id, name: item.display_name, role: item.role, adultConfirmed: item.adult_confirmed, ageConfirmed: Boolean(item.age_confirmed_at) })) }, member: member ? { id: member.id, name: member.display_name, role: member.role, adultConfirmed: member.adult_confirmed, ageConfirmed: Boolean(member.age_confirmed_at) } : null, card: card ? { id: card.id, text: card.text, r18: Boolean(card.r18) } : null };
+    return { room: { id: room.id, deckId: room.deck_id, deckName: room.deck_name, adultOnly: Boolean(room.adult_only), design: normalizeCreatorDesign(room.design), status: room.status, cursor: room.cursor, total: cards.length, revealed: Boolean(room.revealed), answerIndex: room.answer_index, speakerIndex: speaker ? list.indexOf(speaker) : null, speakerName: speaker?.display_name || null, revision: room.revision, expiresAt: room.expires_at, adultAttestedAt: isoOrNull(room.adult_attested_at), memberCount, members: list.map((item) => ({ id: item.id, name: item.display_name, role: item.role, adultConfirmed: item.adult_confirmed, ageConfirmed: Boolean(item.age_confirmed_at) })) }, member: member ? { id: member.id, name: member.display_name, role: member.role, adultConfirmed: member.adult_confirmed, ageConfirmed: Boolean(member.age_confirmed_at) } : null, card: card ? { id: card.id, text: card.text, r18: Boolean(card.r18) } : null };
   }
   async function projected(room, member, includeCard) { return publicRoom(room, member, includeCard, await members(room.id)); }
   async function resolveSet(ownerId, setId) {
@@ -91,7 +92,7 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     const customMap = new Map((custom || []).map((card) => [`custom:${card.id}`, { id: `custom:${card.id}`, text: card.text, r18: card.r18 === true }]));
     const cards = set.card_ids.map((id) => staticCards.get(id) || customMap.get(id));
     if (cards.some((card) => !card)) throw fail(400, 'GROUP_THEME_UNAVAILABLE');
-    return { id: set.id, name: set.name, cardIds: set.card_ids, customCards: custom || [], cards, adultOnly: cards.some((card) => card.r18 === true), audience: set.audience || 'group', questionOrder: set.question_order || 'shuffle' };
+    return { id: set.id, name: set.name, cardIds: set.card_ids, customCards: custom || [], cards, adultOnly: (set.theme_r18 === true) || cards.some((card) => card.r18 === true), r18: set.theme_r18 === true, design: normalizeCreatorDesign(set.design), audience: set.audience || 'group', questionOrder: set.question_order || 'shuffle' };
   }
   async function adultGate(owner, input) {
     await requireAdultConfirmed({ config: service, userId: owner.id, authorization: `Bearer ${service.key}`, fetchImpl });
@@ -105,7 +106,7 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     if (setId) {
       source = await resolveSet(owner.id, setId);
       if (source.adultOnly) { await adultGate(owner, input); gated = true; }
-      const session = createSavedSession({ participants: [hostName, '参加者2'], cardIds: source.cardIds, customCards: source.customCards, ownerUserId: owner.id, questionOrder: source.questionOrder, adultConfirmed: input.adultConfirmed === true });
+      const session = createSavedSession({ participants: [hostName, '参加者2'], cardIds: source.cardIds, customCards: source.customCards, ownerUserId: owner.id, questionOrder: source.questionOrder, r18: source.r18 === true, design: source.design, adultConfirmed: input.adultConfirmed === true });
       source.cards = session.questions.map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true }));
       source.adultOnly = session.includeR18 === true;
     } else {

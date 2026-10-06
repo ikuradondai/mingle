@@ -2,6 +2,7 @@ import { decks } from '../dist/data/decks.js';
 import { soloDecks } from '../dist/data/solo-decks.js';
 import { accountConfig, ACCOUNT_ERRORS } from './accounts.mjs';
 import { requireAdultConfirmed } from './age-confirmation.mjs';
+import { normalizeCreatorDesign, effectiveCreatorAdult } from '../dist/creator-metadata.js';
 
 const CATEGORIES = new Set(['self','relationship','friends','family','work','sports','first-meeting','roleplay','adult']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -50,14 +51,15 @@ export function createMarketplaceService({ env = process.env, fetchImpl = fetch 
   }
   async function sourceSnapshot(user, authorization, setId) {
     if (typeof setId !== 'string' || !UUID.test(setId)) throw fail(400, ACCOUNT_ERRORS.invalid);
-    const rows = await fetchJson(config, `/rest/v1/my_sets?id=eq.${encodeURIComponent(setId)}&user_id=eq.${encodeURIComponent(user.id)}&select=id,name,card_ids,audience,question_order`, { headers: { Authorization: authorization } }, fetchImpl);
-    const set = rows?.[0]; if (!set || !Array.isArray(set.card_ids) || set.card_ids.length < 6 || set.card_ids.length > 40) throw fail(404, 'NOT_FOUND');
+    const rows = await fetchJson(config, `/rest/v1/my_sets?id=eq.${encodeURIComponent(setId)}&user_id=eq.${encodeURIComponent(user.id)}&select=*`, { headers: { Authorization: authorization } }, fetchImpl);
+    const row = rows?.[0]; if (!row || !Array.isArray(row.card_ids) || row.card_ids.length < 6 || row.card_ids.length > 40) throw fail(404, 'NOT_FOUND');
+    const set = { id: row.id, name: row.name, card_ids: row.card_ids, audience: row.audience, question_order: row.question_order, theme_r18: row.theme_r18, design: row.design };
     const customIds = set.card_ids.filter((id) => typeof id === 'string' && id.startsWith('custom:') && UUID.test(id.slice(7)));
     const custom = customIds.length ? await fetchJson(config, `/rest/v1/custom_cards?id=in.(${customIds.map((x) => encodeURIComponent(x.slice(7))).join(',')})&user_id=eq.${encodeURIComponent(user.id)}&select=id,text,r18`, { headers: { Authorization: authorization } }, fetchImpl) : [];
     const customMap = new Map((custom || []).map((c) => [`custom:${c.id}`, { id: `custom:${c.id}`, text: c.text, r18: Boolean(c.r18), kind: 'custom' }]));
     const cards = set.card_ids.map((id) => customMap.get(id) || CARDS.get(id));
     if (cards.some((c) => !c)) throw fail(400, ACCOUNT_ERRORS.invalid);
-    return { set, cards, adultOnly: cards.some((c) => c.r18) };
+    return { set, cards, adultOnly: effectiveCreatorAdult(set.theme_r18 === true, cards), design: normalizeCreatorDesign(set.design) };
   }
   async function list(req) {
     if (!config) throw fail(503, ACCOUNT_ERRORS.unavailable);

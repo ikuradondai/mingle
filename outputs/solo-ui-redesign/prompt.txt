@@ -1,0 +1,4 @@
+Use case: ui-mockup
+Asset type: design reference board for a web product UI
+Primary request: High-fidelity Japanese solo reflection theme chooser for Mingle.Cards, with desktop and 390px mobile layouts side by side. Cream background, deep navy, vivid blue, pastel rounded cards, compact top row, one title, four 2x2 theme cards, clear CTA, subtle saved memo link. No marketplace link in the main chooser.
+Reference image: existing Mingle.Cards logo, used only as a logo reference.

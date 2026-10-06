@@ -1,7 +1,7 @@
 import { accountApi, discoverAccountConfig } from './account.js';
 import { toDataURL } from './vendor/qr.js';
 import { decks } from './data/decks.js';
-import { cardDesignForDeck } from './card-design.js';
+import { cardDesignForSession } from './card-design.js';
 
 const app = document.querySelector('#group-room-app');
 const query = new URLSearchParams(location.search);
@@ -57,7 +57,7 @@ function renderPlayView(room, member, card, host) {
   const ownTurn = Boolean(member?.id && speaker?.id === member.id);
   const loading = Boolean(room.revealed && !card);
   const revealed = Boolean(room.revealed && card);
-  const art = cardDesignForDeck(room.deckId);
+  const art = cardDesignForSession({ mode: 'group', deckId: room.deckId, design: room.design, sharedGuest: true });
   const artStyle = `--card-art-front:url('${art.front}');--card-art-back:url('${art.back}');--card-art-accent:${art.accent}`;
   const cardLabel = loading ? 'カードを読み込んでいます…' : (revealed ? esc(card.text) : (host ? 'タップしてめくる' : '代表者がカードをめくるまでお待ちください'));
   const cardClass = `shared-question-card ${revealed ? 'is-revealed' : 'is-face-down'}${loading ? ' is-loading' : ''}`;
@@ -148,7 +148,3 @@ function schedulePoll() { clearTimeout(pollTimer); if (state.terminal || documen
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (state.host || state.memberToken) load(); schedulePoll(); } else clearTimeout(pollTimer); });
 window.addEventListener('online', () => { if (state.host || state.memberToken) load(); schedulePoll(); });
 schedulePoll();
-
-
-
-

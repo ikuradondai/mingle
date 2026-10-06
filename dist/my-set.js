@@ -15,7 +15,7 @@ export function playableSavedSet(set, customCards = []) {
   if (new Set(normalizedIds).size !== normalizedIds.length) return null;
   const audience = ['group', 'solo', 'both'].includes(set?.audience) ? set.audience : 'group';
   const questionOrder = ['shuffle', 'fixed'].includes(set?.questionOrder || set?.question_order) ? (set.questionOrder || set.question_order) : 'shuffle';
-  return { ...set, audience, questionOrder, card_ids: normalizedIds, cards, cardCount: cards.length, hasR18: cards.some((card) => card.r18 === true) };
+  return { ...set, audience, questionOrder, card_ids: normalizedIds, cards, cardCount: cards.length, hasR18: set?.r18 === true || set?.theme_r18 === true || set?.effectiveR18 === true || cards.some((card) => card.r18 === true) };
 }
 
 export function playableSavedSets(sets = [], customCards = []) {

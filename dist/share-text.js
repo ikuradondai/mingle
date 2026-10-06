@@ -1,5 +1,5 @@
 export const SHARE_URL = "https://mingle.cards/";
-export const SHARE_HASHTAGS = "#ミングる #Minglecards #あたらしい会話のはじめかた";
+export const SHARE_HASHTAGS = "#Minglecards #あたらしい会話のはじめかた";
 
 export function buildShareText(title) {
   const safeTitle = typeof title === "string" && title.trim() ? title.trim() : "会話テーマ";

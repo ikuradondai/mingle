@@ -1,0 +1,8 @@
+Use the supplied Mingle.Cards mobile creator UI v2 board as the exact layout and brand reference, and produce a v3 board with the same three complete 390x844 portrait screens and same cream/navy/cobalt/coral visual system.
+
+Only make these content corrections:
+1) On 「質問を作る」, completely remove any 自動でR18判定, AI判定, or automatic classification card. Keep the question field, one manual R18 checkbox/toggle 「R18の話題にする」 default OFF, compact preview, and 「質問を追加」「保存」.
+2) On 「テーマを作る」, show a question list with at least one R18-marked question. The effective theme R18 state is ON and locked because a child question is R18. Show exact short text 「R18の質問を含むため自動設定」. An optional theme R18 toggle can be shown only as disabled/locked while an R18 child remains. Do not show automatic content classification.
+3) Use the current shared-question-card preview: cream face, narrow flowing illustrated left rail, readable navy text area, no corner patches or giant logo.
+
+Keep v2 layout, exact page names 「マーケットプレイス」「質問を作る」「テーマを作る」, marketplace import/like/count details, exactly eight preset previews, and existing family artwork references. Do not add upload, generation, recommendation, category, tone, or speculative controls. Make each phone screen complete and legible.

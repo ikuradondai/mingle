@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMixedSession, createSession, continueRound, isFinished, isRoundComplete, nextAnswer, revealCard, likeCurrentAnswer, currentSpeaker } from '../dist/engine.js';
+import { createMixedSession, createSession, createSavedSession, continueRound, isFinished, isRoundComplete, nextAnswer, revealCard, likeCurrentAnswer, currentSpeaker } from '../dist/engine.js';
 import { loadSession, saveSession, clearSession } from '../dist/session-storage.js';
 import { decks } from '../dist/data/decks.js';
 
@@ -60,6 +60,27 @@ test('valid single adult, date-R18, and mixed challenge sessions restore', () =>
   ]) {
     const storage = memory(); assert.equal(saveSession(session, { storage, now: 1000 }), true); assert.ok(loadSession({ storage, now: 1000 }));
   }
+});
+
+test('custom session storage preserves design/manual R18 and rejects child-adult option tampering', () => {
+  const ids = Array.from({ length: 6 }, (_, index) => `custom:11111111-1111-4111-8111-${String(index + 1).padStart(12, '0')}`);
+  const cards = ids.map((id, index) => ({ id, text: `質問 ${index + 1}`, r18: index === 0 }));
+  const saved = createSavedSession({ mode: 'group', participants: ['A', 'B'], cardIds: ids, customCards: cards, ownerUserId: '11111111-1111-4111-8111-111111111111', setId: '22222222-2222-4222-8222-222222222222', adultConfirmed: true, includeR18: true, r18: false, design: { version: 1, kind: 'preset', presetId: 'friends' } });
+  const storage = memory();
+  assert.equal(saveSession(saved, { storage, now: 1000 }), true);
+  const restored = loadSession({ storage, now: 1000 });
+  assert.deepEqual(restored.design, { version: 1, kind: 'preset', presetId: 'friends' });
+  assert.equal(restored.r18, false);
+  const raw = JSON.parse(storage.value); raw.includeR18 = false; storage.value = JSON.stringify(raw);
+  assert.equal(loadSession({ storage, now: 1000 }), null);
+});
+
+test('legacy session records without creator metadata remain compatible', () => {
+  const storage = memory(); const session = createSession({ participants: ['A', 'B'], deck: pick('friends'), random: () => 0.5 });
+  assert.equal(saveSession(session, { storage, now: 1000 }), true);
+  const raw = JSON.parse(storage.value); delete raw.design; delete raw.r18; storage.value = JSON.stringify(raw);
+  const restored = loadSession({ storage, now: 1000 });
+  assert.ok(restored); assert.equal(restored.design, null); assert.equal(restored.r18, false);
 });
 
 test('full engine progression survives save/load at every card, gate, and final-four boundary', () => {

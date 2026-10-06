@@ -9,6 +9,7 @@ const FAMILY_ASSETS = {
   self: { front: '/assets/card-families/self-front.webp', back: '/assets/card-families/self-back.webp', accent: '#8471c6' },
   adult: { front: '/assets/card-families/adult-front.webp', back: '/assets/card-families/adult-back.webp', accent: '#7d3457' },
 };
+import { CREATOR_PRESETS, normalizeCreatorDesign } from './creator-metadata.js';
 const DECK_FAMILIES = {
   date: 'welcome', 'business-meetup': 'welcome', 'acquaintance-date': 'welcome', omiai: 'welcome', 'party-first-meeting': 'welcome', 'bar-first-meeting': 'welcome', neighbors: 'welcome', 'group-mixer': 'welcome', classmates: 'welcome',
   couples: 'romance', 'new-couple': 'romance', 'moving-in': 'romance', 'engaged-couple': 'romance', 'ex-lovers': 'romance', 'love-rivals': 'romance',
@@ -63,6 +64,11 @@ export function soloMotifForDeck(deckId) {
   return path ? `<svg class="solo-card-motif" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${path}</svg>` : '';
 }
 export function cardDesignForSession(session) {
+  const creator = normalizeCreatorDesign(session?.design);
+  if (creator) {
+    const preset = CREATOR_PRESETS[creator.presetId];
+    if (preset && FAMILY_ASSETS[preset.family]) return { ...FAMILY_ASSETS[preset.family], family: preset.family, variant: 0, accent: FAMILY_ASSETS[preset.family].accent, creatorPresetId: creator.presetId };
+  }
   const fallbackId = session?.mode === 'solo' ? 'self-values' : 'date';
   const current = session?.questions?.[session.cursor];
   if (session?.mixed && current?.sourceDeckId) return cardDesignForDeck(current.sourceDeckId);
