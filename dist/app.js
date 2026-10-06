@@ -1161,9 +1161,8 @@ function sharedPlayView(session) {
   const cardArtStyle = `--card-art-front:url('${cardDesign.front}');--card-art-back:url('${cardDesign.back}');--card-art-accent:${cardDesign.accent}`;
   const currentIndex = currentParticipantIndex(session);
   const speakerSignature = `${session.sessionId || "session"}:${currentIndex}`;
-  const previousSpeaker = lastSpeakerSignature ? lastSpeakerSignature.split(":").pop() : "";
-  const speakerChanged = Boolean(lastSpeakerSignature && lastSpeakerSignature.startsWith(`${session.sessionId || "session"}:`) && previousSpeaker !== String(currentIndex));
-  lastSpeakerSignature = speakerSignature;
+  const previousSpeakerIndex = root.querySelector(".shared-speaker[data-speaker-index]")?.getAttribute("data-speaker-index");
+  const speakerChanged = previousSpeakerIndex !== undefined && previousSpeakerIndex !== String(currentIndex);
   const speakerName = currentSpeaker(session);
   const sourceDeckId = session.questions?.[session.cursor]?.sourceDeckId || session.deckId;
   const cardDeck = [...decks, ...soloDecks].find((item) => item.id === sourceDeckId);
