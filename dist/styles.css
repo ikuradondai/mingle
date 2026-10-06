@@ -780,6 +780,9 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
   .home-screen:not(:has(.resume-card)) .home-illustration{grid-row:4}
   .home-screen:not(:has(.resume-card)) .ad-slot{grid-row:5}.home-screen:not(:has(.resume-card)) .home-footer{grid-row:6}
 }
+@media (max-width:360px){
+  .home-screen .home-mode-description{min-height:3em}
+}
 
 /* Final play polish. */
 .shared-card-copy,.shared-card-measure{width:72%;margin-left:22%;text-wrap:balance}
