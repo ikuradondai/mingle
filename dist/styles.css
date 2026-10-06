@@ -363,7 +363,7 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
   .content:has(.home-screen) { width:calc(100% - 32px); max-width:1000px; box-sizing:border-box; }
   .home-screen { width:100%; max-width:940px; display:grid; grid-template-columns:minmax(400px,1fr) minmax(350px,.9fr); align-items:center; column-gap:20px; row-gap:8px; text-align:center; }
   .home-screen .masthead-slot { grid-column:1 / -1; grid-row:1; width:min(100%,180px); margin:0 auto 2px; }
-  .home-screen .form-panel { grid-column:1; grid-row:2; width:100%; max-width:none; margin:0; align-self:center; }
+  .home-screen .form-panel { grid-column:1; grid-row:2; width:100%; max-width:none; margin:0; align-self:start; }
   .home-screen .home-illustration { grid-column:2; grid-row:2; width:100%; max-width:none; height:auto; max-height:280px; margin:0; object-fit:contain; object-position:center; }
   .home-screen .ad-slot { grid-column:1 / -1; grid-row:3; width:100%; margin:4px 0 8px; }
   .home-screen .home-footer { grid-column:1 / -1; grid-row:4; width:100%; margin-top:0; }
