@@ -59,10 +59,10 @@ function normalizeCustomCards(customCards) {
   }));
 }
 
-export function createSavedSession({ mode = 'group', participants, cardIds, setId = null, setName = null, customCards = [], ownerUserId = null, adultConfirmed = false, questionOrder = 'shuffle', r18 = false, design = null, participantRule = mode === 'solo' ? 'solo' : 'group', random = Math.random }) {
+export function createSavedSession({ mode = 'group', participants, participant = '自分', cardIds, setId = null, setName = null, customCards = [], ownerUserId = null, adultConfirmed = false, questionOrder = 'shuffle', r18 = false, design = null, participantRule = mode === 'solo' ? 'solo' : 'group', random = Math.random }) {
   if (!['group', 'solo'].includes(mode)) throw new Error('マイセットのモードが不正です');
   if (mode === 'solo' && (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerUserId || '') || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(setId || ''))) throw new Error('ソロマイセットの所有者が不正です');
-  const names = mode === 'solo' ? ['自分'] : normalizeParticipants(participants);
+  const names = mode === 'solo' ? [typeof participant === 'string' && participant.trim() ? participant.trim() : '自分'] : normalizeParticipants(participants);
   const normalizedRule = assertParticipantRule(mode === 'solo' ? 'solo' : participantRule, names.length);
   if (!Array.isArray(cardIds) || cardIds.length < ROUND_SIZE || cardIds.length > 40 || new Set(cardIds).size !== cardIds.length || cardIds.some((id) => typeof id !== 'string')) throw new Error('マイセットの質問が不正です');
   const catalog = new Map();

@@ -689,15 +689,22 @@ function frame(content, eyebrow = "Mingle.Cards", withHeader = true) { const sol
 
 function participantsView() {
   syncAccountParticipantName();
-  const atLimit = state.participants.length >= MAX_PARTICIPANTS;
+  const participantCount = Math.max(1, Math.min(MAX_PARTICIPANTS, state.participants.length || 1));
+  if (state.participants.length !== participantCount) state.participants = state.participants.length ? state.participants.slice(0, participantCount) : [""];
+  const soloActive = participantCount === 1;
+  if (soloActive) {
+    state.themeMode = "solo";
+    state.participantTab = "solo";
+  } else if (state.themeMode === "solo") {
+    state.themeMode = "single";
+    state.participantTab = "group";
+  }
+  const atLimit = participantCount >= MAX_PARTICIPANTS;
   const resumeCard = state.resume && canAccessSessionContent(state.resume, state.account, { activeVenue: isActiveVenueSession(state.resume), venueDisplay: state.venue?.displayR18 === true }) ? `<aside class="resume-card" aria-label="前回の続き"><strong>前回の続き</strong><span>${esc(state.resume.mixed ? "テーマミックス" : state.resume.customSet ? "マイセット" : decks.find((deck) => deck.id === state.resume.deckId)?.title || "会話カード")} · ${state.resume.cursor}/${state.resume.questions?.length || 40}</span><div><button type="button" class="primary-button" data-action="resume">続きから</button><button type="button" class="text-button muted" data-action="discard-resume">削除</button></div></aside>` : "";
-  const soloActive = state.themeMode === "solo";
-  const modeSwitch = `<div class="home-mode-switch" role="group" aria-label="遊び方"><button type="button" class="home-mode-option" data-action="home-group-mode" aria-pressed="${!soloActive}"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8-1a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM3.5 19a4.5 4.5 0 0 1 9 0M14 18a3.5 3.5 0 0 1 7 0"/></svg><span>みんなで</span></button><button type="button" class="home-mode-option" data-action="home-solo-mode" aria-pressed="${soloActive}"><svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="8" r="3"/><path d="M5 19a7 7 0 0 1 14 0"/></svg><span>ひとりで</span></button></div>`;
-  const modeDescription = `<p class="home-mode-description" aria-live="polite">${soloActive ? "自分のことを理解する質問がでてくるよ" : "会話のきっかけになる質問がでてくるよ"}</p>`;
-  const groupForm = `<form class="panel form-panel" data-form="participants"><div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="呼び名" aria-label="${index + 1}人目の呼び名" autocomplete="off" enterkeyhint="${index === state.participants.length - 1 ? "done" : "next"}" /></label>`).join("")}</div><div class="inline-actions"><button type="button" class="text-button add-person" data-action="add-person" ${atLimit ? "disabled" : ""}>＋ 参加者を追加</button>${state.participants.length > 2 ? '<button type="button" class="text-button muted" data-action="remove-person">最後の人を削除</button>' : ""}<span class="limit-note">${atLimit ? "8人まで" : ""}</span></div><p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button">質問テーマを選ぶ</button></form>`;
-  const soloHome = `<section class="home-solo-panel" aria-label="ひとりで遊ぶ"><button type="button" class="primary-button" data-action="home-solo-start">質問テーマを選ぶ</button></section>`;
-  const mainInput = soloActive ? soloHome : groupForm;
-  return frame(`<div class="home-screen">${accountView()}<div class="masthead-slot"><img class="masthead-image" src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards。やっぱり人って面白い。" width="1493" height="1054" /><h1 class="visually-hidden" tabindex="-1" data-focus>Mingle.Cards</h1></div>${resumeCard}${modeSwitch}${modeDescription}${mainInput}<img class="home-illustration" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たちのイラスト" width="1611" height="976" loading="eager" />${renderAd("top")}<footer class="home-footer"><p><span>α版</span><span>開発：株式会社ErudAite</span></p><nav aria-label="ご案内"><a href="/terms.html">利用規約</a><a href="/privacy.html">プライバシーポリシー</a><a href="/personal-information.html">個人情報保護法に基づく公表事項</a><a class="venue-footer-link" href="https://partnerplan.mingle.cards">店舗で使う</a></nav></footer></div>`, "Mingle.Cards", true);
+  const modeDescription = `<p class="home-mode-description" aria-live="polite">${soloActive ? "自分をもっとよく知るための質問が出てくるよ" : "会話のきっかけになる質問がでてくるよ"}</p>`;
+  const countStepper = `<div class="participant-count-stepper" role="group" aria-label="参加人数"><span class="participant-count-label">参加人数</span><button type="button" class="participant-count-button" data-action="remove-person" aria-label="人数を減らす" ${participantCount <= 1 ? "disabled" : ""}>−</button><output aria-live="polite">${participantCount}人</output><button type="button" class="participant-count-button" data-action="add-person" aria-label="人数を増やす" ${atLimit ? "disabled" : ""}>＋</button></div>`;
+  const groupForm = `<form class="panel form-panel" data-form="participants"><div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="呼び名" aria-label="${index + 1}人目の呼び名" autocomplete="off" enterkeyhint="${index === state.participants.length - 1 ? "done" : "next"}" /></label>`).join("")}</div>${countStepper}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button">質問テーマを選ぶ</button></form>`;
+  return frame(`<div class="home-screen">${accountView()}<div class="masthead-slot"><img class="masthead-image" src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards。やっぱり人って面白い。" width="1493" height="1054" /><h1 class="visually-hidden" tabindex="-1" data-focus>Mingle.Cards</h1></div>${resumeCard}${modeDescription}${groupForm}<img class="home-illustration" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たちのイラスト" width="1611" height="976" loading="eager" />${renderAd("top")}<footer class="home-footer"><p><span>α版</span><span>開発：株式会社ErudAite</span></p><nav aria-label="ご案内"><a href="/terms.html">利用規約</a><a href="/privacy.html">プライバシーポリシー</a><a href="/personal-information.html">個人情報保護法に基づく公表事項</a><a class="venue-footer-link" href="https://partnerplan.mingle.cards">店舗で使う</a></nav></footer></div>`, "Mingle.Cards", true);
 }
 function avatarImageSrc(value) {
   return typeof value === "string" && /^(?:data:image\/(?:png|jpe?g|webp);base64,|https?:\/\/)/i.test(value) && value.length <= 360000 ? value : "";
@@ -1544,9 +1551,10 @@ function playSavedSet(set) {
   if (hasR18 && (!ageConfirmed() || !r18DisplayVisible())) { state.account.pendingSet = null; state.error = !ageConfirmed() ? "R18を含むセットは、アカウント設定で18歳以上の確認をすると遊べます。" : "R18を表示するを選んでから遊べます。"; state.account.error = state.error; render(); return; }
   if (hasR18 && !state.account.pendingSet?.consented) { state.account.pendingSet = { set, consented: false }; state.account.open = true; state.account.libraryOpen = true; state.account.error = ""; render(); return; }
   const solo = set?.audience === 'solo' || (set?.audience === 'both' && state.themeMode === 'solo');
-  if (solo) { if (state.participants.length >= 2) state.groupParticipants = [...state.participants]; state.participants = ['自分']; state.themeMode = 'solo'; }
+  const soloName = state.participants.length === 1 && String(state.participants[0] || '').trim() ? String(state.participants[0]).trim() : '自分';
+  if (solo) { if (state.participants.length >= 2) state.groupParticipants = [...state.participants]; state.participants = [soloName]; state.themeMode = 'solo'; }
   else { if (state.themeMode === 'solo' || state.participants.length < 2) state.participants = state.groupParticipants?.length >= 2 ? [...state.groupParticipants] : ['', '']; else state.groupParticipants = [...state.participants]; state.themeMode = 'single'; }
-  state.session = createSavedSession({ mode: solo ? 'solo' : 'group', participants: solo ? ['自分'] : state.participants, cardIds: ids, setId: set?.id || null, setName: set?.name || 'マイセット', customCards: state.account.customCards, ownerUserId: state.account.user?.id || null, adultConfirmed: state.account.pendingSet?.consented === true, questionOrder: set?.questionOrder || set?.question_order || 'shuffle', r18: explicitR18, design: set?.design, participantRule: solo ? 'solo' : participantRuleForSavedSet(set, 'group'),
+  state.session = createSavedSession({ mode: solo ? 'solo' : 'group', participants: solo ? [soloName] : state.participants, participant: soloName, cardIds: ids, setId: set?.id || null, setName: set?.name || 'マイセット', customCards: state.account.customCards, ownerUserId: state.account.user?.id || null, adultConfirmed: state.account.pendingSet?.consented === true, questionOrder: set?.questionOrder || set?.question_order || 'shuffle', r18: explicitR18, design: set?.design, participantRule: solo ? 'solo' : participantRuleForSavedSet(set, 'group'),
   });
   state.session.setName = set?.name || "マイセット";
   state.account.pendingSet = null;
@@ -1648,7 +1656,21 @@ async function startSharedSet() {
 }
 function submitParticipants() {
   try {
-    state.participants = normalizeParticipants(state.participants);
+    if (state.participants.length === 1) {
+      const name = String(state.participants[0] || "").trim() || "自分";
+      if (Array.from(name).length > MAX_NAME_LENGTH || /[\u0000-\u001f\u007f]/u.test(name)) throw new Error("呼び名を確認してください。");
+      state.participants = [name];
+    } else state.participants = normalizeParticipants(state.participants);
+    const nextThemeMode = state.participants.length === 1 ? "solo" : state.themeMode === "mixed" ? "mixed" : "single";
+    const modeChanged = state.themeMode !== nextThemeMode;
+    state.themeMode = nextThemeMode;
+    state.participantTab = nextThemeMode === "solo" ? "solo" : "group";
+    if (modeChanged || !state.selectedDeckIds?.length) {
+      state.themeExplorerShelf = "all";
+      state.selectedMySetId = null;
+      state.selectedDeckId = nextThemeMode === "solo" ? "self-values" : "friends";
+      state.selectedDeckIds = [state.selectedDeckId];
+    }
     state.screen = "decks";
     state.error = ""; render(); } catch (error) { state.error = error.message; const invalidIndex = state.participants.findIndex((name) => typeof name !== "string" || !name.trim() || Array.from(name.trim()).length > MAX_NAME_LENGTH); state.focusSelector = `input[data-index="${Math.max(0, invalidIndex)}"]`; render(); } }
 function groupRoomArgs(deck, mySet) { return { deckId: deck?.id, adultOnly: deck?.adultOnly === true, setId: mySet?.id || null, setHasR18: mySet?.hasR18 === true, offerR18: canOfferR18(deck), adultConfirmed: state.adultConfirmed, plannedParticipantCount: state.participants.length }; }
@@ -2188,14 +2210,41 @@ async function handleAction(event) {
     return;
   }
   if (action === "add-person") {
+    const sharedEntry = Boolean(state.shared || state.venue);
     if (state.participants.length < MAX_PARTICIPANTS) {
-      state.participants.push("");
-      state.focusSelector = `input[data-index="${state.participants.length - 1}"]`;
+      const restoredName = state.groupParticipants?.[state.participants.length];
+      state.participants.push(typeof restoredName === "string" ? restoredName : "");
+      if (!sharedEntry && state.participants.length === 2) {
+        state.themeMode = "single";
+        state.participantTab = "group";
+        state.selectedDeckId = "friends";
+        state.selectedDeckIds = ["friends"];
+        state.selectedMySetId = null;
+      }
+      state.focusSelector = 'button[data-action="add-person"]';
     }
     render();
     return;
   }
-  if (action === "remove-person") { if (state.participants.length > 2) { state.participants.pop(); state.focusSelector = `input[data-index="${state.participants.length - 1}"]`; } render(); return; }
+  if (action === "remove-person") {
+    const sharedEntry = Boolean(state.shared || state.venue);
+    const minimumParticipants = sharedEntry ? 2 : 1;
+    if (state.participants.length > minimumParticipants) {
+      const previousGroup = Array.isArray(state.groupParticipants) ? state.groupParticipants : [];
+      state.groupParticipants = [...state.participants, ...previousGroup.slice(state.participants.length)];
+      state.participants.pop();
+      if (!sharedEntry && state.participants.length === 1) {
+        state.themeMode = "solo";
+        state.participantTab = "solo";
+        state.selectedDeckId = "self-values";
+        state.selectedDeckIds = ["self-values"];
+        state.selectedMySetId = null;
+      }
+      state.focusSelector = (!sharedEntry && state.participants.length === 1) || (sharedEntry && state.participants.length === 2) ? 'button[data-action="add-person"]' : 'button[data-action="remove-person"]';
+    }
+    render();
+    return;
+  }
   if (action === "home-solo-mode") { if (state.participants.length >= 2) state.groupParticipants = [...state.participants]; state.themeMode = "solo"; state.participantTab = "solo"; state.themeExplorerShelf = "all"; state.selectedDeckId = "self-values"; state.selectedDeckIds = ["self-values"]; state.selectedMySetId = null; state.error = ""; render(); return; }
   if (action === "home-group-mode") { if (state.themeMode === "solo") state.participants = state.groupParticipants?.length >= 2 ? [...state.groupParticipants] : ["", ""]; state.themeMode = "single"; state.participantTab = "group"; state.themeExplorerShelf = "all"; state.selectedDeckId = "friends"; state.selectedDeckIds = ["friends"]; state.selectedMySetId = null; state.error = ""; render(); return; }
   if (action === "edit-participants") { state.screen = "participants"; state.error = ""; state.focusSelector = "input[data-index=\"0\"]"; render(); return; }
@@ -2250,7 +2299,7 @@ async function handleAction(event) {
   if (action === "solo-start") {
     if (state.selectedMySetId) { const set = playableSavedSets(state.account.sets, state.account.customCards).find((item) => item.id === state.selectedMySetId && ['solo', 'both'].includes(item.audience)); if (!set) { state.error = "このマイセットは一人用では利用できません。"; render(); return; } try { playSavedSet(set); } catch (error) { state.error = error.message; render(); } return; }
     const deck = soloDecks.find((item) => item.id === state.selectedDeckId) || soloDecks[0];
-    try { state.session = createSoloSession({ deck }); state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null; state.soloMemoOpen = false; state.soloNoteDraft = ""; state.soloNoteStatus = ""; state.soloNoteError = ""; state.soloSummaryDraft = ""; trackThemeStart(state.session.deckId); recordThemeExplorerStart({ ownerId: state.account.user?.id, mode: "solo", themeIds: [state.session.deckId] }); saveCurrentSession(state.session); state.screen = "play"; state.error = ""; render(); } catch (error) { state.error = error.message; render(); }
+     try { state.session = createSoloSession({ deck, participant: state.participants[0] || "自分" }); state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null; state.soloMemoOpen = false; state.soloNoteDraft = ""; state.soloNoteStatus = ""; state.soloNoteError = ""; state.soloSummaryDraft = ""; trackThemeStart(state.session.deckId); recordThemeExplorerStart({ ownerId: state.account.user?.id, mode: "solo", themeIds: [state.session.deckId] }); saveCurrentSession(state.session); state.screen = "play"; state.error = ""; render(); } catch (error) { state.error = error.message; render(); }
     return;
   }
   if (action === "solo-history-open") { state.soloHistoryOpen = true; state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryHasMore = false; if (state.account.user) loadSoloHistory(false); else { state.account.returnAfterAuth = true; state.account.open = state.account.enabled; state.account.status = "ログイン後に保存したメモを読み込みます。"; render(); } return; }
