@@ -735,3 +735,13 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .shared-bubbles i:after{content:"";position:absolute;bottom:-4px;left:9px;width:8px;height:8px;background:inherit;clip-path:polygon(0 0,100% 0,0 100%)}
 .play-frame-topbar{padding-top:12px;padding-bottom:6px}.play-frame-topbar .app-brand-home,.play-frame-topbar .app-brand-home img{width:100px;height:48px}.play-frame-topbar .quiet{display:none}
 @media(max-width:680px){.shared-card-copy,.shared-card-measure{width:72%;margin-left:22%}}
+/* 自分とミングる: themes grouped by situation */
+.solo-groups{max-width:840px;margin:0 auto}
+.solo-group{margin:0 0 18px}.solo-group h2{margin:0 0 10px;font-size:15px;font-weight:700;color:var(--muted);text-align:left;letter-spacing:.02em}
+.solo-group>.solo-deck-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:0}
+.solo-theme-card-self-love-now{background:#fff0f3}.solo-theme-card-self-crush{background:#fff4ec}.solo-theme-card-self-breakup-decided{background:#f3f0ff}.solo-theme-card-self-breakup-lingering{background:#eef3fb}
+.solo-theme-card-self-school{background:#eefaf6}.solo-theme-card-self-club{background:#fff8e6}.solo-theme-card-self-friends{background:#eef7ff}
+.solo-theme-card-self-love-now .solo-topic-icon{color:#e0567a}.solo-theme-card-self-crush .solo-topic-icon{color:#e87a3a}.solo-theme-card-self-breakup-decided .solo-topic-icon{color:#7a5bd0}.solo-theme-card-self-breakup-lingering .solo-topic-icon{color:#4b78b8}
+.solo-theme-card-self-school .solo-topic-icon{color:#219b78}.solo-theme-card-self-club .solo-topic-icon{color:#c98a0e}.solo-theme-card-self-friends .solo-topic-icon{color:#1769e8}
+.solo-theme-card-self-strengths .solo-topic-icon{color:#d29a17}.solo-theme-card-self-checkin .solo-topic-icon{color:#e09a1a}
+@media(max-width:520px){.solo-group>.solo-deck-list{grid-template-columns:1fr;gap:10px}.solo-group{margin-bottom:14px}}

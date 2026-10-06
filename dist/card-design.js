@@ -17,7 +17,7 @@ const DECK_FAMILIES = {
   founders: 'work', team: 'work', 'new-colleagues': 'work', 'promotion-rivals': 'work',
   'sports-teammates': 'sports',
   'hero-and-demon-king': 'roleplay', 'assassin-and-target': 'roleplay', 'arch-enemies': 'roleplay', 'detective-and-phantom-thief': 'roleplay',
-  'self-values': 'self', 'self-strengths': 'self', 'self-work': 'self', 'self-checkin': 'self',
+  'self-love-now': 'self', 'self-crush': 'self', 'self-breakup-decided': 'self', 'self-breakup-lingering': 'self', 'self-strengths': 'self', 'self-work': 'self', 'self-school': 'self', 'self-club': 'self', 'self-friends': 'self', 'self-values': 'self', 'self-checkin': 'self',
   intimacy: 'adult', 'first-intimacy': 'adult', 'intimacy-refresh': 'adult', 'intimacy-distance': 'adult',
 };
 const VARIANT_PALETTES = { welcome: ['#ef6a55','#1769e8','#e9b62f','#4da99a'], romance: ['#e9b62f','#ef6a55','#b65d87','#1769e8'], friends: ['#5eb59d','#1769e8','#ef6a55','#e9b62f'], family: ['#e9a35d','#5eb59d','#ef6a55','#8471c6'], work: ['#326d74','#1769e8','#e9b62f','#5eb59d'], sports: ['#1769e8','#ef6a55','#e9b62f','#326d74'], roleplay: ['#6d5ab8','#1769e8','#ef6a55','#e9b62f'], self: ['#8471c6','#1769e8','#5eb59d','#e9b62f'], adult: ['#7d3457','#a94f64','#9b6a3a','#5a315d'] };
@@ -30,7 +30,7 @@ const DECK_VARIANTS = {
   'parent-50plus': 0, 'parent-under12': 1, 'family-reunion': 2, siblings: 3, 'in-laws': 0, 'grandparents-and-grandchildren': 1,
   founders: 0, team: 1, 'new-colleagues': 2, 'promotion-rivals': 3, 'sports-teammates': 0,
   'hero-and-demon-king': 0, 'assassin-and-target': 1, 'arch-enemies': 2, 'detective-and-phantom-thief': 3,
-  'self-values': 0, 'self-strengths': 1, 'self-work': 2, 'self-checkin': 3,
+  'self-love-now': 0, 'self-crush': 1, 'self-breakup-decided': 2, 'self-breakup-lingering': 3, 'self-strengths': 0, 'self-work': 1, 'self-school': 2, 'self-club': 3, 'self-friends': 0, 'self-values': 1, 'self-checkin': 2,
   intimacy: 0, 'first-intimacy': 1, 'intimacy-refresh': 2, 'intimacy-distance': 3,
 };
 function variantAccent(deckId, family) { return VARIANT_PALETTES[family][DECK_VARIANTS[deckId] ?? 0]; }
@@ -47,10 +47,17 @@ export function cardDesignForDeck(deckId) {
 }
 export function soloMotifForDeck(deckId) {
   const motifs = {
-    'self-values': '<path d="M12 3 14.5 9l6.5.5-5 4 1.5 6.2-5.5-3.3-5.5 3.3L8 13.5 3 9.5 9.5 9 12 3Z"/>',
-    'self-strengths': '<path d="M5 18 9 14l3 2 7-8"/><path d="M16 8h3v3"/>',
-    'self-work': '<circle cx="12" cy="12" r="8"/><path d="M12 4v8l5 3"/>',
-    'self-checkin': '<path d="M12 3c3 3 5 6 5 9a5 5 0 1 1-10 0c0-3 2-6 5-9Z"/><path d="M9 15c1.5 1 3 1 4.5 0"/>',
+    'self-love-now': '<path d="M12 20S4 14.5 4 9a4 4 0 0 1 8-1.5A4 4 0 0 1 20 9c0 5.5-8 11-8 11Z"/>',
+    'self-crush': '<path d="M11 20S4 15 4 10a3.6 3.6 0 0 1 7-1.4A3.6 3.6 0 0 1 18 10c0 1-.2 1.9-.6 2.8"/><path d="M19 3v4M17 5h4"/>',
+    'self-breakup-decided': '<path d="M14 4h5v16h-5"/><path d="M10 12H3m3-3-3 3 3 3"/>',
+    'self-breakup-lingering': '<path d="M12 20S4 14.5 4 9a4 4 0 0 1 8-1.5A4 4 0 0 1 20 9c0 5.5-8 11-8 11Z"/><path d="m12 7.5-1.5 3 3 2-1.5 3"/>',
+    'self-strengths': '<path d="m12 4 2 5 5 .5-3.8 3.4L16.4 18 12 15.3 7.6 18l1.2-5.1L5 9.5l5-.5z"/>',
+    'self-work': '<path d="M4 8h16v11H4zM8 8V5h8v3"/><path d="M4 12h16"/>',
+    'self-school': '<path d="m3 8 9-4 9 4-9 4z"/><path d="M7 10v4.5c3 2 7 2 10 0V10"/>',
+    'self-club': '<circle cx="12" cy="12" r="8"/><path d="M12 4v16M4 12h16"/>',
+    'self-friends': '<circle cx="9" cy="9" r="3"/><circle cx="16" cy="10" r="2.5"/><path d="M3.5 19c.6-3 2.6-5 5.5-5s4.9 2 5.5 5M14.5 19c.3-2 1.4-3.5 3-3.5 1.4 0 2.6 1.2 3 3.5"/>',
+    'self-values': '<path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+    'self-checkin': '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
   };
   const path = motifs[deckId];
   return path ? `<svg class="solo-card-motif" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${path}</svg>` : '';
