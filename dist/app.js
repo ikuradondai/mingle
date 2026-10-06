@@ -19,7 +19,6 @@ import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart } fr
 import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText } from "./participant-rule.js";
 const root = document.querySelector("#app");
-let lastSpeakerSignature = "";
 const state = {
   shared: null,
   venue: null,
@@ -1160,7 +1159,6 @@ function sharedPlayView(session) {
   const cardDesign = cardDesignForSession(session);
   const cardArtStyle = `--card-art-front:url('${cardDesign.front}');--card-art-back:url('${cardDesign.back}');--card-art-accent:${cardDesign.accent}`;
   const currentIndex = currentParticipantIndex(session);
-  const speakerSignature = `${session.sessionId || "session"}:${currentIndex}`;
   const previousSpeakerIndex = root.querySelector(".shared-speaker[data-speaker-index]")?.getAttribute("data-speaker-index");
   const speakerChanged = previousSpeakerIndex !== undefined && previousSpeakerIndex !== String(currentIndex);
   const speakerName = currentSpeaker(session);
