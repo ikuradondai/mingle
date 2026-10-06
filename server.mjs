@@ -10,6 +10,9 @@ import venueHandler from './api/venue.js';
 import groupHandler from './api/group.js';
 import shareHandler from './api/share.js';
 import marketplaceHandler from './api/marketplace.js';
+import dailyHandler from './api/daily.js';
+import lineWebhookHandler from './api/line/webhook.js';
+import dailyCronHandler from './api/daily/cron.js';
 
 const root = normalize(fileURLToPath(new URL('./dist/', import.meta.url))).replace(/[\\/]+$/, '');
 const port = Number(process.env.PORT || 5180);
@@ -38,6 +41,9 @@ const server = createServer((request, response) => {
   if (pathname === '/api/group' || pathname.startsWith('/api/group/')) return groupHandler(request, response);
   if (pathname.startsWith('/api/share/')) return shareHandler(request, response);
   if (pathname === '/api/marketplace' || pathname.startsWith('/api/marketplace/')) return marketplaceHandler(request, response);
+  if (pathname === '/api/daily/cron') return dailyCronHandler(request, response);
+  if (pathname.startsWith('/api/daily/')) return dailyHandler(request, response);
+  if (pathname === '/api/line/webhook') return lineWebhookHandler(request, response);
   if (pathname === '/admin' || pathname === '/admin/') request.url = '/admin.html';
   const target = safePath(request.url || '/');
   if (!target) { response.writeHead(400); response.end('Bad Request'); return; }

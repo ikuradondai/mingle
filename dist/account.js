@@ -18,6 +18,13 @@ async function request(path, options = {}) {
   let data = null; try { data = await response.json(); } catch {}
   if (!response.ok) { const error = new Error(data?.error || 'account_request_failed'); error.status = response.status; throw error; } return data || {};
 }
+export async function dailyRequest(path, options = {}) {
+  const token = await sessionToken(); if (!token) { const error = authError(); throw error; }
+  const response = await fetcher(`/api/daily${path}`, { ...options, credentials: 'same-origin', headers: { ...(options.body === undefined ? {} : { 'content-type': 'application/json' }), authorization: `Bearer ${token}`, ...(options.headers || {}) }, body: options.body === undefined ? undefined : JSON.stringify(options.body) });
+  let data = null; try { data = await response.json(); } catch {}
+  if (!response.ok) { const error = new Error(data?.error || 'daily_request_failed'); error.status = response.status; throw error; }
+  return data || {};
+}
 export async function marketplaceRequest(path = '', options = {}) {
   const token = await sessionToken();
   const headers = { ...(options.body === undefined ? {} : { 'content-type': 'application/json' }), ...(options.headers || {}) };
@@ -41,6 +48,7 @@ async function groupRequest(path, options = {}) {
 }
 function authClient() { if (!supabase) throw authError('account_unavailable', 503); return supabase.auth; }
 export const accountApi = {
+  dailyRequest,
   me: () => request('/me'),
   confirmAdult: (source) => request('/adult-confirmation', { method: 'PUT', body: { source } }),
   revokeAdult: () => request('/adult-confirmation', { method: 'DELETE' }),

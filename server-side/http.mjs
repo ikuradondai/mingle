@@ -4,6 +4,19 @@ export function json(res, status, body, extra = {}) { res.writeHead(status, { 'C
 export function noStore(res) { res.setHeader?.('Cache-Control', 'no-store'); }
 export async function body(req) { return bodyWithLimit(req, MAX_BODY_BYTES); }
 export async function bodyWithLimit(req, maxBytes) { const contentType = String(req.headers?.['content-type'] || '').split(';')[0].trim().toLowerCase(); if (contentType && contentType !== 'application/json') throw Object.assign(new Error('content type'), { status: 415 }); if (req.body && typeof req.body === 'object') { if (Buffer.byteLength(JSON.stringify(req.body)) > maxBytes) throw Object.assign(new Error('body too large'), { status: 413 }); return req.body; } let size = 0; const chunks = []; for await (const chunk of req) { size += chunk.length; if (size > maxBytes) throw Object.assign(new Error('body too large'), { status: 413 }); chunks.push(chunk); } if (!size) return {}; try { const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')); if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error(); return parsed; } catch { throw Object.assign(new Error('invalid json'), { status: 400 }); } }
+export async function rawBodyWithLimit(req, maxBytes) {
+  const canReadStream = typeof req?.[Symbol.asyncIterator] === 'function' || typeof req?.on === 'function';
+  if (canReadStream && !req.readableEnded) {
+    let size = 0; const chunks = [];
+    for await (const chunk of req) { size += chunk.length; if (size > maxBytes) throw Object.assign(new Error('body too large'), { status: 413 }); chunks.push(Buffer.from(chunk)); }
+    return Buffer.concat(chunks);
+  }
+  const descriptor = req ? Object.getOwnPropertyDescriptor(req, 'body') : null;
+  if (descriptor && 'value' in descriptor && (Buffer.isBuffer(descriptor.value) || typeof descriptor.value === 'string')) {
+    const raw = Buffer.from(descriptor.value); if (raw.length > maxBytes) throw Object.assign(new Error('body too large'), { status: 413 }); return raw;
+  }
+  throw Object.assign(new Error('raw body unavailable'), { status: 400, code: 'RAW_BODY_UNAVAILABLE' });
+}
 export function exactKeys(value, keys) { return Object.keys(value).every((key) => keys.includes(key)) && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key)); }
 export function sameOrigin(req) { const origin = req.headers?.origin; if (!origin) return true; try { return new URL(origin).host === (req.headers.host || new URL(process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost').host); } catch { return false; } }
 export function cookie(req, name) { const raw = req.headers?.cookie || ''; const match = raw.split(';').map((v) => v.trim()).find((v) => v.startsWith(`${name}=`)); if (!match) return ''; try { return decodeURIComponent(match.slice(name.length + 1)); } catch { return ''; } }

@@ -6,13 +6,16 @@
     "start": "node --env-file-if-exists=.env.local server.mjs",
     "check": "node --test tests/*.test.mjs",
     "build:account-sdk": "esbuild vendor/supabase-entry.js --bundle --format=esm --platform=browser --minify --outfile=dist/vendor/supabase.js",
-    "build:qr": "esbuild vendor/qr-entry.js --bundle --format=esm --platform=browser --minify --outfile=dist/vendor/qr.js"
+    "build:qr": "esbuild vendor/qr-entry.js --bundle --format=esm --platform=browser --minify --outfile=dist/vendor/qr.js",
+    "check:daily-db": "node tests/rls/daily-line-verify.mjs && node tests/rls/line-account-link-verify.mjs",
+    "check:daily-browser": "node tests/browser/daily-ui-qa.mjs && node tests/browser/daily-ui-actions-qa.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.2",
     "qrcode": "1.5.4"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.14",
     "esbuild": "0.25.12"
   }
 }
