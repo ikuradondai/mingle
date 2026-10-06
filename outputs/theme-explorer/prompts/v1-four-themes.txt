@@ -1,0 +1,8 @@
+# Theme explorer thumbnail generation v1
+
+- `date`: A warm first-date city cafe scene, two adults meeting across a small table, gentle coral and cobalt accents, cream paper-like atmosphere, natural candid expressions, no text, no logo, no UI, 4:3 landscape composition, clear subject at thumbnail size.
+- `friends`: A relaxed group of three friends talking around a low table after a walk, friendly natural gestures, cream background with navy, coral and cobalt accents, soft editorial illustration, no text, no logo, no UI, 4:3 landscape composition, clear subject at thumbnail size.
+- `founders`: Two coworkers sketching ideas around a shared desk with notebooks and a small plant, collaborative but calm mood, cream/navy/cobalt/coral palette, soft editorial illustration, no text, no logo, no UI, 4:3 landscape composition, clear subject at thumbnail size.
+- `self-values`: A single adult journaling by a sunlit window with a cup of tea and a small plant, reflective and reassuring mood, cream/navy/cobalt/coral palette, soft editorial illustration, no text, no logo, no UI, 4:3 landscape composition, clear subject at thumbnail size.
+
+Shared constraints: polished Mingle.Cards visual language, gentle rounded forms, subtle paper texture, diverse ordinary adults, no readable text or signage, no brand marks, no explicit or sexual imagery, no card frame, no four-corner collage, no giant empty area, no photorealistic rendering.
