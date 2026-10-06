@@ -547,11 +547,6 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 .venue-landing .venue-count{display:grid;gap:5px;margin:5px 0;font-weight:800}.venue-landing .venue-count select{min-height:44px;padding:8px 10px;border:1px solid var(--line);border-radius:11px;background:#fff;color:var(--ink);font:inherit;font-size:16px}.venue-landing .venue-names{margin:6px 0}.venue-landing .venue-names summary{min-height:44px;display:flex;align-items:center;cursor:pointer;color:var(--blue);font-weight:800}.venue-landing .venue-names .participant-list{margin-top:4px}
 
 .venue-landing .venue-footer-links{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:8px}
-/* Solo sessions keep the one-person surface focused on the question. */
-body.solo-play .speaker-pill,
-body.solo-play .participant-strip,
-body.solo-play .like-button,
-
 @media (min-width:681px) {
   .home-screen .home-mode-switch { grid-column:1 / -1; grid-row:2; width:min(100%,360px); margin:0 auto 4px; }
   .home-screen .form-panel { grid-row:3; }
@@ -707,6 +702,28 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .shared-actions{display:grid;grid-template-columns:44px 64px minmax(0,1fr) 44px;gap:8px;align-items:center;min-height:48px;max-width:600px;margin:8px auto 0}.shared-actions button{grid-column:auto;grid-row:auto;min-height:48px}.shared-actions .like-button,.shared-actions .pass-button{min-width:0;padding-inline:8px}.shared-actions .pass-button{display:grid;place-items:center}.shared-actions .pass-button .action-icon{width:18px;height:18px}.shared-play-shell.is-solo .shared-actions{grid-template-columns:minmax(0,1fr) 48px}.shared-pass-hint{margin:7px 0 0;color:var(--muted);font-size:12px;text-align:center}.shared-question-card:focus-visible{outline:3px solid var(--lime);outline-offset:3px}
 @media(max-width:680px){.shared-play-shell{width:100%}.shared-play-head{min-height:40px}.shared-play-head .play-deck{font-size:17px}.shared-round-progress{margin:6px 0 8px}.shared-question-card{min-height:280px;border-radius:20px}.shared-art-rail{border-radius:19px 0 0 19px}.shared-card-copy,.shared-card-measure{width:72%;margin-left:14%;padding:48px 0 60px;font-size:clamp(24px,7vw,29px)}.shared-question-card.is-face-down .shared-card-copy{font-size:19px}.shared-question-card .favorite-card-button,.shared-question-card .card-audio-toggle,.play-toolbar-slot{bottom:10px}.shared-question-card .favorite-card-button,.play-toolbar-slot{right:62px}.shared-question-card .card-audio-toggle{right:10px}.shared-speaker{min-height:38px;margin-top:7px}.shared-speaker strong{font-size:16px}.shared-actions{grid-template-columns:44px 64px minmax(0,1fr) 44px;gap:6px;margin-top:7px}.shared-actions .primary-button{font-size:16px;padding-inline:8px}.shared-pass-hint{margin-top:6px}}
 @media(max-width:380px){.shared-card-copy,.shared-card-measure{font-size:23px}.shared-question-card.is-face-down .shared-card-copy{font-size:18px}.shared-actions{grid-template-columns:44px 60px minmax(0,1fr) 44px;gap:5px}}
+
+/* Home mode switch stays in normal grid flow above the form and illustration. */
+.home-screen .home-mode-switch{position:static;z-index:auto}
+@media (max-width:899px){
+ .home-screen{display:grid;grid-template-columns:minmax(0,1fr);grid-auto-rows:auto;align-items:start;row-gap:8px}
+ .home-screen .masthead-slot{grid-column:1;grid-row:1}.home-screen .home-mode-switch{grid-column:1;grid-row:3;margin:0 auto 4px}
+ .home-screen .form-panel,.home-screen .home-solo-panel{grid-column:1;grid-row:4}.home-screen .home-illustration{grid-column:1;grid-row:5}
+ .home-screen .ad-slot{grid-column:1;grid-row:6}.home-screen .home-footer{grid-column:1;grid-row:7}
+ .home-screen:has(.resume-card) .resume-card{grid-column:1;grid-row:2}.home-screen:has(.resume-card) .home-mode-switch{grid-row:3}
+ .home-screen:has(.resume-card) .form-panel,.home-screen:has(.resume-card) .home-solo-panel{grid-row:4}.home-screen:has(.resume-card) .home-illustration{grid-row:5}
+ .home-screen:has(.resume-card) .ad-slot{grid-row:6}.home-screen:has(.resume-card) .home-footer{grid-row:7}
+}
+@media (min-width:900px){
+ .home-screen{display:grid;grid-template-columns:minmax(400px,1fr) minmax(350px,.9fr);grid-auto-rows:auto;align-items:center;column-gap:20px;row-gap:8px}
+ .home-screen .masthead-slot{grid-column:1 / -1;grid-row:1}.home-screen .home-mode-switch{grid-column:1 / -1;grid-row:2}
+ .home-screen .form-panel,.home-screen .home-solo-panel{grid-column:1;grid-row:3}.home-screen .home-illustration{grid-column:2;grid-row:3}
+ .home-screen .ad-slot{grid-column:1 / -1;grid-row:4}.home-screen .home-footer{grid-column:1 / -1;grid-row:5}
+ .home-screen:has(.resume-card) .resume-card{grid-column:1 / -1;grid-row:2}.home-screen:has(.resume-card) .home-mode-switch{grid-row:3}
+ .home-screen:has(.resume-card) .form-panel,.home-screen:has(.resume-card) .home-solo-panel{grid-row:4}.home-screen:has(.resume-card) .home-illustration{grid-row:4}
+ .home-screen:has(.resume-card) .ad-slot{grid-row:5}.home-screen:has(.resume-card) .home-footer{grid-row:6}
+}
+.home-screen .home-solo-panel{min-width:0}
 
 /* Final play polish. */
 .shared-card-copy,.shared-card-measure{width:72%;margin-left:22%;text-wrap:balance}
