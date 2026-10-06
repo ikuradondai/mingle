@@ -487,31 +487,6 @@ function render() {
   root.querySelector("[data-theme-explorer-search]")?.addEventListener("input", applyThemeQuery);
   root.querySelector("[data-theme-explorer-search]")?.addEventListener("compositionend", applyThemeQuery);
   root.querySelectorAll("[data-theme-category]").forEach((button) => button.addEventListener("click", () => { state.themeExplorerShelf = button.dataset.themeCategory || "all"; state.focusSelector = `[data-theme-category="${state.themeExplorerShelf}"]`; render(); }));
-  root.querySelectorAll("[data-participant-tab]").forEach((button) => button.addEventListener("click", () => {
-    const tab = button.dataset.participantTab;
-    if (!['pair', 'group', 'solo'].includes(tab)) return;
-    if (tab === state.participantTab && !(tab === 'solo' && state.themeMode !== 'solo')) return;
-    state.error = "";
-    if (tab === 'solo') {
-      if (state.participants.length >= 2) state.groupParticipants = [...state.participants];
-      const first = soloDecks[0];
-      state.participants = ['自分']; state.themeMode = 'solo'; state.participantTab = 'solo'; state.selectedDeckId = first?.id || 'self-values'; state.selectedDeckIds = [state.selectedDeckId]; state.selectedMySetId = null; state.adultConfirmed = false; state.themeOptionsOpen = false;
-    } else {
-      if (state.themeMode === 'solo') state.participants = state.groupParticipants?.length >= 2 ? [...state.groupParticipants] : ['', ''];
-      const keepMixed = state.themeMode === 'mixed';
-      state.participantTab = tab; state.selectedMySetId = null;
-      const candidates = decks.filter((deck) => participantRuleForDeck(deck) === tab && canSeeDeck(deck));
-      if (keepMixed) {
-        state.selectedDeckId = state.selectedDeckIds[0] || state.selectedDeckId;
-      } else {
-        state.themeMode = 'single';
-        const selected = candidates.find((deck) => canUseDeck(deck)) || candidates[0] || decks.find((deck) => participantRuleForDeck(deck) === tab);
-        state.selectedDeckId = selected?.id || state.selectedDeckId; state.selectedDeckIds = selected ? [selected.id] : [];
-        state.adultConfirmed = false; state.themeOptionsOpen = false;
-      }
-    }
-    state.themeExplorerShelf = 'all'; state.themeExplorerQuery = ''; state.focusSelector = `[data-participant-tab="${tab}"]`; render();
-  }));
   root.querySelector("[data-theme-reset]")?.addEventListener("click", () => { state.themeExplorerQuery = ""; state.themeExplorerShelf = "all"; state.focusSelector = "[data-theme-explorer-search]"; render(); });
   root.querySelectorAll('[data-action="theme-view"]').forEach((button) => button.addEventListener("click", () => { state.themeExplorerView = button.dataset.view === "list" ? "list" : "cards"; state.focusSelector = `[data-action="theme-view"][data-view="${state.themeExplorerView}"]`; try { localStorage.setItem("mingle.theme-explorer.view.v1", state.themeExplorerView); } catch {} render(); }));
   root.querySelectorAll('[data-action="theme-shelf-scroll"]').forEach((button) => button.addEventListener("click", () => { const shelf = root.querySelector(`#${CSS.escape(button.dataset.target || "")}`); if (shelf) shelf.scrollBy({ left: Number(button.dataset.direction || 1) * Math.max(260, shelf.clientWidth * .72), behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }));
@@ -519,12 +494,12 @@ function render() {
     state.themeMode = event.target.checked ? "mixed" : "single";
     state.adultConfirmed = false;
     if (state.themeMode === "mixed") {
-      const regular = new Set(decks.filter((deck) => !deck.adultOnly).map((deck) => deck.id));
+      const regular = new Set(decks.filter((deck) => !deck.adultOnly && participantRuleVisibleForParticipants(participantRuleForDeck(deck))).map((deck) => deck.id));
       state.selectedDeckIds = state.selectedDeckIds.filter((id) => regular.has(id));
       if (!state.selectedDeckIds.length && regular.has(state.selectedDeckId)) state.selectedDeckIds = [state.selectedDeckId];
       if (state.filter === "adult") state.filter = "all";
     } else {
-      const candidates = decks.filter((deck) => participantRuleForDeck(deck) === state.participantTab && canSeeDeck(deck) && canUseDeck(deck));
+      const candidates = decks.filter((deck) => participantRuleVisibleForParticipants(participantRuleForDeck(deck)) && canSeeDeck(deck) && canUseDeck(deck));
       state.selectedDeckId = candidates.find((deck) => state.selectedDeckIds.includes(deck.id))?.id || candidates[0]?.id || state.selectedDeckId;
       state.selectedDeckIds = state.selectedDeckId ? [state.selectedDeckId] : [];
     }
@@ -991,8 +966,11 @@ const SOLO_TOPIC_ICONS = {
   "self-checkin": '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
 };
 function soloTopicIcon(deck) { const path = SOLO_TOPIC_ICONS[String(deck?.id || "")] || '<circle cx="12" cy="12" r="7"/><path d="m12 8 1.2 2.6L16 12l-2.8 1.4L12 16l-1.2-2.6L8 12l2.8-1.4z"/>'; return `<svg viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`; }
-function participantTabs(active) {
-  return `<div class="participant-tabs" role="group" aria-label="テーマの人数"><button type="button" class="filter-chip ${active === 'pair' ? 'is-active' : ''}" data-participant-tab="pair" aria-pressed="${active === 'pair'}">2人専用</button><button type="button" class="filter-chip ${active === 'group' ? 'is-active' : ''}" data-participant-tab="group" aria-pressed="${active === 'group'}">2人以上用</button><button type="button" class="filter-chip ${active === 'solo' ? 'is-active' : ''}" data-participant-tab="solo" aria-pressed="${active === 'solo'}">1人専用</button></div>`;
+function participantRuleVisibleForParticipants(rule) {
+  if (state.themeMode === 'solo') return rule === 'solo';
+  const count = Array.isArray(state.participants) ? state.participants.length : 0;
+  if (count === 2) return rule === 'pair' || rule === 'group';
+  return rule === 'group';
 }
 function themeExplorerText(deck, categoryLabels = {}) {
   const categories = (themeGroups[deck.id] || []).map((id) => categoryLabels[id] || id).join('・');
@@ -1057,6 +1035,7 @@ function soloDecksView() {
   const allowedSets = playableSavedSets(state.account.sets, state.account.customCards).filter((set) => ['solo', 'both'].includes(set.audience) && (!set.hasR18 || (ageConfirmed() && r18DisplayVisible())));
   const sets = allowedSets.filter((set) => !query || `${set.name || 'マイセット'} ${set.description || ''}`.toLocaleLowerCase('ja-JP').includes(query));
   const selectedMySet = allowedSets.find((set) => set.id === state.selectedMySetId) || null;
+  if (state.selectedMySetId && !selectedMySet) state.selectedMySetId = null;
   const mySetEntries = sets.map((set) => ({ id: `set:${set.id}`, title: set.name || 'マイセット', __mySet: set }));
   const historyEntries = historyIds.map((id) => {
     const deck = history.find((item) => item.id === id);
@@ -1077,22 +1056,29 @@ function soloDecksView() {
   const soloConsent = selectedMySet?.hasR18 ? `<label class="consent selected-consent"><input type="checkbox" data-adult="my-set" ${state.adultConfirmed ? 'checked' : ''} ${!isRegisteredUser() ? 'disabled' : ''}/><span><strong>参加者全員が18歳以上で、R18の話題に同意しています</strong><small>このマイセットにはR18の質問が含まれています。</small></span></label>` : '';
   const soloOptionsOpen = state.themeOptionsOpen;
   const soloControls = `<div class="theme-options ${soloOptionsOpen ? 'is-expanded' : ''}"><div class="theme-options-details"><div class="theme-options-head"><strong>詳細設定</strong><button type="button" class="icon-button" data-action="theme-options-toggle" aria-label="詳細設定を閉じる" title="閉じる">×</button></div>${soloConsent}</div>${themeExplorerSelectedBar({ solo: true, selected, selectedMySet, showSettings: Boolean(soloConsent), optionsOpen: soloOptionsOpen, canStart: true })}</div>`;
-  return frame(`<div class="theme-screen solo-theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>ひとりで</h1></div>${participantTabs('solo')}${r18DisplayToggle()}${themeExplorerToolbar({ solo: true, filters })}${soloBrowse}<p class="form-error" role="alert">${esc(state.error)}</p>${soloControls}${soloHistoryView()}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'ひとりで', true);
+  return frame(`<div class="theme-screen solo-theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>ひとりで</h1></div>${r18DisplayToggle()}${themeExplorerToolbar({ solo: true, filters })}${soloBrowse}<p class="form-error" role="alert">${esc(state.error)}</p>${soloControls}${soloHistoryView()}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'ひとりで', true);
 }
 function decksView() {
   if (state.themeMode === 'solo') return soloDecksView();
   const mixed = state.themeMode === 'mixed';
   const query = state.themeExplorerQuery.trim().toLocaleLowerCase('ja-JP');
-  const participantTab = state.participantTab === 'pair' ? 'pair' : 'group';
-  const allowedSets = !mixed && isRegisteredUser() ? playableSavedSets(state.account.sets, state.account.customCards).filter((set) => ['group', 'both'].includes(set.audience) && (!set.hasR18 || (ageConfirmed() && r18DisplayVisible()))) : [];
-  const mySets = allowedSets.filter((set) => participantRuleForSavedSet(set, 'group') === participantTab && (!query || `${set.name || 'マイセット'} ${set.description || ''}`.toLocaleLowerCase('ja-JP').includes(query)));
+  const allowedSets = !mixed && isRegisteredUser() ? playableSavedSets(state.account.sets, state.account.customCards).filter((set) => ['group', 'both'].includes(set.audience) && participantRuleVisibleForParticipants(participantRuleForSavedSet(set, 'group')) && (!set.hasR18 || (ageConfirmed() && r18DisplayVisible()))) : [];
+  const mySets = allowedSets.filter((set) => participantRuleVisibleForParticipants(participantRuleForSavedSet(set, 'group')) && (!query || `${set.name || 'マイセット'} ${set.description || ''}`.toLocaleLowerCase('ja-JP').includes(query)));
   const selectedMySet = allowedSets.find((set) => set.id === state.selectedMySetId) || null;
+  if (state.selectedMySetId && !selectedMySet) state.selectedMySetId = null;
+  if (mixed) {
+    const compatibleIds = state.selectedDeckIds.filter((id) => participantRuleVisibleForParticipants(participantRuleForDeck(id)));
+    if (compatibleIds.length !== state.selectedDeckIds.length) {
+      state.selectedDeckIds = compatibleIds;
+      state.selectedDeckId = compatibleIds[0] || '';
+    }
+  }
   let selected = decks.find((deck) => deck.id === state.selectedDeckId) || decks[0];
   if (!mixed && !selectedMySet) {
-    const selectedUsable = selected && participantRuleForDeck(selected) === participantTab && canSeeDeck(selected) && canUseDeck(selected);
+    const selectedUsable = selected && participantRuleVisibleForParticipants(participantRuleForDeck(selected)) && canSeeDeck(selected) && canUseDeck(selected);
     if (!selectedUsable) {
       const candidate = decks
-        .filter((deck) => participantRuleForDeck(deck) === participantTab && canSeeDeck(deck))
+        .filter((deck) => participantRuleVisibleForParticipants(participantRuleForDeck(deck)) && canSeeDeck(deck))
         .find((deck) => canUseDeck(deck));
       if (candidate) {
         selected = candidate;
@@ -1105,10 +1091,10 @@ function decksView() {
   }
   const categoryLabels = Object.fromEntries(Object.entries(groupLabels));
   const matches = (deck) => !query || themeExplorerText(deck, categoryLabels).includes(query);
-  const regular = decks.filter((deck) => !deck.adultOnly && matches(deck) && canSeeDeck(deck) && participantRuleForDeck(deck) === participantTab);
-  const adult = decks.filter((deck) => (deck.adultOnly || deck.r18Available) && matches(deck) && ageConfirmed() && r18DisplayVisible() && canSeeDeck(deck) && participantRuleForDeck(deck) === participantTab);
+  const regular = decks.filter((deck) => !deck.adultOnly && matches(deck) && canSeeDeck(deck) && participantRuleVisibleForParticipants(participantRuleForDeck(deck)));
+  const adult = decks.filter((deck) => (deck.adultOnly || deck.r18Available) && matches(deck) && ageConfirmed() && r18DisplayVisible() && canSeeDeck(deck) && participantRuleVisibleForParticipants(participantRuleForDeck(deck)));
   const historyIds = themeExplorerHistory(state.account.user?.id, 'group').flatMap((row) => row.themeIds || []);
-  const history = historyIds.map((id) => decks.find((deck) => deck.id === id)).filter(Boolean).filter(matches).filter((deck) => canSeeDeck(deck)).filter((deck) => participantRuleForDeck(deck) === participantTab).filter((deck) => !mixed || !deck.adultOnly);
+  const history = historyIds.map((id) => decks.find((deck) => deck.id === id)).filter(Boolean).filter(matches).filter((deck) => canSeeDeck(deck)).filter((deck) => participantRuleVisibleForParticipants(participantRuleForDeck(deck))).filter((deck) => !mixed || !deck.adultOnly);
   const filters = Object.entries(groupLabels).filter(([id]) => id !== 'adult' || (!mixed && ageConfirmed() && r18DisplayVisible())).map(([id, label]) => `<button type="button" class="filter-chip ${((mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf) === id) ? 'is-active' : ''}" data-theme-category="${esc(id)}">${esc(label)}</button>`).join('');
   const categoryId = mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf;
   const categoryDecks = categoryId !== 'all' && categoryId !== 'adult' ? regular.filter((deck) => themeGroups[deck.id]?.includes(categoryId)) : categoryId === 'adult' ? adult : regular;
@@ -1146,7 +1132,7 @@ function decksView() {
   const groupBrowse = groupNeedsFlat
     ? (groupFlat.length ? themeExplorerShelf('group-filtered', categoryId === 'all' ? 'テーマ一覧' : categoryId === 'adult' ? 'R18のテーマ' : 'カテゴリ別', groupFlat, { mixed, selectedMySet }) : themeExplorerEmpty())
     : `${themeExplorerShelf('recommended', 'おすすめ', recommended.filter(matches), { mixed, selectedMySet })}${historyEntries.length ? themeExplorerShelf('history', '最近遊んだテーマ', historyEntries, { mixed, selectedMySet }) : ''}${mySetEntries.length ? themeExplorerShelf('group-mysets', 'マイセット', mySetEntries, { mixed, selectedMySet }) : ''}${groupCategoryShelves}${adultShelf}`;
-  return frame(`<div class="theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>質問テーマを選ぶ</h1></div>${!isRegisteredUser() ? `<p class="guest-theme-note">無料登録で、さらに多くのテーマが使えます。</p>` : ''}${participantTabs(participantTab)}${r18DisplayToggle()}<label class="mode-switch compact-mode-switch"><input type="checkbox" data-mode-mixed ${mixed ? 'checked' : ''}/> <span>テーマミックス</span><small>2〜3テーマ</small></label>${mixed ? `<p class="mode-hint">通常テーマから2〜3個を選びます。${state.selectedDeckIds.length}/3</p>` : ''}${themeExplorerToolbar({ filters })}${groupBrowse}${controls}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'Mingle.Cards', true);
+  return frame(`<div class="theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>質問テーマを選ぶ</h1></div>${!isRegisteredUser() ? `<p class="guest-theme-note">無料登録で、さらに多くのテーマが使えます。</p>` : ''}${r18DisplayToggle()}<label class="mode-switch compact-mode-switch"><input type="checkbox" data-mode-mixed ${mixed ? 'checked' : ''}/> <span>テーマミックス</span><small>2〜3テーマ</small></label>${mixed ? `<p class="mode-hint">通常テーマから2〜3個を選びます。${state.selectedDeckIds.length}/3</p>` : ''}${themeExplorerToolbar({ filters })}${groupBrowse}${controls}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'Mingle.Cards', true);
 }
 
 function participantChips(session) { return session.participants.map((name, index) => { const initial = Array.from(name.trim())[0] ?? '・'; return `<span class="participant-chip participant-color-${index} ${index === currentParticipantIndex(session) ? "is-current" : ""}"><i aria-hidden="true">${esc(initial)}</i>${esc(name)}</span>`;

@@ -104,17 +104,12 @@
 .theme-explorer-selected-bar:has(.theme-explorer-selection-error) > span:not(.theme-explorer-selection-error) { flex: 1 1 auto; }
 .theme-explorer-selected-actions .participant-edit-link { min-height:44px; white-space:nowrap; }
 @media (max-width:680px) { .theme-explorer-selected-bar { flex-wrap:wrap; gap:8px; } .theme-explorer-selected-actions { width:100%; display:flex; flex-wrap:wrap; gap:8px; } .theme-explorer-selected-actions .selected-start { flex:1 1 150px; } .theme-explorer-selected-actions .participant-edit-link { flex:1 1 130px; } .theme-explorer-screen:has(.theme-explorer-selected-bar .theme-explorer-selection-error) { padding-bottom:150px; } .theme-explorer-selected-bar:has(.theme-explorer-selection-error) .theme-explorer-selected-actions { width:auto; flex:0 0 auto; gap:4px; } .theme-explorer-selected-bar:has(.theme-explorer-selection-error) .selected-start { flex:0 0 108px; padding-inline:8px; } .theme-explorer-selected-bar:has(.theme-explorer-selection-error) .participant-edit-link { flex:0 0 auto; padding-inline:9px; } }
-.theme-explorer-screen .participant-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
-.theme-explorer-screen .participant-tabs .filter-chip { min-height: 36px; padding: 6px 12px; }
-.theme-explorer-screen .participant-tabs [aria-pressed="true"] { background: var(--navy, #14213d); color: #fff; }
 .theme-explorer-screen .guest-theme-note { margin: 0 0 10px; }
 .theme-explorer-card .action-icon, .theme-explorer-shelf-controls .action-icon, .theme-explorer-view .action-icon { width: 19px; height: 19px; }
 @media (max-width: 680px) {
   .theme-explorer-screen { padding-inline: 0; padding-bottom: 108px; }
   .theme-explorer-toolbar { gap: 8px; }
   .theme-explorer-filters { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
-  .theme-explorer-screen .participant-tabs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
-  .theme-explorer-screen .participant-tabs .filter-chip { flex: 0 0 auto; }
   .theme-explorer-filters .filter-chip { flex: 0 0 auto; }
   .theme-explorer-track { grid-auto-columns: minmax(205px, 72vw); gap: 10px; }
   .theme-explorer-track.is-list { grid-template-columns: 1fr; }
