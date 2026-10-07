@@ -102,3 +102,45 @@ export function recordThemeExplorerStart({ ownerId = null, mode = 'group', theme
 export function themeExplorerHistory(ownerId = null, mode = 'group') {
   return normalizeRows(readHistory()[safeOwner(ownerId)]?.[safeBucket(mode)]);
 }
+
+// Deterministic ranking shared by group and solo explorers. Availability is
+// always primary; history only supplies a small, explainable category affinity.
+export function rankThemeRecommendations({ decks = [], historyRows = [], baseIds = [], limit = 8, isAvailable = () => true, categoryOf = () => [] } = {}) {
+  const historyIds = new Set(historyRows.flatMap((row) => row?.themeIds || []).filter((id) => typeof id === 'string'));
+  const recent = historyRows.flatMap((row) => row?.themeIds || []).find((id) => decks.some((deck) => deck.id === id));
+  const recentCategories = new Set(recent ? categoryOf(decks.find((deck) => deck.id === recent)) : []);
+  const preferred = new Map(baseIds.map((id, index) => [id, index]));
+  const pool = decks.map((deck, index) => {
+    const categories = categoryOf(deck);
+    return {
+      deck, index,
+      available: isAvailable(deck) ? 1 : 0,
+      unplayed: historyIds.has(deck.id) ? 0 : 1,
+      affinity: categories.some((category) => recentCategories.has(category)) ? 1 : 0,
+      baseIndex: preferred.has(deck.id) ? preferred.get(deck.id) : baseIds.length + index,
+    };
+  });
+  pool.sort((a, b) => b.available - a.available || b.unplayed - a.unplayed || b.affinity - a.affinity || a.baseIndex - b.baseIndex || a.index - b.index);
+  const picked = [];
+  const seenCategories = new Set();
+  const pickTier = (tier) => {
+    for (const item of tier) {
+      if (picked.length >= limit) return;
+      const categories = categoryOf(item.deck);
+      if (categories.some((category) => !seenCategories.has(category))) {
+        picked.push(item.deck); categories.forEach((category) => seenCategories.add(category));
+      }
+    }
+    for (const item of tier) {
+      if (picked.length >= limit) return;
+      if (!picked.includes(item.deck)) picked.push(item.deck);
+    }
+  };
+  // Complete each priority tier before moving on. Category diversity never
+  // allows a locked or already-played card to outrank an available candidate.
+  pickTier(pool.filter((entry) => entry.available === 1 && entry.unplayed === 1));
+  pickTier(pool.filter((entry) => entry.available === 1 && entry.unplayed === 0));
+  pickTier(pool.filter((entry) => entry.available === 0 && entry.unplayed === 1));
+  pickTier(pool.filter((entry) => entry.available === 0 && entry.unplayed === 0));
+  return picked;
+}

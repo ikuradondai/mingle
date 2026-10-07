@@ -93,6 +93,25 @@ test('host create, guest join, projection and CAS answer progression', async () 
   assert.equal(guestAfterSpeaker.room.speakerName, '友だち');
 });
 
+test('friends and family themes create and continue through six cards in shared rooms', async () => {
+  for (const deckId of ['friends', 'family-reunion']) {
+    const { service } = fixture();
+    const created = await service.create(req({ deckId }));
+    assert.equal(created.room.deckId, deckId);
+    const joined = await service.join({ body: { inviteToken: created.inviteToken, name: '友だち' }, headers: {} }, roomId);
+    let current = await service.action(req({ action: 'start', revision: joined.room.revision }), roomId);
+    for (let card = 0; card < 6; card += 1) {
+      current = await service.action(req({ action: 'reveal', revision: current.room.revision }), roomId);
+      current = await service.action(req({ action: 'next', revision: current.room.revision }), roomId);
+      current = await service.action(req({ action: 'next', revision: current.room.revision }), roomId);
+    }
+    assert.equal(current.room.status, 'break', deckId);
+    assert.equal(current.card, null, deckId);
+    const resumed = await service.action(req({ action: 'continue', revision: current.room.revision }), roomId);
+    assert.equal(resumed.room.status, 'playing', deckId);
+  }
+});
+
 test('pair rooms reject a third participant while preserving repeated-secret rejoin', async () => {
   const { service } = fixture();
   const created = await service.create(req({ deckId: 'date' }));

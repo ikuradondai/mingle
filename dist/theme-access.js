@@ -1,6 +1,15 @@
 import { decks } from "./data/decks.js";
 import { soloDecks } from "./data/solo-decks.js";
-export const GUEST_THEME_IDS = new Set(['date', 'party-first-meeting', 'business-meetup', 'bar-first-meeting']);
+// These are safe, self-contained standard themes that let a guest reach the
+// first card. family-reunion is the broadest family-oriented option here.
+export const GUEST_THEME_IDS = new Set([
+  'date',
+  'party-first-meeting',
+  'business-meetup',
+  'bar-first-meeting',
+  'friends',
+  'family-reunion',
+]);
 
 export function isRegisteredAccount(account) {
   return Boolean(account?.enabled && account?.authReady && account?.user?.id);

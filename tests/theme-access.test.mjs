@@ -12,8 +12,8 @@ const confirmed = { enabled: true, authReady: true, user: { id: 'member-1' }, ag
 const confirmedOff = { ...confirmed, r18DisplayEnabled: false };
 const loading = { enabled: true, authReady: false, user: { id: 'member-1' }, ageConfirmedAt: '2026-10-05T09:12:00.000Z' };
 
-test('guest access is limited to four non-adult themes', () => {
-  assert.deepEqual([...GUEST_THEME_IDS], ['date', 'party-first-meeting', 'business-meetup', 'bar-first-meeting']);
+test('guest access is limited to six non-adult themes', () => {
+  assert.deepEqual([...GUEST_THEME_IDS], ['date', 'party-first-meeting', 'business-meetup', 'bar-first-meeting', 'friends', 'family-reunion']);
   for (const deck of decks) assert.equal(canUseTheme(deck, guest), GUEST_THEME_IDS.has(deck.id));
   assert.equal(canUseTheme(undefined, member), false);
   assert.equal(canUseTheme(undefined, confirmed), false);

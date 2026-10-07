@@ -15,7 +15,8 @@ import { buildFacebookShareUrl, buildShareText, buildXShareUrl } from "./share-t
 import { isCardAudioEnabled, toggleCardAudio, playFlipSound } from "./card-audio.js";
 import { cardDesignForSession, soloMotifForDeck } from "./card-design.js";
 import { CREATOR_PRESET_IDS, normalizeCreatorDesign, effectiveCreatorAdult } from "./creator-metadata.js";
-import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart } from "./theme-explorer.js";
+import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, rankThemeRecommendations } from "./theme-explorer.js";
+import { themeExampleForDeck } from "./theme-examples.js";
 import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText } from "./participant-rule.js";
 const root = document.querySelector("#app");
@@ -1015,7 +1016,7 @@ function themeExplorerCard(deck, { solo = false, mixed = false, selectedMySet = 
   const control = '';
   const image = set ? cardDesignForSession({ mode: solo ? 'solo' : 'group', customSet: true, deckId: set.deckId || (solo ? 'self-values' : 'date'), design: set.design }).back : themeExplorerImage(deck.id);
   const title = set?.name || deck.title;
-  const subtitle = set?.description || deck.subtitle || '';
+  const subtitle = set?.description || themeExampleForDeck(deck);
   const count = set?.cardCount || (Array.isArray(deck.questions) ? deck.questions.length : 40);
   const action = set ? 'choose-myset' : 'theme-select';
   return `<button type="button" class="theme-explorer-card ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}" data-action="${action}" data-theme-card data-theme-id="${esc(deck.id)}" ${set ? `data-set-id="${esc(set.id)}"` : ''} data-theme-key="${esc(shelfId)}:${esc(deck.id)}" aria-pressed="${selected}" aria-disabled="${locked}" ${locked ? 'disabled' : ''}>${image ? `<img class="theme-explorer-image" src="${esc(image)}" alt="" loading="lazy" width="320" height="213" />` : ''}<span class="theme-explorer-card-body">${control}<strong>${esc(title)}</strong><small>${esc(subtitle)}</small><span class="theme-explorer-meta">${locked ? '🔒 登録で解放' : `${count}枚`}</span></span></button>`;
@@ -1059,6 +1060,7 @@ function soloDecksView() {
   const all = soloDecks.filter(matches);
   const historyIds = themeExplorerHistory(state.account.user?.id, 'solo').flatMap((row) => row.themeIds || []);
   const history = historyIds.map((id) => soloDecks.find((deck) => deck.id === id)).filter(Boolean).filter(matches);
+  const historyRows = history.map((deck) => ({ themeIds: [deck.id] }));
   const filters = [`<button type="button" class="filter-chip ${state.themeExplorerShelf === 'all' ? 'is-active' : ''}" data-theme-category="all">すべて</button>`, ...soloCategories.map((category) => `<button type="button" class="filter-chip ${state.themeExplorerShelf === category.id ? 'is-active' : ''}" data-theme-category="${esc(category.id)}">${esc(category.label)}</button>`)].join('');
   const categoryDecks = state.themeExplorerShelf !== 'all' ? all.filter((deck) => deck.category === state.themeExplorerShelf) : all;
   const soloCategoryShelves = soloCategories.map((category) => themeExplorerShelf(`solo-category-${category.id}`, category.label, categoryDecks.filter((deck) => deck.category === category.id), { solo: true })).join('');
@@ -1073,8 +1075,16 @@ function soloDecksView() {
     const set = sets.find((item) => item.id === id);
     return set ? { id: `set:${set.id}`, title: set.name || 'マイセット', __mySet: set } : null;
   }).filter(Boolean);
-  const recommendedIds = ['self-values', 'self-checkin', 'self-work', 'self-friends', 'self-love-now', 'self-school'];
-  const recommended = recommendedIds.map((id) => all.find((deck) => deck.id === id)).filter(Boolean);
+  const recommendedIds = ['self-values', 'self-checkin', 'self-work', 'self-friends', 'self-love-now', 'self-school', 'self-strengths', 'self-club'];
+  const recommended = rankThemeRecommendations({
+    decks: all,
+    historyRows,
+    baseIds: recommendedIds,
+    // Solo cards keep the existing guest-first behavior; group guest access
+    // must not accidentally lock the standard solo catalog.
+    isAvailable: () => true,
+    categoryOf: (deck) => deck?.category ? [deck.category] : [],
+  });
   const visibleMySetEntries = query.length || state.themeExplorerView === 'list'
     ? mySetEntries.filter((entry) => state.themeExplorerShelf === 'all' || entry.__mySet?.category === state.themeExplorerShelf)
     : [];
@@ -1125,11 +1135,20 @@ function decksView() {
   const adult = decks.filter((deck) => (deck.adultOnly || deck.r18Available) && matches(deck) && ageConfirmed() && r18DisplayVisible() && canSeeDeck(deck) && participantRuleVisibleForParticipants(participantRuleForDeck(deck)));
   const historyIds = themeExplorerHistory(state.account.user?.id, 'group').flatMap((row) => row.themeIds || []);
   const history = historyIds.map((id) => decks.find((deck) => deck.id === id)).filter(Boolean).filter(matches).filter((deck) => canSeeDeck(deck)).filter((deck) => participantRuleVisibleForParticipants(participantRuleForDeck(deck))).filter((deck) => !mixed || !deck.adultOnly);
+  const historyRows = history.map((deck) => ({ themeIds: [deck.id] }));
   const filters = Object.entries(groupLabels).filter(([id]) => id !== 'adult' || (!mixed && ageConfirmed() && r18DisplayVisible())).map(([id, label]) => `<button type="button" class="filter-chip ${((mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf) === id) ? 'is-active' : ''}" data-theme-category="${esc(id)}">${esc(label)}</button>`).join('');
   const categoryId = mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf;
   const categoryDecks = categoryId !== 'all' && categoryId !== 'adult' ? regular.filter((deck) => themeGroups[deck.id]?.includes(categoryId)) : categoryId === 'adult' ? adult : regular;
-  const recommendedIds = ['date', 'party-first-meeting', 'business-meetup', 'bar-first-meeting', 'friends', 'couples', 'team', 'reunion', 'group-mixer'];
-  const recommended = recommendedIds.map((id) => regular.find((deck) => deck.id === id)).filter(Boolean);
+  const recommendedIds = state.participants.length >= 3
+    ? ['friends', 'family-reunion', 'team', 'group-mixer', 'party-first-meeting', 'business-meetup', 'bar-first-meeting', 'date']
+    : ['friends', 'date', 'party-first-meeting', 'business-meetup', 'bar-first-meeting', 'family-reunion', 'team', 'group-mixer'];
+  const recommended = rankThemeRecommendations({
+    decks: regular,
+    historyRows,
+    baseIds: recommendedIds,
+    isAvailable: (deck) => canUseDeck(deck),
+    categoryOf: (deck) => themeGroups[deck?.id] || [],
+  });
   const groupCategoryShelves = Object.entries(groupLabels).filter(([id]) => !['all', 'adult'].includes(id)).map(([id, label]) => themeExplorerShelf(`group-category-${id}`, label, regular.filter((deck) => themeGroups[deck.id]?.includes(id)), { mixed })).join('');
   const mySetEntries = mySets.map((set) => ({ id: `set:${set.id}`, title: set.name || 'マイセット', __mySet: set }));
   const historyEntries = historyIds.map((id) => {
