@@ -14,7 +14,7 @@ process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
 process.env.ADMIN_PASSWORD = 'test-password';
 const { recordEvent, fetchStats } = await import('../server-side/store.mjs');
 const { revokeSession, signSession, verifySession, verifySessionAsync } = await import('../server-side/http.mjs');
-const { default: track } = await import('../api/track.js');
+const { default: track, recommendationLabels } = await import('../api/track.js');
 const { statsHandler } = await import('../server-side/admin-api.mjs');
 
 test('analytics records page views and theme starts separately and deduplicates retries', async () => {
@@ -28,6 +28,44 @@ test('analytics records page views and theme starts separately and deduplicates 
   assert.equal(result.days[0].day.themeStarts, 1);
   assert.equal(result.days[0].pages.participants, 1);
   assert.equal(result.days[0].themes.date, 1);
+});
+
+test('public recommendation labels require a meaningful unique rank and increase', () => {
+  assert.deepEqual(recommendationLabels({ days: [{ themes: { date: 8, friends: 3 } }, { themes: { date: 4 } }] }), { date: 'yesterday_top' });
+  assert.deepEqual(recommendationLabels({ days: [{ themes: { date: 8, friends: 8 } }, { themes: { date: 4, friends: 4 } }] }), { date: 'rising', friends: 'rising' });
+  assert.deepEqual(recommendationLabels({ days: [{ themes: { date: 8, friends: 5 } }, { themes: { date: 4, friends: 5 } }] }), { date: 'yesterday_top' });
+  assert.deepEqual(recommendationLabels({ days: [{ themes: { date: 4 } }, { themes: { date: 1 } }] }), {});
+});
+
+test('public recommendation GET returns only bounded labels and accepts admin sessions', async () => {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
+  const yesterday = fmt.format(new Date(Date.now() - 86400000));
+  await recordEvent({ type: 'theme_start', themeId: 'date', eventId: `public-label-${Date.now()}`, date: yesterday });
+  const req = Readable.from([]); req.method = 'GET'; req.url = '/api/track?view=recommendations'; req.headers = { cookie: `mingle_admin=${signSession()}` }; req.socket = { remoteAddress: 'public-label-test' };
+  let status; let result; const res = { setHeader() {}, writeHead(code) { status = code; }, end(value) { result = JSON.parse(value); } };
+  await track(req, res);
+  assert.equal(status, 200);
+  assert.equal(result.asOf, yesterday);
+  assert.ok(result.labels && typeof result.labels === 'object');
+  assert.equal(Object.hasOwn(result, 'counts'), false);
+});
+
+test('recommendation loader retries after a short backoff and validates asOf', async () => {
+  const originalFetch = globalThis.fetch; const originalTimer = globalThis.setTimeout; const originalNow = Date.now; const calls = []; const timers = [];
+  let now = originalNow(); Date.now = () => now;
+  globalThis.setTimeout = (callback) => { timers.push(callback); return timers.length; };
+  try {
+    globalThis.fetch = async () => { calls.push('failed'); return { ok: false }; };
+    const failed = await import(`../dist/recommendation-labels.js?labels-failed=${Date.now()}`);
+    failed.loadRecommendationLabels(); await new Promise((resolve) => originalTimer(resolve, 0));
+    assert.equal(calls.length, 1);
+    const current = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const [year, month, day] = current.split('-').map(Number); const yesterday = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.UTC(year, month - 1, day - 1)));
+    globalThis.fetch = async () => { calls.push('success'); return { ok: true, json: async () => ({ asOf: yesterday, labels: { date: 'rising' } }) }; };
+    now += 30 * 1000 + 1; timers.shift()(); await new Promise((resolve) => originalTimer(resolve, 0));
+    assert.equal(failed.recommendationLabel('date'), 'rising');
+    assert.equal(calls.length, 2);
+  } finally { Date.now = originalNow; globalThis.fetch = originalFetch; globalThis.setTimeout = originalTimer; }
 });
 
 test('signed sessions reject tampering and expiry', () => {

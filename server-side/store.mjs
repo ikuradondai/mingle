@@ -96,5 +96,16 @@ export async function fetchStats(dates) {
   }
   if (!localEnabled) throw new Error('store unavailable'); const db = readLocal(); return { totals: db.totals || {}, days: dates.map((date) => { const source = db.days[date] || {}; const day = { ...source, ...(source.progress || {}) }; return { date, day, pages: source.pages || {}, themes: source.themes || {}, progressThemes: source.progressThemes || {} }; }), startedAt: db.startedAt, updatedAt: db.updatedAt };
 }
+export async function fetchThemeStartStats(dates) {
+  dates = await dates;
+  if (hasRedis()) {
+    const commands = dates.map((date) => ['HGETALL', `${REDIS_PREFIX}:themes:${date}`]);
+    const out = await redisPipeline(commands);
+    return { days: dates.map((date, index) => ({ date, themes: hash(out[index]) })) };
+  }
+  if (!localEnabled) throw new Error('store unavailable');
+  const db = readLocal();
+  return { days: dates.map((date) => ({ date, themes: (db.days[date] || {}).themes || {} })) };
+}
 export async function knownDates() { if (hasRedis()) return (await redisCommand(['SMEMBERS', `${REDIS_PREFIX}:dates`])).sort(); if (!localEnabled) throw new Error('store unavailable'); return Object.keys(readLocal().dates || {}).sort(); }
 function hash(value) { const o = {}; for (let i = 0; i < (value || []).length; i += 2) o[value[i]] = Number(value[i + 1]); return o; }

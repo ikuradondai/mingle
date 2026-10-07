@@ -16,6 +16,7 @@ import { isCardAudioEnabled, toggleCardAudio, playFlipSound } from "./card-audio
 import { cardDesignForSession, soloMotifForDeck } from "./card-design.js";
 import { CREATOR_PRESET_IDS, normalizeCreatorDesign, effectiveCreatorAdult } from "./creator-metadata.js";
 import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, rankThemeRecommendations } from "./theme-explorer.js";
+import { loadRecommendationLabels, recommendationLabel } from "./recommendation-labels.js";
 import { themeExampleForDeck } from "./theme-examples.js";
 import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText } from "./participant-rule.js";
@@ -375,6 +376,14 @@ function restoreAccountScroll(snapshot) {
   if (favorites) { favorites.scrollTop = snapshot.favoritesTop; favorites.scrollLeft = snapshot.favoritesLeft; }
 }
 function render() {
+  if (state.screen === "decks") loadRecommendationLabels(() => {
+    if (state.screen !== "decks") return;
+    root.querySelectorAll('[data-theme-recommendation-label]').forEach((node) => {
+      const kind = recommendationLabel(node.dataset.themeRecommendationLabel);
+      node.textContent = kind === 'yesterday_top' ? '昨日の人気No.1' : kind === 'rising' ? '人気上昇中！' : '';
+      node.title = kind === 'yesterday_top' ? '昨日のテーマ開始数で1位' : kind === 'rising' ? '昨日のテーマ開始数が一昨日より増加' : '';
+    });
+  });
   const explorerScrollSnapshot = state.screen === "decks" ? [...root.querySelectorAll('[data-theme-rail]')].map((rail) => [rail.id, rail.scrollLeft]) : [];
   const explorerWindowScroll = state.screen === "decks" ? { x: window.scrollX, y: window.scrollY } : null;
   const explorerFocus = document.activeElement?.closest?.('[data-theme-card]')?.dataset.themeKey || null;
@@ -1019,7 +1028,12 @@ function themeExplorerCard(deck, { solo = false, mixed = false, selectedMySet = 
   const subtitle = set?.description || themeExampleForDeck(deck);
   const count = set?.cardCount || (Array.isArray(deck.questions) ? deck.questions.length : 40);
   const action = set ? 'choose-myset' : 'theme-select';
-  return `<button type="button" class="theme-explorer-card ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}" data-action="${action}" data-theme-card data-theme-id="${esc(deck.id)}" ${set ? `data-set-id="${esc(set.id)}"` : ''} data-theme-key="${esc(shelfId)}:${esc(deck.id)}" aria-pressed="${selected}" aria-disabled="${locked}" ${locked ? 'disabled' : ''}>${image ? `<img class="theme-explorer-image" src="${esc(image)}" alt="" loading="lazy" width="320" height="213" />` : ''}<span class="theme-explorer-card-body">${control}<strong>${esc(title)}</strong><small>${esc(subtitle)}</small><span class="theme-explorer-meta">${locked ? '🔒 登録で解放' : `${count}枚`}</span></span></button>`;
+  const showRecommendationNode = !set && (shelfId === 'recommended' || shelfId === 'solo-recommended' || state.themeExplorerView === 'list');
+  const labelKind = showRecommendationNode ? recommendationLabel(deck.id) : '';
+  const label = labelKind === 'yesterday_top' ? '昨日の人気No.1' : labelKind === 'rising' ? '人気上昇中！' : '';
+  const labelTitle = labelKind === 'yesterday_top' ? '昨日のテーマ開始数で1位' : labelKind === 'rising' ? '昨日のテーマ開始数が一昨日より増加' : '';
+  const imageMarkup = image ? `<span class="theme-explorer-image-wrap"><img class="theme-explorer-image" src="${esc(image)}" alt="" loading="lazy" width="320" height="213" />${showRecommendationNode ? `<span class="theme-explorer-label" data-theme-recommendation-label="${esc(deck.id)}" title="${esc(labelTitle)}">${label}</span>` : ''}</span>` : '';
+  return `<button type="button" class="theme-explorer-card ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}" data-action="${action}" data-theme-card data-theme-id="${esc(deck.id)}" ${set ? `data-set-id="${esc(set.id)}"` : ''} data-theme-key="${esc(shelfId)}:${esc(deck.id)}" aria-pressed="${selected}" aria-disabled="${locked}" ${locked ? 'disabled' : ''}>${imageMarkup}<span class="theme-explorer-card-body">${control}<strong>${esc(title)}</strong><small>${esc(subtitle)}</small><span class="theme-explorer-meta">${locked ? '🔒 登録で解放' : `${count}枚`}</span></span></button>`;
 }
 function themeExplorerShelf(id, title, decksForShelf, options = {}) {
   const cards = decksForShelf.map((deck) => themeExplorerCard(deck, { ...options, shelfId: id })).join('');
