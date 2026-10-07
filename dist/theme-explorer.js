@@ -57,6 +57,8 @@ export function themeExplorerImage(id) {
 }
 
 const KEY = 'mingle.theme-explorer.history.v1';
+const BOOKMARK_KEY = 'mingle.theme-explorer.bookmarks.v1';
+const EXPERIENCED_KEY = 'mingle.theme-explorer.experienced.v1';
 const BUCKETS = ['group', 'solo'];
 function isRecord(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function safeOwner(ownerId) { return typeof ownerId === 'string' && ownerId.trim() ? ownerId : 'guest'; }
@@ -91,6 +93,42 @@ function readHistory() {
   } catch { return {}; }
 }
 function writeHistory(value) { try { globalThis.localStorage?.setItem(KEY, JSON.stringify(value)); } catch {} }
+function readBookmarks() {
+  try {
+    const raw = globalThis.localStorage?.getItem(BOOKMARK_KEY);
+    const parsed = JSON.parse(typeof raw === 'string' && raw ? raw : '{}');
+    if (!isRecord(parsed)) return {};
+    const normalized = {};
+    for (const [owner, ids] of Object.entries(parsed)) normalized[owner] = normalizeIds(ids);
+    return normalized;
+  } catch { return {}; }
+}
+function writeBookmarks(value) { try { globalThis.localStorage?.setItem(BOOKMARK_KEY, JSON.stringify(value)); } catch {} }
+export function themeExplorerBookmarks(ownerId = null) { return normalizeIds(readBookmarks()[safeOwner(ownerId)]); }
+export function toggleThemeExplorerBookmark(id, ownerId = null) {
+  if (typeof id !== 'string' || !id.trim()) return false;
+  const owner = safeOwner(ownerId); const all = readBookmarks(); const current = new Set(normalizeIds(all[owner]));
+  if (current.has(id)) current.delete(id); else current.add(id);
+  all[owner] = [...current]; writeBookmarks(all); return current.has(id);
+}
+function readExperienced() {
+  try {
+    const raw = globalThis.localStorage?.getItem(EXPERIENCED_KEY);
+    const parsed = JSON.parse(typeof raw === 'string' && raw ? raw : '{}');
+    if (!isRecord(parsed)) return {};
+    const normalized = {};
+    for (const [owner, ids] of Object.entries(parsed)) normalized[owner] = normalizeIds(ids);
+    return normalized;
+  } catch { return {}; }
+}
+function writeExperienced(value) { try { globalThis.localStorage?.setItem(EXPERIENCED_KEY, JSON.stringify(value)); } catch {} }
+export function themeExplorerExperienced(ownerId = null) { return normalizeIds(readExperienced()[safeOwner(ownerId)]); }
+export function toggleThemeExplorerExperienced(id, ownerId = null) {
+  if (typeof id !== 'string' || !id.trim()) return false;
+  const owner = safeOwner(ownerId); const all = readExperienced(); const current = new Set(normalizeIds(all[owner]));
+  if (current.has(id)) current.delete(id); else current.add(id);
+  all[owner] = [...current]; writeExperienced(all); return current.has(id);
+}
 export function recordThemeExplorerStart({ ownerId = null, mode = 'group', themeIds = [] } = {}) {
   const ids = normalizeIds(themeIds); if (!ids.length) return;
   const owner = safeOwner(ownerId); const bucket = safeBucket(mode); const history = readHistory();

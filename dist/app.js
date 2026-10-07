@@ -15,7 +15,7 @@ import { buildFacebookShareUrl, buildShareText, buildXShareUrl } from "./share-t
 import { isCardAudioEnabled, toggleCardAudio, playFlipSound } from "./card-audio.js";
 import { cardDesignForSession, soloMotifForDeck } from "./card-design.js";
 import { CREATOR_PRESET_IDS, normalizeCreatorDesign, effectiveCreatorAdult } from "./creator-metadata.js";
-import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, rankThemeRecommendations } from "./theme-explorer.js";
+import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, rankThemeRecommendations, themeExplorerBookmarks, toggleThemeExplorerBookmark, themeExplorerExperienced, toggleThemeExplorerExperienced } from "./theme-explorer.js";
 import { loadRecommendationLabels, recommendationLabel } from "./recommendation-labels.js";
 import { themeExampleForDeck } from "./theme-examples.js";
 import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
@@ -42,7 +42,7 @@ const state = {
   error: "", busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, lastAdvanceAt: 0, focusAction: null, focusSelector: null, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null, soloNoteDraft: "", soloNoteStatus: "", soloNoteError: "", soloSummaryDraft: "", soloSummaryStatus: "", soloDraftOwner: null, soloDraftRevision: 0, soloMemoOpen: false, soloMemoKey: "", soloHistoryOpen: false, soloHistory: [], soloHistoryCursor: null, soloHistoryHasMore: false, soloHistoryLoading: false, soloHistoryError: "", soloHistoryEditing: null, soloNoteDrafts: Object.create(null), soloNoteStatuses: Object.create(null), soloNoteErrors: Object.create(null), soloSummaryDrafts: Object.create(null), soloSummaryStatuses: Object.create(null), soloSummaryErrors: Object.create(null),
   selectedDeckIds: ["friends"],
   themeMode: "single", participantTab: "group",
-  filter: "all", adultConfirmed: false, includeChallenges: false, resume: null, themeExplorerView: "cards", themeExplorerQuery: "", themeExplorerShelf: "all", themeOptionsOpen: false, account: { enabled: accountConfig.enabled, authReady: false, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false,
+  filter: "all", adultConfirmed: false, includeChallenges: false, resume: null, themeExplorerView: "cards", themeExplorerQuery: "", themeExplorerShelf: "all", themeExplorerTagFilter: "all", themeOptionsOpen: false, account: { enabled: accountConfig.enabled, authReady: false, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false,
     shareOpen: false,
     shareBusy: false,
     shareRequestId: 0,
@@ -506,8 +506,9 @@ function render() {
   root.querySelector("[data-theme-explorer-search]")?.addEventListener("input", applyThemeQuery);
   root.querySelector("[data-theme-explorer-search]")?.addEventListener("compositionend", applyThemeQuery);
   root.querySelectorAll("[data-theme-category]").forEach((button) => button.addEventListener("click", () => { state.themeExplorerShelf = button.dataset.themeCategory || "all"; state.focusSelector = `[data-theme-category="${state.themeExplorerShelf}"]`; render(); }));
-  root.querySelector("[data-theme-reset]")?.addEventListener("click", () => { state.themeExplorerQuery = ""; state.themeExplorerShelf = "all"; state.focusSelector = "[data-theme-explorer-search]"; render(); });
+  root.querySelector("[data-theme-reset]")?.addEventListener("click", () => { state.themeExplorerQuery = ""; state.themeExplorerShelf = "all"; state.themeExplorerTagFilter = "all"; state.focusSelector = "[data-theme-explorer-search]"; render(); });
   root.querySelectorAll('[data-action="theme-view"]').forEach((button) => button.addEventListener("click", () => { state.themeExplorerView = button.dataset.view === "list" ? "list" : "cards"; state.focusSelector = `[data-action="theme-view"][data-view="${state.themeExplorerView}"]`; try { localStorage.setItem("mingle.theme-explorer.view.v1", state.themeExplorerView); } catch {} render(); }));
+  root.querySelector("[data-theme-tag-filter]")?.addEventListener("change", (event) => { state.themeExplorerTagFilter = event.currentTarget.value === "bookmarked" || event.currentTarget.value === "experienced" ? event.currentTarget.value : "all"; state.focusSelector = "[data-theme-tag-filter]"; render(); });
   root.querySelectorAll('[data-action="theme-shelf-scroll"]').forEach((button) => button.addEventListener("click", () => { const shelf = root.querySelector(`#${CSS.escape(button.dataset.target || "")}`); if (shelf) shelf.scrollBy({ left: Number(button.dataset.direction || 1) * Math.max(260, shelf.clientWidth * .72), behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }));
   root.querySelector("[data-mode-mixed]")?.addEventListener("change", (event) => {
     state.themeMode = event.target.checked ? "mixed" : "single";
@@ -666,7 +667,7 @@ function render() {
   const background = root.querySelectorAll(".topbar, .round-break");
   background.forEach((element) => { element.inert = Boolean(state.shareDialogOpen); });
   const pendingFocusSelector = state.focusSelector;
-  const focusTarget = pendingFocusSelector ? root.querySelector(pendingFocusSelector) : state.focusAction ? root.querySelector(`[data-action="${state.focusAction}"]`) : null;
+  const focusTarget = pendingFocusSelector ? (root.querySelector(pendingFocusSelector) || (pendingFocusSelector.includes('theme-bookmark') || pendingFocusSelector.includes('theme-experienced') ? root.querySelector('[data-theme-tag-filter]') : null)) : state.focusAction ? root.querySelector(`[data-action="${state.focusAction}"]`) : null;
   const shouldScrollToInput = Boolean(pendingFocusSelector?.includes("participant") || pendingFocusSelector?.includes("data-index"));
   state.focusSelector = null;
   state.focusAction = null;
@@ -1028,12 +1029,17 @@ function themeExplorerCard(deck, { solo = false, mixed = false, selectedMySet = 
   const subtitle = set?.description || themeExampleForDeck(deck);
   const count = set?.cardCount || (Array.isArray(deck.questions) ? deck.questions.length : 40);
   const action = set ? 'choose-myset' : 'theme-select';
+  const bookmarkId = set ? `set:${set.id}` : deck.id;
+  const bookmarked = themeExplorerBookmarks(state.account.user?.id).includes(bookmarkId);
+  const experienced = themeExplorerExperienced(state.account.user?.id).includes(bookmarkId);
   const showRecommendationNode = !set && (shelfId === 'recommended' || shelfId === 'solo-recommended' || state.themeExplorerView === 'list');
   const labelKind = showRecommendationNode ? recommendationLabel(deck.id) : '';
   const label = labelKind === 'yesterday_top' ? '昨日の人気No.1' : labelKind === 'rising' ? '人気上昇中！' : '';
   const labelTitle = labelKind === 'yesterday_top' ? '昨日のテーマ開始数で1位' : labelKind === 'rising' ? '昨日のテーマ開始数が一昨日より増加' : '';
   const imageMarkup = image ? `<span class="theme-explorer-image-wrap"><img class="theme-explorer-image" src="${esc(image)}" alt="" loading="lazy" width="320" height="213" />${showRecommendationNode ? `<span class="theme-explorer-label" data-theme-recommendation-label="${esc(deck.id)}" title="${esc(labelTitle)}">${label}</span>` : ''}</span>` : '';
-  return `<button type="button" class="theme-explorer-card ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}" data-action="${action}" data-theme-card data-theme-id="${esc(deck.id)}" ${set ? `data-set-id="${esc(set.id)}"` : ''} data-theme-key="${esc(shelfId)}:${esc(deck.id)}" aria-pressed="${selected}" aria-disabled="${locked}" ${locked ? 'disabled' : ''}>${imageMarkup}<span class="theme-explorer-card-body">${control}<strong>${esc(title)}</strong><small>${esc(subtitle)}</small><span class="theme-explorer-meta">${locked ? '🔒 登録で解放' : `${count}枚`}</span></span></button>`;
+  const bookmark = `<button type="button" class="theme-explorer-bookmark ${bookmarked ? 'is-active' : ''}" data-action="theme-bookmark" data-bookmark-id="${esc(bookmarkId)}" aria-pressed="${bookmarked}" aria-label="${bookmarked ? '保存を外す' : 'テーマを保存'}：${esc(title)}" title="${bookmarked ? '保存を外す' : 'テーマを保存'}：${esc(title)}">${actionIcon('bookmark')}</button>`;
+  const experiencedToggle = `<button type="button" class="theme-explorer-experienced ${experienced ? 'is-active' : ''}" data-action="theme-experienced" data-experienced-id="${esc(bookmarkId)}" aria-pressed="${experienced}" aria-label="${experienced ? '体験済みを外す' : '体験済みにする'}：${esc(title)}">${experienced ? '✓ 体験済み' : '体験済みにする'}</button>`;
+  return `<div class="theme-explorer-card-wrap">${bookmark}<button type="button" class="theme-explorer-card ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}" data-action="${action}" data-theme-card data-theme-id="${esc(deck.id)}" ${set ? `data-set-id="${esc(set.id)}"` : ''} data-theme-key="${esc(shelfId)}:${esc(deck.id)}" aria-pressed="${selected}" aria-disabled="${locked}" ${locked ? 'disabled' : ''}>${imageMarkup}<span class="theme-explorer-card-body">${control}<strong>${esc(title)}</strong><small>${esc(subtitle)}</small><span class="theme-explorer-meta">${locked ? '🔒 登録で解放' : `${count}枚`}</span></span></button>${experiencedToggle}</div>`;
 }
 function themeExplorerShelf(id, title, decksForShelf, options = {}) {
   const cards = decksForShelf.map((deck) => themeExplorerCard(deck, { ...options, shelfId: id })).join('');
@@ -1046,11 +1052,14 @@ function themeExplorerUnique(decksForResult) {
   return [...new Map(decksForResult.map((deck) => [deck.id, deck])).values()];
 }
 function themeExplorerEmpty() {
-  return '<p class="theme-explorer-empty" role="status">見つかりませんでした。<button type="button" class="secondary-button" data-theme-reset>検索・カテゴリを解除</button></p>';
+  return '<p class="theme-explorer-empty" role="status">見つかりませんでした。<button type="button" class="secondary-button" data-theme-reset>絞り込みを解除</button></p>';
+}
+function themeTagMatches(id, tagFilter, bookmarkedIds, experiencedIds) {
+  return tagFilter === 'bookmarked' ? bookmarkedIds.has(id) : tagFilter === 'experienced' ? experiencedIds.has(id) : true;
 }
 function themeExplorerToolbar({ solo = false, filters = '', mix = false } = {}) {
   const mixControl = mix ? `<label class="mode-switch compact-mode-switch"><input type="checkbox" data-mode-mixed ${state.themeMode === 'mixed' ? 'checked' : ''}/> <span>テーマミックス</span><small>2〜3テーマ</small></label>` : '';
-  return `<div class="theme-explorer-toolbar-row">${mixControl}<div class="theme-explorer-toolbar"><label class="theme-explorer-search"><span class="sr-only">テーマを検索</span><input type="search" data-theme-explorer-search value="${esc(state.themeExplorerQuery)}" placeholder="テーマを検索" autocomplete="off" /></label><div class="theme-explorer-view" role="group" aria-label="表示形式"><button type="button" class="icon-button ${state.themeExplorerView === 'cards' ? 'is-active' : ''}" data-action="theme-view" data-view="cards" aria-pressed="${state.themeExplorerView === 'cards'}" title="カード表示">${actionIcon('grid')}</button><button type="button" class="icon-button ${state.themeExplorerView === 'list' ? 'is-active' : ''}" data-action="theme-view" data-view="list" aria-pressed="${state.themeExplorerView === 'list'}" title="リスト表示">${actionIcon('list')}</button></div></div></div>${filters ? `<div class="filter-chips theme-explorer-filters" role="toolbar" aria-label="テーマカテゴリ">${filters}</div>` : ''}`;
+  return `<div class="theme-explorer-toolbar-row">${mixControl}<div class="theme-explorer-toolbar"><label class="theme-explorer-search"><span class="sr-only">テーマを検索</span><input type="search" data-theme-explorer-search value="${esc(state.themeExplorerQuery)}" placeholder="テーマを検索" autocomplete="off" /></label><select class="theme-explorer-tag-filter" data-theme-tag-filter aria-label="テーマのタグ"><option value="all" ${state.themeExplorerTagFilter === 'all' ? 'selected' : ''}>すべて</option><option value="bookmarked" ${state.themeExplorerTagFilter === 'bookmarked' ? 'selected' : ''}>保存済み</option><option value="experienced" ${state.themeExplorerTagFilter === 'experienced' ? 'selected' : ''}>体験済み</option></select><div class="theme-explorer-view" role="group" aria-label="表示形式"><button type="button" class="icon-button ${state.themeExplorerView === 'cards' ? 'is-active' : ''}" data-action="theme-view" data-view="cards" aria-pressed="${state.themeExplorerView === 'cards'}" title="カード表示">${actionIcon('grid')}</button><button type="button" class="icon-button ${state.themeExplorerView === 'list' ? 'is-active' : ''}" data-action="theme-view" data-view="list" aria-pressed="${state.themeExplorerView === 'list'}" title="リスト表示">${actionIcon('list')}</button></div></div></div>${filters ? `<div class="filter-chips theme-explorer-filters" role="toolbar" aria-label="テーマカテゴリ">${filters}</div>` : ''}`;
 }
 function themeExplorerSelectedBar({ solo = false, selected, selectedMySet = null, mixed = false, showSettings = false, optionsOpen = state.themeOptionsOpen, canStart = true, participantRule = 'group' } = {}) {
   const mixedLabel = state.selectedDeckIds.map((id) => [...decks, ...soloDecks].find((deck) => deck.id === id)?.title).filter(Boolean).join('・');
@@ -1071,7 +1080,10 @@ function soloDecksView() {
   const selected = state.selectedMySetId ? null : (soloDecks.find((deck) => deck.id === state.selectedDeckId) || soloDecks[0]);
   const query = state.themeExplorerQuery.trim().toLocaleLowerCase('ja-JP');
   const matches = (deck) => !query || themeExplorerText(deck, Object.fromEntries(soloCategories.map((c) => [c.id, c.label]))).includes(query);
-  const all = soloDecks.filter(matches);
+  const bookmarkedIds = new Set(themeExplorerBookmarks(state.account.user?.id));
+  const experiencedIds = new Set(themeExplorerExperienced(state.account.user?.id));
+  const tagMatches = (deck) => themeTagMatches(deck.__mySet ? `set:${deck.__mySet.id}` : deck.id, state.themeExplorerTagFilter, bookmarkedIds, experiencedIds);
+  const all = soloDecks.filter(matches).filter(tagMatches);
   const historyIds = themeExplorerHistory(state.account.user?.id, 'solo').flatMap((row) => row.themeIds || []);
   const history = historyIds.map((id) => soloDecks.find((deck) => deck.id === id)).filter(Boolean).filter(matches);
   const historyRows = history.map((deck) => ({ themeIds: [deck.id] }));
@@ -1082,7 +1094,7 @@ function soloDecksView() {
   const sets = allowedSets.filter((set) => !query || `${set.name || 'マイセット'} ${set.description || ''}`.toLocaleLowerCase('ja-JP').includes(query));
   const selectedMySet = allowedSets.find((set) => set.id === state.selectedMySetId) || null;
   if (state.selectedMySetId && !selectedMySet) state.selectedMySetId = null;
-  const mySetEntries = sets.map((set) => ({ id: `set:${set.id}`, title: set.name || 'マイセット', __mySet: set }));
+  const mySetEntries = sets.map((set) => ({ id: `set:${set.id}`, title: set.name || 'マイセット', __mySet: set })).filter(tagMatches);
   const historyEntries = historyIds.map((id) => {
     const deck = history.find((item) => item.id === id);
     if (deck) return deck;
@@ -1103,7 +1115,7 @@ function soloDecksView() {
     ? mySetEntries.filter((entry) => state.themeExplorerShelf === 'all' || entry.__mySet?.category === state.themeExplorerShelf)
     : [];
   const soloFlat = themeExplorerUnique([...categoryDecks, ...visibleMySetEntries]);
-  const soloNeedsFlat = state.themeExplorerView === 'list' || query.length > 0 || state.themeExplorerShelf !== 'all';
+  const soloNeedsFlat = state.themeExplorerView === 'list' || query.length > 0 || state.themeExplorerShelf !== 'all' || state.themeExplorerTagFilter !== 'all';
   const soloBrowse = soloNeedsFlat
     ? (soloFlat.length ? themeExplorerShelf('solo-filtered', 'テーマ一覧', soloFlat, { solo: true, selectedMySet }) : themeExplorerEmpty())
     : `${themeExplorerShelf('solo-recommended', 'おすすめ', recommended, { solo: true, selectedMySet })}${historyEntries.length ? themeExplorerShelf('solo-history', '最近遊んだテーマ', historyEntries, { solo: true, selectedMySet }) : ''}${mySetEntries.length ? themeExplorerShelf('solo-mysets', 'マイセット', mySetEntries, { solo: true, selectedMySet }) : ''}${soloCategoryShelves}`;
@@ -1145,10 +1157,13 @@ function decksView() {
   }
   const categoryLabels = Object.fromEntries(Object.entries(groupLabels));
   const matches = (deck) => !query || themeExplorerText(deck, categoryLabels).includes(query);
-  const regular = decks.filter((deck) => !deck.adultOnly && matches(deck) && canSeeDeck(deck) && participantRuleVisibleForParticipants(participantRuleForDeck(deck)));
-  const adult = decks.filter((deck) => (deck.adultOnly || deck.r18Available) && matches(deck) && ageConfirmed() && r18DisplayVisible() && canSeeDeck(deck) && participantRuleVisibleForParticipants(participantRuleForDeck(deck)));
+  const bookmarkedIds = new Set(themeExplorerBookmarks(state.account.user?.id));
+  const experiencedIds = new Set(themeExplorerExperienced(state.account.user?.id));
+  const tagMatches = (deck) => themeTagMatches(deck.__mySet ? `set:${deck.__mySet.id}` : deck.id, state.themeExplorerTagFilter, bookmarkedIds, experiencedIds);
+  const regular = decks.filter((deck) => !deck.adultOnly && matches(deck) && tagMatches(deck) && canSeeDeck(deck) && participantRuleVisibleForParticipants(participantRuleForDeck(deck)));
+  const adult = decks.filter((deck) => (deck.adultOnly || deck.r18Available) && matches(deck) && tagMatches(deck) && ageConfirmed() && r18DisplayVisible() && canSeeDeck(deck) && participantRuleVisibleForParticipants(participantRuleForDeck(deck)));
   const historyIds = themeExplorerHistory(state.account.user?.id, 'group').flatMap((row) => row.themeIds || []);
-  const history = historyIds.map((id) => decks.find((deck) => deck.id === id)).filter(Boolean).filter(matches).filter((deck) => canSeeDeck(deck)).filter((deck) => participantRuleVisibleForParticipants(participantRuleForDeck(deck))).filter((deck) => !mixed || !deck.adultOnly);
+  const history = historyIds.map((id) => decks.find((deck) => deck.id === id)).filter(Boolean).filter(matches).filter(tagMatches).filter((deck) => canSeeDeck(deck)).filter((deck) => participantRuleVisibleForParticipants(participantRuleForDeck(deck))).filter((deck) => !mixed || !deck.adultOnly);
   const historyRows = history.map((deck) => ({ themeIds: [deck.id] }));
   const filters = Object.entries(groupLabels).filter(([id]) => id !== 'adult' || (!mixed && ageConfirmed() && r18DisplayVisible())).map(([id, label]) => `<button type="button" class="filter-chip ${((mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf) === id) ? 'is-active' : ''}" data-theme-category="${esc(id)}">${esc(label)}</button>`).join('');
   const categoryId = mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf;
@@ -1164,13 +1179,13 @@ function decksView() {
     categoryOf: (deck) => themeGroups[deck?.id] || [],
   });
   const groupCategoryShelves = Object.entries(groupLabels).filter(([id]) => !['all', 'adult'].includes(id)).map(([id, label]) => themeExplorerShelf(`group-category-${id}`, label, regular.filter((deck) => themeGroups[deck.id]?.includes(id)), { mixed })).join('');
-  const mySetEntries = mySets.map((set) => ({ id: `set:${set.id}`, title: set.name || 'マイセット', __mySet: set }));
+  const mySetEntries = mySets.map((set) => ({ id: `set:${set.id}`, title: set.name || 'マイセット', __mySet: set })).filter(tagMatches);
   const historyEntries = historyIds.map((id) => {
     const deck = history.find((item) => item.id === id);
     if (deck) return deck;
     const set = mySets.find((item) => item.id === id);
     return set ? { id: `set:${set.id}`, title: set.name || 'マイセット', __mySet: set } : null;
-  }).filter(Boolean);
+  }).filter(Boolean).filter(tagMatches);
   const consent = !mixed && (canOfferR18(selected) || selected?.adultOnly); const consentCopy = selected?.r18Available ? 'R18を含めていい' : '参加者全員が18歳以上で、R18の話題に同意しています';
   const mySetConsent = selectedMySet?.hasR18 ? `<label class="consent selected-consent"><input type="checkbox" data-adult="my-set" ${state.adultConfirmed ? 'checked' : ''} ${!isRegisteredUser() ? 'disabled' : ''}/><span><strong>参加者全員が18歳以上で、R18の話題に同意しています</strong><small>このマイセットにはR18の質問が含まれています。</small></span></label>` : '';
   const allRegular = decks.filter((deck) => !deck.adultOnly && canSeeDeck(deck));
@@ -1191,7 +1206,7 @@ function decksView() {
     ? mySetEntries.filter((entry) => categoryId === 'all' || (categoryId === 'adult' ? entry.__mySet?.hasR18 === true : entry.__mySet?.category === categoryId))
     : [];
   const groupFlat = themeExplorerUnique([...(categoryId === 'all' ? listPool : categoryDecks), ...visibleMySetEntries]);
-  const groupNeedsFlat = state.themeExplorerView === 'list' || query.length > 0 || categoryId !== 'all';
+  const groupNeedsFlat = state.themeExplorerView === 'list' || query.length > 0 || categoryId !== 'all' || state.themeExplorerTagFilter !== 'all';
   const groupBrowse = groupNeedsFlat
     ? (groupFlat.length ? themeExplorerShelf('group-filtered', categoryId === 'all' ? 'テーマ一覧' : categoryId === 'adult' ? 'R18のテーマ' : 'カテゴリ別', groupFlat, { mixed, selectedMySet }) : themeExplorerEmpty())
     : `${themeExplorerShelf('recommended', 'おすすめ', recommended.filter(matches), { mixed, selectedMySet })}${historyEntries.length ? themeExplorerShelf('history', '最近遊んだテーマ', historyEntries, { mixed, selectedMySet }) : ''}${mySetEntries.length ? themeExplorerShelf('group-mysets', 'マイセット', mySetEntries, { mixed, selectedMySet }) : ''}${groupCategoryShelves}${adultShelf}`;
@@ -1880,6 +1895,8 @@ function restoreGroupHomeState() {
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
   if (action === "audio-toggle") { event.stopPropagation(); state.focusAction = "audio-toggle"; toggleCardAudio(); render(); return; }
+  if (action === "theme-bookmark") { event.stopPropagation(); const id = event.currentTarget.dataset.bookmarkId; toggleThemeExplorerBookmark(id, state.account.user?.id); state.focusSelector = `[data-action="theme-bookmark"][data-bookmark-id="${CSS.escape(id)}"]`; render(); return; }
+  if (action === "theme-experienced") { event.stopPropagation(); const id = event.currentTarget.dataset.experiencedId; toggleThemeExplorerExperienced(id, state.account.user?.id); state.focusSelector = `[data-action="theme-experienced"][data-experienced-id="${CSS.escape(id)}"]`; render(); return; }
   if (state.busy && action !== "continue" && action !== "home") return;
   state.focusAction = action;
   if (action === "theme-select") {

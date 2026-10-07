@@ -1,17 +1,49 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { THEME_EXPLORER_IMAGES, themeExplorerImage, recordThemeExplorerStart, themeExplorerHistory, rankThemeRecommendations } from '../dist/theme-explorer.js';
+import { THEME_EXPLORER_IMAGES, themeExplorerImage, recordThemeExplorerStart, themeExplorerHistory, rankThemeRecommendations, themeExplorerBookmarks, toggleThemeExplorerBookmark, themeExplorerExperienced, toggleThemeExplorerExperienced } from '../dist/theme-explorer.js';
 import { THEME_EXAMPLE_QUESTION_IDS, themeExampleForDeck } from '../dist/theme-examples.js';
 import { decks } from '../dist/data/decks.js';
 import { soloDecks } from '../dist/data/solo-decks.js';
 import { GUEST_THEME_IDS } from '../dist/theme-access.js';
 
 let stored = null;
+const auxiliaryStorage = new Map();
 globalThis.localStorage = {
-  getItem() { return stored; },
-  setItem(_key, value) { stored = value; },
+  getItem(key) { return key === 'mingle.theme-explorer.history.v1' ? stored : auxiliaryStorage.get(key) ?? null; },
+  setItem(key, value) { if (key === 'mingle.theme-explorer.history.v1') stored = value; else auxiliaryStorage.set(key, value); },
 };
+
+// Bookmark and experienced tags are local-only, owner-scoped, reversible, and
+// must stay isolated across guest and account identities.
+assert.deepEqual(themeExplorerBookmarks(), []);
+assert.equal(toggleThemeExplorerBookmark('friends'), true);
+assert.deepEqual(themeExplorerBookmarks(), ['friends']);
+assert.deepEqual(themeExplorerBookmarks('user-a'), []);
+assert.equal(toggleThemeExplorerBookmark('friends', 'user-a'), true);
+assert.deepEqual(themeExplorerBookmarks('user-a'), ['friends']);
+assert.deepEqual(themeExplorerBookmarks('user-b'), []);
+assert.equal(toggleThemeExplorerBookmark('friends'), false);
+assert.deepEqual(themeExplorerBookmarks(), []);
+assert.equal(toggleThemeExplorerBookmark('friends', 'user-a'), false);
+assert.deepEqual(themeExplorerBookmarks('user-a'), []);
+assert.equal(toggleThemeExplorerExperienced('date', 'user-a'), true);
+assert.deepEqual(themeExplorerExperienced('user-a'), ['date']);
+assert.equal(toggleThemeExplorerExperienced('date', 'user-a'), false);
+assert.deepEqual(themeExplorerExperienced('user-a'), []);
+// Reload semantics: helpers read storage on every access.
+assert.equal(toggleThemeExplorerBookmark('friends', 'user-b'), true);
+assert.deepEqual(themeExplorerBookmarks('user-b'), ['friends']);
+assert.deepEqual(themeExplorerExperienced('user-b'), []);
+auxiliaryStorage.set('mingle.theme-explorer.bookmarks.v1', '{bad json');
+auxiliaryStorage.set('mingle.theme-explorer.experienced.v1', JSON.stringify(['bad']));
+assert.deepEqual(themeExplorerBookmarks('user-b'), []);
+assert.deepEqual(themeExplorerExperienced('user-b'), []);
+const previousGetItem = globalThis.localStorage.getItem;
+globalThis.localStorage.getItem = () => { throw new Error('blocked read'); };
+assert.doesNotThrow(() => themeExplorerBookmarks('user-a'));
+assert.doesNotThrow(() => themeExplorerExperienced('user-a'));
+globalThis.localStorage.getItem = previousGetItem;
 
 stored = JSON.stringify({ alice: { group: [{ themeIds: ['A', 'B'] }, null, 'bad'], solo: null }, broken: 'x', primitive: 1 });
 assert.deepEqual(themeExplorerHistory('alice', 'group').map((row) => row.themeIds[0]), ['A', 'B']);
