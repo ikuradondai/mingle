@@ -441,6 +441,15 @@ function render() {
         }
       }
       state.participants[index] = event.target.value;
+      if (event.currentTarget.form?.dataset.form === "participants") {
+        const submit = event.currentTarget.form.querySelector("button[type=submit]");
+        const validationError = homeParticipantValidationError(state.participants);
+        if (submit) submit.disabled = Boolean(validationError);
+        const hadNameError = state.error === "呼び名を入力してください。" || state.error === "呼び名に使用できない文字が含まれています。" || state.error.startsWith("呼び名は");
+        if (!validationError && hadNameError) state.error = "";
+        const error = event.currentTarget.form.querySelector(".form-error");
+        if (error && !validationError && !state.error) error.textContent = "";
+      }
     });
     input.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" || event.isComposing || event.nativeEvent?.isComposing) return;
@@ -703,8 +712,21 @@ function participantsView() {
   const resumeCard = state.resume && canAccessSessionContent(state.resume, state.account, { activeVenue: isActiveVenueSession(state.resume), venueDisplay: state.venue?.displayR18 === true }) ? `<aside class="resume-card" aria-label="前回の続き"><strong>前回の続き</strong><span>${esc(state.resume.mixed ? "テーマミックス" : state.resume.customSet ? "マイセット" : decks.find((deck) => deck.id === state.resume.deckId)?.title || "会話カード")} · ${state.resume.cursor}/${state.resume.questions?.length || 40}</span><div><button type="button" class="primary-button" data-action="resume">続きから</button><button type="button" class="text-button muted" data-action="discard-resume">削除</button></div></aside>` : "";
   const modeDescription = `<p class="home-mode-description" aria-live="polite">${soloActive ? "自分をもっとよく知るための質問が出てくるよ" : "会話のきっかけになる質問がでてくるよ"}</p>`;
   const countStepper = `<div class="participant-count-stepper" role="group" aria-label="参加人数"><span class="participant-count-label">参加人数</span><button type="button" class="participant-count-button" data-action="remove-person" aria-label="人数を減らす" ${participantCount <= 1 ? "disabled" : ""}>−</button><output aria-live="polite">${participantCount}人</output><button type="button" class="participant-count-button" data-action="add-person" aria-label="人数を増やす" ${atLimit ? "disabled" : ""}>＋</button></div>`;
-  const groupForm = `<form class="panel form-panel" data-form="participants"><div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="呼び名" aria-label="${index + 1}人目の呼び名" autocomplete="off" enterkeyhint="${index === state.participants.length - 1 ? "done" : "next"}" /></label>`).join("")}</div>${countStepper}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button">質問テーマを選ぶ</button></form>`;
+  const groupForm = `<form class="panel form-panel" data-form="participants"><div class="participant-list">${state.participants.map((name, index) => `<label class="name-field"><span class="name-avatar participant-color-${index}">${participantAvatar(name)}</span><input name="participant" data-index="${index}" value="${esc(name)}" maxlength="80" placeholder="呼び名" aria-label="${index + 1}人目の呼び名" autocomplete="off" enterkeyhint="${index === state.participants.length - 1 ? "done" : "next"}" /></label>`).join("")}</div>${countStepper}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${participantNamesReadyForHome(state.participants) ? "" : "disabled"}>話すテーマを選ぼう！</button></form>`;
   return frame(`<div class="home-screen">${accountView()}<div class="masthead-slot"><img class="masthead-image" src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards。やっぱり人って面白い。" width="1493" height="1054" /><h1 class="visually-hidden" tabindex="-1" data-focus>Mingle.Cards</h1></div>${resumeCard}${modeDescription}${groupForm}<img class="home-illustration" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たちのイラスト" width="1611" height="976" loading="eager" />${renderAd("top")}<footer class="home-footer"><p><span>α版</span><span>開発：株式会社ErudAite</span></p><nav aria-label="ご案内"><a href="/terms.html">利用規約</a><a href="/privacy.html">プライバシーポリシー</a><a href="/personal-information.html">個人情報保護法に基づく公表事項</a><a class="venue-footer-link" href="https://partnerplan.mingle.cards">店舗で使う</a></nav></footer></div>`, "Mingle.Cards", true);
+}
+function homeParticipantValidationError(names) {
+  if (!Array.isArray(names) || names.length < 1 || names.length > MAX_PARTICIPANTS) return "呼び名を確認してください。";
+  for (const name of names) {
+    if (typeof name !== "string" || !name.trim()) return "呼び名を入力してください。";
+    const trimmed = name.trim();
+    if (Array.from(trimmed).length > MAX_NAME_LENGTH) return `呼び名は${MAX_NAME_LENGTH}文字以内で入力してください。`;
+    if (/[\u0000-\u001f\u007f]/u.test(trimmed)) return "呼び名に使用できない文字が含まれています。";
+  }
+  return "";
+}
+function participantNamesReadyForHome(names) {
+  return !homeParticipantValidationError(names);
 }
 function avatarImageSrc(value) {
   return typeof value === "string" && /^(?:data:image\/(?:png|jpe?g|webp);base64,|https?:\/\/)/i.test(value) && value.length <= 360000 ? value : "";
@@ -1653,6 +1675,14 @@ async function startSharedSet() {
   }
 }
 function submitParticipants() {
+  const validationError = homeParticipantValidationError(state.participants);
+  if (validationError) {
+    state.error = validationError;
+    const invalidIndex = state.participants.findIndex((name) => typeof name !== "string" || !name.trim() || Array.from(name.trim()).length > MAX_NAME_LENGTH || /[\u0000-\u001f\u007f]/u.test(name.trim()));
+    state.focusSelector = `input[data-index="${Math.max(0, invalidIndex)}"]`;
+    render();
+    return;
+  }
   try {
     if (state.participants.length === 1) {
       const name = String(state.participants[0] || "").trim() || "自分";
