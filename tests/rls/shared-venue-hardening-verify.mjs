@@ -31,6 +31,7 @@ create or replace function public.revoke_shared_set(p_set_id uuid) returns boole
 insert into public.my_sets values ('${setId}','${u1}','theme',array['date-01','date-02','date-03','date-04','date-05','date-06'],true,'group','shuffle',null);
 insert into public.shared_sets(owner_id,set_id,token,token_hash,name,card_count,adult_only,cards) values ('${u1}','${setId}',null,'legacy','legacy',6,false,to_jsonb(repeat('x',70000)));`);
 // Phase A leaves old authenticated table writes available for cutover compatibility.
+await db.exec(`grant all on public.shared_sets,public.venue_sets to authenticated;`);
 await db.exec(migration);
 await db.exec(`grant all on public.shared_sets,public.venue_sets,public.venues,public.my_sets,public.custom_cards to service_role; grant select,insert,update,delete on public.shared_sets,public.venue_sets to authenticated; grant execute on function public.create_shared_set_server(uuid,uuid,text,text,text,text,jsonb,boolean,text,jsonb,boolean) to service_role; grant execute on function public.create_venue_set_server(uuid,uuid,text,jsonb,boolean,jsonb) to service_role;`);
 await db.exec(`insert into public.venues(id,owner_id,name,adult_enabled) values ('${venueId}','${u1}','compat venue',false),('00000000-0000-4000-8000-000000000011','${u2}','other venue',false);`);
@@ -54,6 +55,8 @@ const validNewCalls = [
   `select public.set_venue_set_active_server('${u1}','00000000-0000-4000-8000-000000000099',true)`
 ];
 for (const role of ['anon', 'authenticated']) for (const [index, call] of validNewCalls.entries()) await expectDenied(role, call, `Phase A ${role} new RPC ${index}`);
+await expectDenied('authenticated', 'truncate public.shared_sets', 'Phase A shared TRUNCATE');
+await expectDenied('authenticated', 'truncate public.venue_sets', 'Phase A venue TRUNCATE');
 await db.exec(`set role authenticated; select public.create_shared_set('${setId}','${'K'.repeat(43)}','${'5'.repeat(64)}','legacy-compatible',6,false,'${cards}'::jsonb,false); reset role;`);
 await db.exec(`set role authenticated; insert into public.shared_sets(owner_id,set_id,token_hash,name,card_count,adult_only,cards) values ('${u1}',gen_random_uuid(),'phase-a-direct','phase-a',6,false,'${cards}'::jsonb); insert into public.venue_sets(venue_id,name,cards,card_count,adult_only) values ('${venueId}','phase-a-direct','${cards}'::jsonb,6,false); reset role;`);
 await db.exec(`set role service_role; select public.create_shared_set_server('${u1}','${setId}','${'A'.repeat(43)}','${'a'.repeat(64)}','iv.tag.payload','theme', '${cards}'::jsonb, true, 'shuffle', null, true);`);
@@ -92,6 +95,8 @@ await expectDenied('authenticated', `delete from public.shared_sets where token_
 await expectDenied('authenticated', `insert into public.venue_sets(venue_id,name,cards,card_count) values ('${venueId}','x','${cards}'::jsonb,6)`, 'Phase B venue INSERT');
 await expectDenied('authenticated', `update public.venue_sets set name='changed' where venue_id='${venueId}'`, 'Phase B venue UPDATE');
 await expectDenied('authenticated', `delete from public.venue_sets where venue_id='${venueId}'`, 'Phase B venue DELETE');
+await expectDenied('authenticated', 'truncate public.shared_sets', 'Phase B shared TRUNCATE');
+await expectDenied('authenticated', 'truncate public.venue_sets', 'Phase B venue TRUNCATE');
 await expectDenied('anon', `select public.create_shared_set('${setId}','${'J'.repeat(43)}','${'4'.repeat(64)}','x',6,false,'${cards}'::jsonb,false)`, 'Phase B old RPC');
 await expectDenied('authenticated', `select public.create_shared_set('${setId}','${'L'.repeat(43)}','${'6'.repeat(64)}','x',6,false,'${cards}'::jsonb,false)`, 'Phase B old RPC authenticated');
 await expectDenied('authenticated', `select public.revoke_shared_set('${setId}')`, 'Phase B old revoke RPC authenticated');

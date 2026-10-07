@@ -1,7 +1,7 @@
 -- Phase B: deploy only after the application is using the phase-A RPCs.
 -- This closes the legacy table/RPC write paths atomically.
 begin;
-revoke insert, update, delete on public.shared_sets, public.venue_sets from public, anon, authenticated;
+revoke insert, update, delete, truncate, references, trigger on public.shared_sets, public.venue_sets from public, anon, authenticated;
 do $$ declare fn record; begin
   for fn in select n.nspname, p.proname, pg_get_function_identity_arguments(p.oid) args
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace

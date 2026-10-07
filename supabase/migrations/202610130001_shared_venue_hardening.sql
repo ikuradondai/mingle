@@ -5,6 +5,10 @@
 -- shape, byte/card limits, and the derived adult flag atomically.
 begin;
 
+-- Legacy cutover keeps only the old row-write verbs until Phase B. These
+-- administrative table privileges are never part of the application path.
+revoke truncate, references, trigger on public.shared_sets, public.venue_sets from public, anon, authenticated;
+
 create or replace function public.snapshot_cards_valid(p_cards jsonb, p_card_count integer)
 returns boolean
 language sql immutable security definer
