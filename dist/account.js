@@ -46,6 +46,15 @@ async function groupRequest(path, options = {}) {
   let data = null; try { data = await response.json(); } catch {}
   if (!response.ok) { const error = new Error(data?.error || 'group_request_failed'); error.status = response.status; throw error; } return data || {};
 }
+export async function businessRequest(path, options = {}) {
+  const token = await sessionToken(); if (!token) throw authError();
+  const headers = { ...(options.body === undefined ? {} : { 'content-type': 'application/json' }), authorization: `Bearer ${token}`, ...(options.headers || {}) };
+  const bodyValue = path.endsWith('/members/import') && Array.isArray(options.body) ? { rows: options.body } : options.body;
+  const response = await fetcher(`/api/business${path}`, { ...options, credentials: 'same-origin', headers, body: bodyValue === undefined ? undefined : JSON.stringify(bodyValue) });
+  let data = null; try { data = await response.json(); } catch {}
+  if (!response.ok) { const error = new Error(data?.error || 'business_request_failed'); error.status = response.status; error.code = data?.error || ''; throw error; }
+  return data || {};
+}
 function authClient() { if (!supabase) throw authError('account_unavailable', 503); return supabase.auth; }
 export const accountApi = {
   dailyRequest,

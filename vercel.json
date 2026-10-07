@@ -22,6 +22,11 @@
       "has": [{ "type": "host", "value": "partnerplan.mingle.cards" }],
       "dest": "/partnerplan/index.html"
     },
+    {
+      "src": "/",
+      "has": [{ "type": "host", "value": "business.mingle.cards" }],
+      "dest": "/business.html"
+    },
     { "src": "/admin/?", "dest": "/admin.html" },
     { "handle": "filesystem" }
   ]

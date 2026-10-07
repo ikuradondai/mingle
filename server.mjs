@@ -13,6 +13,7 @@ import marketplaceHandler from './api/marketplace.js';
 import dailyHandler from './api/daily.js';
 import lineWebhookHandler from './api/line/webhook.js';
 import dailyCronHandler from './api/daily/cron.js';
+import businessHandler from './api/business.js';
 
 const root = normalize(fileURLToPath(new URL('./dist/', import.meta.url))).replace(/[\\/]+$/, '');
 const port = Number(process.env.PORT || 5180);
@@ -37,6 +38,7 @@ const server = createServer((request, response) => {
   if (pathname === '/api/track') return trackHandler(request, response);
   if (pathname === '/api/feedback') return feedbackHandler(request, response);
   if (pathname === '/api/account' || pathname.startsWith('/api/account/')) return accountHandler(request, response);
+  if (pathname === '/api/business' || pathname.startsWith('/api/business/')) return businessHandler(request, response);
   if (pathname === '/api/venue' || pathname.startsWith('/api/venue/')) return venueHandler(request, response);
   if (pathname === '/api/group' || pathname.startsWith('/api/group/')) return groupHandler(request, response);
   if (pathname.startsWith('/api/share/')) return shareHandler(request, response);
