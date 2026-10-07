@@ -136,22 +136,53 @@ export function createMixedSession({ participants, decks, participantRule = 'gro
   const ids = decks.map((deck) => deck?.id);
   if (new Set(ids).size !== ids.length || decks.some((deck) => !deck || deck.adultOnly || !Array.isArray(deck.questions) || deck.questions.length !== 40 || deck.questions.some((question) => question.r18 === true))) throw new Error('ミックスできないテーマです');
   const pools = decks.map((deck) => shuffle(deck.questions, random).map((question) => ({ ...question, sourceDeckId: deck.id })));
+  const usedIds = new Set();
+  const usedTextKeys = new Set();
+  const textKey = (card) => String(card?.text || '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
+  const selectUnique = (quotas) => {
+    const selected = [];
+    const localIds = new Set(usedIds);
+    const localTextKeys = new Set(usedTextKeys);
+    for (let poolIndex = 0; poolIndex < pools.length; poolIndex += 1) {
+      let picked = 0;
+      for (let cardIndex = 0; cardIndex < pools[poolIndex].length && picked < quotas[poolIndex]; cardIndex += 1) {
+        const card = pools[poolIndex][cardIndex];
+        const key = textKey(card);
+        if (localIds.has(card.id) || localTextKeys.has(key)) continue;
+        localIds.add(card.id);
+        localTextKeys.add(key);
+        selected.push({ poolIndex, cardIndex, card });
+        picked += 1;
+      }
+      if (picked < quotas[poolIndex]) throw new Error('ミックス質問が不正です');
+    }
+    for (const item of [...selected].sort((a, b) => a.poolIndex - b.poolIndex || b.cardIndex - a.cardIndex)) pools[item.poolIndex].splice(item.cardIndex, 1);
+    for (const item of selected) {
+      usedIds.add(item.card.id);
+      usedTextKeys.add(textKey(item.card));
+    }
+    return selected.map((item) => item.card);
+  };
   const questions = [];
   for (let round = 0; round < 6; round += 1) {
-    const roundCards = [];
     const count = decks.length === 2 ? 3 : 2;
-    pools.forEach((pool) => roundCards.push(...pool.splice(0, count)));
+    const roundCards = selectUnique(pools.map(() => count));
     questions.push(...shuffle(roundCards, random));
   }
   const tail = [];
   const tailTaken = pools.map(() => 0);
   while (questions.length + tail.length < 40) {
-    const available = pools.map((pool, index) => ({ pool, index })).filter(({ pool }) => pool.length);
+    const available = pools.map((pool, index) => ({ pool, index })).filter(({ pool }) => pool.some((card) => !usedIds.has(card.id) && !usedTextKeys.has(textKey(card))));
     if (!available.length) break;
     const minimum = Math.min(...available.map(({ index }) => tailTaken[index]));
     const candidates = available.filter(({ index }) => tailTaken[index] === minimum);
+    if (!candidates.length) throw new Error('ミックス質問が不正です');
     const selected = candidates[Math.floor(random() * candidates.length)];
-    tail.push(selected.pool.shift());
+    const cardIndex = selected.pool.findIndex((card) => !usedIds.has(card.id) && !usedTextKeys.has(textKey(card)));
+    const [card] = selected.pool.splice(cardIndex, 1);
+    tail.push(card);
+    usedIds.add(card.id);
+    usedTextKeys.add(textKey(card));
     tailTaken[selected.index] += 1;
   }
   questions.push(...shuffle(tail, random));

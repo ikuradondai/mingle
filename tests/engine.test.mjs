@@ -41,6 +41,114 @@ test('contains complete decks with unique question ids', () => {
   assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 1600 + challenges.length);
 });
 
+function normalizedQuestionText(card) {
+  return String(card?.text || '').normalize('NFKC').replace(/\s+/gu, ' ').trim();
+}
+
+function assertMixedQuestionUniqueness(session) {
+  const ids = new Set(session.questions.map((card) => card.id));
+  const texts = new Set(session.questions.map(normalizedQuestionText));
+  assert.equal(ids.size, session.questions.length);
+  assert.equal(texts.size, session.questions.length);
+}
+
+test('mixed sessions exclude same-text questions across selected themes', () => {
+  const dateOmiai = createMixedSession({
+    participants: names,
+    decks: [deckById('date'), deckById('omiai')],
+    random: seeded(4),
+  });
+  const friendsFamily = createMixedSession({
+    participants: names,
+    decks: [deckById('friends'), deckById('parent-50plus')],
+    random: seeded(1),
+  });
+  assertMixedQuestionUniqueness(dateOmiai);
+  assertMixedQuestionUniqueness(friendsFamily);
+  assert.equal(dateOmiai.questions.filter((card) => card.sourceDeckId === 'date').length, 20);
+  assert.equal(dateOmiai.questions.filter((card) => card.sourceDeckId === 'omiai').length, 20);
+});
+
+test('three-theme mixed quotas remain balanced while excluding normalized duplicates', () => {
+  const value = createMixedSession({
+    participants: names,
+    decks: [deckById('date'), deckById('omiai'), deckById('business-meetup')],
+    random: seeded(4),
+  });
+  assertMixedQuestionUniqueness(value);
+  for (const id of ['date', 'omiai', 'business-meetup']) {
+    const count = value.questions.filter((card) => card.sourceDeckId === id).length;
+    assert.ok(count >= 12 && count <= 14, `${id} quota ${count}`);
+  }
+});
+
+test('mixed same-text exhaustion fails instead of filling with a duplicate', () => {
+  const make = (id) => ({ id, adultOnly: false, questions: Array.from({ length: 40 }, (_, index) => ({ id: `${id}-${index}`, text: '同じ本文' })) });
+  assert.throws(
+    () => createMixedSession({ participants: names, decks: [make('a'), make('b')], random: seeded(1) }),
+    /ミックス質問が不正です/,
+  );
+});
+
+test('mixed treats NFKC and whitespace variants as the same text key', () => {
+  const make = (id, firstText) => ({
+    id,
+    adultOnly: false,
+    questions: Array.from({ length: 40 }, (_, index) => ({
+      id: `${id}-${index}`,
+      text: index === 0 ? firstText : `${id} 質問 ${index}`,
+    })),
+  });
+  const value = createMixedSession({
+    participants: names,
+    decks: [make('a', 'Ａ　Ｂ'), make('b', 'A B')],
+    random: () => 0.999999,
+  });
+  assertMixedQuestionUniqueness(value);
+  assert.equal(
+    value.questions.filter((card) => normalizedQuestionText(card) === 'A B').length,
+    1,
+  );
+});
+
+test('mixed treats duplicate card IDs as unavailable across pools', () => {
+  const make = (id) => ({
+    id,
+    adultOnly: false,
+    questions: Array.from({ length: 40 }, (_, index) => ({
+      id: index === 0 ? 'same-card-id' : `${id}-${index}`,
+      text: `${id} 質問 ${index}`,
+    })),
+  });
+  const value = createMixedSession({
+    participants: names,
+    decks: [make('a'), make('b')],
+    random: () => 0.999999,
+  });
+  assertMixedQuestionUniqueness(value);
+});
+
+test('mixed unique questions remain unique through every continued round', () => {
+  let value = createMixedSession({
+    participants: names,
+    decks: [deckById('date'), deckById('omiai')],
+    random: seeded(4),
+  });
+  const seenIds = new Set();
+  const seenTexts = new Set();
+  while (!isFinished(value)) {
+    const card = currentCard(value);
+    assert.equal(seenIds.has(card.id), false);
+    assert.equal(seenTexts.has(normalizedQuestionText(card)), false);
+    seenIds.add(card.id);
+    seenTexts.add(normalizedQuestionText(card));
+    value = answerCurrent(value);
+    if (isRoundComplete(value)) value = continueRound(value);
+  }
+  assert.equal(seenIds.size, 40);
+  assert.equal(seenTexts.size, 40);
+});
+
 test('acquaintance date keeps independent 40-card and R18 sources', () => {
   const acquaintance = decks.find((item) => item.id === 'acquaintance-date');
   assert.ok(acquaintance);
