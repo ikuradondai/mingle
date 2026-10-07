@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,12 +11,17 @@ let local = null;
 function readLocal() { if (!local) { mkdirSync(dirname(localPath), { recursive: true }); local = existsSync(localPath) ? JSON.parse(readFileSync(localPath, 'utf8')) : { startedAt: null, updatedAt: null, days: {}, dedup: {}, rate: {} }; } return local; }
 function saveLocal() { writeFileSync(localPath, JSON.stringify(local)); }
 const PROGRESS_TYPES = { round_complete: 'roundCompletes', round_continue: 'roundContinues', session_complete: 'sessionCompletes' };
+const RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+const DEDUP_MS = 48 * 60 * 60 * 1000;
+const MAX_FEEDBACK = 10000;
+const localRetentionEnabled = process.env.NODE_ENV !== 'test';
 function dayData(db, date) { return db.days[date] ||= { pageViews: 0, themeStarts: 0, pages: {}, themes: {}, progress: {}, progressThemes: {} }; }
-function localRate(key, now) { const db = readLocal(); const r = db.rate[key] ||= { count: 0, reset: now + 60000 }; if (r.reset < now) { r.count = 0; r.reset = now + 60000; } r.count += 1; saveLocal(); return r.count; }
+function localRate(key, now) { const db = readLocal(); for (const [stored, value] of Object.entries(db.rate || {})) if (!value || value.reset <= now) delete db.rate[stored]; const r = db.rate[key] ||= { count: 0, reset: now + 60000 }; r.count += 1; saveLocal(); return r.count; }
 
 export function persistentStoreAvailable() { return hasRedis() || localEnabled; }
 export function usingLocalStore() { return !hasRedis() && localEnabled; }
-export async function consumeRate(key) { if (hasRedis()) return Number(await redisCommand(['EVAL', "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],60) end; return n", 1, `${REDIS_PREFIX}:rate:${key}`])); if (localEnabled) return localRate(key, Date.now()); throw new Error('store unavailable'); }
+function boundedRateKey(key) { return createHash('sha256').update(String(key).slice(0, 512)).digest('hex'); }
+export async function consumeRate(key) { const bounded = boundedRateKey(key); if (hasRedis()) return Number(await redisCommand(['EVAL', "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],60) end; return n", 1, `${REDIS_PREFIX}:rate:${bounded}`])); if (localEnabled) return localRate(bounded, Date.now()); throw new Error('store unavailable'); }
 export async function consumeAiQuota(key) {
   const limit = (value, fallback) => (/^[1-9][0-9]{0,5}$/.test(String(value || '')) ? Number(value) : fallback);
   const minuteLimit = limit(process.env.AI_MINUTE_LIMIT, 3);
@@ -43,7 +49,7 @@ export async function recordEvent({ type, pageId, themeId, eventId, date }) {
     return Number(await redisCommand(['EVAL', script, 9, day, totals, pages, themes, progressThemes, dedup, dates, started, updated, eventId, date, type, pageId || '', themeId || '', metric, now]));
   }
   if (!localEnabled) throw new Error('store unavailable');
-  const db = readLocal(); const d = dayData(db, date); db.dates ||= {}; if (db.dedup[eventId]) return 0; db.dedup[eventId] = Date.now() + 172800000; db.dates[date] = true;
+  const db = readLocal(); const now = Date.now(); const d = dayData(db, date); db.dates ||= {}; for (const [stored, expires] of Object.entries(db.dedup || {})) if (Number(expires) <= now) delete db.dedup[stored]; if (db.dedup[eventId]) return 0; db.dedup[eventId] = now + DEDUP_MS; db.dates[date] = true;
   db.totals ||= { pageViews: 0, themeStarts: 0, pages: {}, themes: {}, progress: {}, progressThemes: {} }; db.totals.progress ||= {}; db.totals.progressThemes ||= {}; d.progress ||= {}; d.progressThemes ||= {};
   d.pageViews += type === 'page_view' ? 1 : 0; d.themeStarts += type === 'theme_start' ? 1 : 0; db.totals.pageViews += type === 'page_view' ? 1 : 0; db.totals.themeStarts += type === 'theme_start' ? 1 : 0;
   if (type === 'page_view') d.pages[pageId] = (d.pages[pageId] || 0) + 1, db.totals.pages[pageId] = (db.totals.pages[pageId] || 0) + 1;
@@ -55,13 +61,16 @@ export async function recordFeedback({ sessionId, cursor, themeId, themeIds, rat
   const id = `${sessionId}:${cursor}`;
   const item = { id, createdAt, date, themeId, themeIds: [...themeIds], cursor, rating, text };
   if (hasRedis()) {
-    const script = "if redis.call('SET', KEYS[1] .. ARGV[1], '1', 'NX') == false then return 0 end; redis.call('ZADD', KEYS[2], ARGV[2], ARGV[3]); redis.call('SADD', KEYS[3], ARGV[4]); return 1";
-    return Number(await redisCommand(['EVAL', script, 3, `${REDIS_PREFIX}:feedbackDedup:`, `${REDIS_PREFIX}:feedback`, `${REDIS_PREFIX}:dates`, id, String(Date.parse(createdAt)), JSON.stringify(item), date]));
+    const script = "if redis.call('SET', KEYS[1] .. ARGV[1], '1', 'NX', 'EX', ARGV[5]) == false then return 0 end; redis.call('ZADD', KEYS[2], ARGV[2], ARGV[3]); redis.call('EXPIRE', KEYS[2], ARGV[8]); redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', ARGV[4]); local n=redis.call('ZCARD', KEYS[2]); if n > tonumber(ARGV[6]) then redis.call('ZREMRANGEBYRANK', KEYS[2], 0, n - tonumber(ARGV[6]) - 1) end; redis.call('SADD', KEYS[3], ARGV[7]); return 1";
+    const retentionCutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+    return Number(await redisCommand(['EVAL', script, 3, `${REDIS_PREFIX}:feedbackDedup:`, `${REDIS_PREFIX}:feedback`, `${REDIS_PREFIX}:dates`, id, String(Date.parse(createdAt)), JSON.stringify(item), String(retentionCutoff), '172800', '10000', date, String(90 * 24 * 60 * 60)]));
   }
   if (!localEnabled) throw new Error('store unavailable');
-  const db = readLocal(); db.feedback ||= []; db.feedbackDedup ||= {};
+  const db = readLocal(); db.feedback ||= []; db.feedbackDedup ||= {}; const now = Date.now(); for (const [stored, expires] of Object.entries(db.feedbackDedup)) if (Number(expires) <= now) delete db.feedbackDedup[stored];
   if (db.feedbackDedup[id]) return 0;
-  db.feedbackDedup[id] = true; db.feedback.push(item); db.dates ||= {}; db.dates[date] = true;
+  db.feedbackDedup[id] = now + DEDUP_MS; db.feedback.push(item); db.dates ||= {}; db.dates[date] = true;
+  if (localRetentionEnabled) db.feedback = db.feedback.filter((entry) => Date.parse(entry.createdAt) >= now - RETENTION_MS);
+  db.feedback.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))); if (db.feedback.length > MAX_FEEDBACK) db.feedback.length = MAX_FEEDBACK;
   db.startedAt ||= createdAt; db.updatedAt = createdAt; saveLocal(); return 1;
 }
 export async function fetchFeedback(dates, limit = 100) {

@@ -1,15 +1,15 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
-import { ALLOWED_THEME_IDS, PAGE_IDS, PAGE_LABELS, SESSION_COOKIE, THEME_LABELS } from './config.mjs';
-import { body, clearCookie, cookie, exactKeys, json, sameOrigin, setCookie, verifySession, signSession } from './http.mjs';
+import { timingSafeEqual } from 'node:crypto';
+import { ALLOWED_THEME_IDS, PAGE_IDS, PAGE_LABELS, THEME_LABELS, isProduction } from './config.mjs';
+import { adminSession, body, clientRateKey, clearCookie, exactKeys, json, revokeSession, sameOrigin, setCookie, verifySessionAsync, signSession } from './http.mjs';
 import { consumeRate, fetchFeedback, fetchStats, knownDates, persistentStoreAvailable, recordEvent } from './store.mjs';
 import { decks } from '../dist/data/decks.js';
 const themes = THEME_LABELS;
-function configured() { return Boolean(process.env.ADMIN_PASSWORD && process.env.ADMIN_SESSION_SECRET) && persistentStoreAvailable(); }
-function ipKey(req) { return createHmac('sha256', process.env.ADMIN_SESSION_SECRET || 'missing').update(String(req.headers?.['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown')).digest('hex').slice(0, 32); }
+function configured() { return Boolean(process.env.ADMIN_PASSWORD && process.env.ADMIN_SESSION_SECRET) && (!isProduction() || (process.env.ADMIN_PASSWORD.length >= 32 && process.env.ADMIN_SESSION_SECRET.length >= 32)) && persistentStoreAvailable(); }
+function ipKey(req) { return clientRateKey(req, 'admin-login'); }
 export async function sessionHandler(req, res) {
   if (!sameOrigin(req)) return json(res, 403, { error: 'forbidden' });
-  if (req.method === 'GET') return verifySession(cookie(req, SESSION_COOKIE)) ? json(res, 200, { authenticated: true }) : json(res, 401, { authenticated: false });
-  if (req.method === 'DELETE') { clearCookie(res); return json(res, 200, { ok: true }); }
+  if (req.method === 'GET') return await verifySessionAsync(adminSession(req)) ? json(res, 200, { authenticated: true }) : json(res, 401, { authenticated: false });
+  if (req.method === 'DELETE') { await revokeSession(adminSession(req)); clearCookie(res); return json(res, 200, { ok: true }); }
   if (req.method !== 'POST') return json(res, 405, { error: 'method_not_allowed' });
   if (!configured()) return json(res, 503, { error: 'analytics_unavailable' });
   let input; try { input = await body(req); } catch (e) { return json(res, e.status || 400, { error: 'invalid_request' }); }
@@ -22,7 +22,7 @@ export async function sessionHandler(req, res) {
 }
 function datesFor(range) { const now = new Date(); const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }); const end = fmt.format(now); const count = range === 'today' ? 1 : range === '7d' ? 7 : range === '30d' ? 30 : 0; if (!count) return []; const dates = []; let d = new Date(`${end}T00:00:00+09:00`); for (let i = count - 1; i >= 0; i--) { const x = new Date(d); x.setDate(x.getDate() - i); dates.push(fmt.format(x)); } return dates; }
 export async function statsHandler(req, res) {
-  if (req.method !== 'GET') return json(res, 405, { error: 'method_not_allowed' }); if (!sameOrigin(req)) return json(res, 403, { error: 'forbidden' }); if (!verifySession(cookie(req, SESSION_COOKIE))) return json(res, 401, { error: 'unauthorized' });
+  if (req.method !== 'GET') return json(res, 405, { error: 'method_not_allowed' }); if (!sameOrigin(req)) return json(res, 403, { error: 'forbidden' }); if (!await verifySessionAsync(adminSession(req))) return json(res, 401, { error: 'unauthorized' });
   const range = new URL(req.url || '/', 'http://localhost').searchParams.get('range') || 'today'; if (!['today', '7d', '30d', 'all'].includes(range)) return json(res, 400, { error: 'invalid_range' });
   if (!persistentStoreAvailable()) return json(res, 503, { error: 'analytics_unavailable' }); try { const dates = range === 'all' ? allDates() : datesFor(range); const result = await fetchStats(dates); const feedback = await fetchFeedback(dates, 100); const page = {}, theme = {}, progressTheme = {}, daily = []; const metricNames = ['roundCompletes', 'roundContinues', 'sessionCompletes']; const zeroProgress = () => Object.fromEntries(metricNames.map((name) => [name, 0])); for (const item of result.days) { const progress = Object.fromEntries(metricNames.map((name) => [name, Number(item.day[name] || 0)])); daily.push({ date: item.date, pageViews: Number(item.day.pageViews || 0), themeStarts: Number(item.day.themeStarts || 0), ...progress }); for (const id of PAGE_IDS) page[id] = (page[id] || 0) + Number(item.pages[id] || 0); for (const id of ALLOWED_THEME_IDS) { theme[id] = (theme[id] || 0) + Number(item.themes[id] || 0); progressTheme[id] ||= zeroProgress(); for (const metric of metricNames) progressTheme[id][metric] += Number(item.progressThemes?.[`${id}:${metric}`] || 0); } } const totals = range === 'all' ? result.totals : { pageViews: daily.reduce((n, x) => n + x.pageViews, 0), themeStarts: daily.reduce((n, x) => n + x.themeStarts, 0), progress: Object.fromEntries(metricNames.map((name) => [name, daily.reduce((n, x) => n + x[name], 0)])) }; const progress = Object.fromEntries(metricNames.map((name) => [name, Number(totals.progress?.[name] || totals[name] || 0)])); return json(res, 200, { range, timezone: 'Asia/Tokyo', trackingStartedAt: result.startedAt || null, updatedAt: result.updatedAt || new Date().toISOString(), totals: { pageViews: Number(totals.pageViews || 0), themeStarts: Number(totals.themeStarts || 0), ...progress }, pages: PAGE_IDS.map((id) => ({ id, label: PAGE_LABELS[id], count: page[id] || 0 })), themes: ALLOWED_THEME_IDS.map((id) => ({ id, label: themes[id] || id, count: theme[id] || 0, ...progressTheme[id] })), daily, feedback, feedbackLimit: 100 }); } catch { return json(res, 503, { error: 'analytics_unavailable' }); }
 }

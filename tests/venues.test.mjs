@@ -24,6 +24,22 @@ test('venue public QR exposes venue active snapshots and server-issued session o
   assert.equal(started.cards.length, 6); assert.match(started.session, /^[A-Za-z0-9_-]{32}$/); assert.equal(calls.filter((x) => x.url.endsWith('/venue_usage_events')).length, 1);
 });
 
+test('legacy venue snapshot with a false stored R18 flag is gated by canonical standard ID', async () => {
+  const legacy = { ...setRow, cards: setRow.cards.map((card, index) => index === 0 ? { ...card, id: 'intimacy-01', r18: false } : card) };
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url.includes('/venue_tables?token_hash=')) return response(200, [{ id: tableId, label: 'A卓', venue_id: venueId, venues: venueRow }]);
+    if (url.includes('/venue_sets?venue_id=')) return response(200, [legacy]);
+    throw new Error(`unexpected ${url}`);
+  };
+  const service = createVenueService({ env, fetchImpl });
+  const info = await service.publicInfo(req(`/api/venue/public/${token}`, { headers: {} }), token, false);
+  assert.equal(info.sets.length, 0);
+  await assert.rejects(() => service.publicInfo(req(`/api/venue/public/${token}/start`, { method: 'POST', headers: {}, body: { setId, participants: ['A', 'B'], adultConfirmed: true } }), token, true), (error) => error.code === 'NOT_FOUND');
+  assert.equal(calls.some((url) => url.includes('/venue_sets?id=eq.')), false);
+});
+
 test('venue public start rejects a set outside the current venue and adult snapshots require consent', async () => {
   const fetchImpl = async (url) => { if (url.includes('/venue_tables?token_hash=')) return response(200, [{ id: tableId, label: 'A卓', venue_id: venueId, venues: { ...venueRow, adult_enabled: true, adult_attested_at: '2026-10-05T00:00:00+00:00' } }]); if (url.endsWith('/rpc/is_adult_confirmed')) return response(200, true); if (url.includes('/venue_sets?venue_id=')) return response(200, [{ ...setRow, adult_only: true }]); if (url.includes('/venue_sets?id=')) return response(200, [{ ...setRow, adult_only: false, cards: setRow.cards.map((card, index) => index === 0 ? { ...card, r18: true } : card) }]); throw new Error(`unexpected ${url}`); };
   const service = createVenueService({ env, fetchImpl });
@@ -127,9 +143,9 @@ function ownerFetch({ confirmed = true, row = {} } = {}) {
     if (url.endsWith('/rest/v1/venues') && method === 'POST') { const body = JSON.parse(options.body); return response(201, [{ ...venueRow, ...body, adult_attested_at: body.adult_enabled ? attestedAt : null }]); }
     if (url.includes('/venues?id=eq.') && method === 'GET') return response(200, [current]);
     if (url.includes('/venues?id=eq.') && method === 'PATCH') { const body = JSON.parse(options.body); return response(200, [{ ...current, ...body }]); }
-    if (url.endsWith('/rest/v1/venue_sets') && method === 'POST') { const body = JSON.parse(options.body); return response(201, [{ id: setId, ...body, active: true }]); }
+    if (url.endsWith('/rest/v1/rpc/create_venue_set_server')) { const body = JSON.parse(options.body); return response(200, [{ id: setId, venue_id: body.p_venue_id, name: body.p_name, cards: body.p_cards, card_count: body.p_cards.length, adult_only: body.p_adult_only, active: true }]); }
     if (url.includes('/venue_sets?id=eq.') && method === 'GET') return response(200, [{ id: setId, venue_id: venueId, active: false, adult_only: true, venues: { owner_id: owner, adult_enabled: Boolean(current.adult_enabled) } }]);
-    if (url.includes('/venue_sets?id=eq.') && method === 'PATCH') return response(204, null);
+    if (url.endsWith('/rest/v1/rpc/set_venue_set_active_server')) return response(200, true);
     throw new Error(`unexpected ${method} ${url}`);
   };
   return { service: createVenueService({ env, fetchImpl }), calls };

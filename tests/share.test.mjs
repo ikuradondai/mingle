@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createAccountService } from '../server-side/accounts.mjs';
 
-const env = { SUPABASE_URL: 'https://share-test.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test' };
+const env = { SUPABASE_URL: 'https://share-test.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SERVICE_ROLE_KEY: 'service_role_test', SHARED_TOKEN_ENCRYPTION_KEY: 'x'.repeat(32) };
 const owner = '00000000-0000-0000-0000-000000000001';
 const setId = '00000000-0000-4000-8000-000000000001';
 const customUuid = '11111111-1111-4111-8111-111111111111';
@@ -21,8 +21,8 @@ test('share snapshots owner set, returns a reusable token, and hides cards from 
     if (url.includes('/my_sets?user_id=') && url.includes('id=eq.')) return response(200, [{ id: setId, name: '週末', card_ids: ['date-01', 'date-02', 'date-03', 'date-04', 'date-05', `custom:${customUuid}`] }]);
     if (url.includes('/custom_cards?')) return response(200, [{ id: customUuid, text: 'owner private text', r18: false, created_at: '2026-01-01', updated_at: '2026-01-01' }]);
     if (url.includes('/shared_sets?owner_id=') && options.method !== 'PATCH') return response(200, current);
-    if (url.endsWith('/rpc/create_shared_set')) { const body = JSON.parse(options.body); if (!body.p_rotate && current.length) return response(200, current); current = [{ id: 'share-1', token: body.p_token, name: body.p_name, card_count: body.p_card_count, adult_only: body.p_adult_only, cards: body.p_cards }]; return response(200, current); }
-    if (url.endsWith('/rpc/revoke_shared_set')) { current = []; return response(200, [true]); }
+    if (url.endsWith('/rpc/create_shared_set_server')) { const body = JSON.parse(options.body); if (!body.p_rotate && current.length) return response(200, current); current = [{ id: 'share-1', token: body.p_token, name: body.p_name, card_count: body.p_cards.length, adult_only: body.p_adult_only, cards: body.p_cards }]; return response(200, current); }
+    if (url.endsWith('/rpc/revoke_shared_set_server')) { current = []; return response(200, [true]); }
     throw new Error(`unexpected ${options.method || 'GET'} ${url}`);
   };
   const service = createAccountService({ env, fetchImpl });
@@ -32,7 +32,7 @@ test('share snapshots owner set, returns a reusable token, and hides cards from 
   assert.match(created.share.token, /^[A-Za-z0-9_-]{43}$/);
   const repeated = await service.shareSet(req(`/api/account/sets/${setId}/share`, { method: 'POST' }), setId);
   assert.equal(repeated.share.token, created.share.token);
-  const rpcBody = JSON.parse(calls.find((call) => call.url.endsWith('/rpc/create_shared_set')).options.body);
+  const rpcBody = JSON.parse(calls.find((call) => call.url.endsWith('/rpc/create_shared_set_server')).options.body);
   assert.equal(rpcBody.p_cards.at(-1).id, `custom:${customUuid}`);
   assert.equal(rpcBody.p_cards.at(-1).text, 'owner private text');
   const beforeRead = calls.length;
@@ -85,8 +85,24 @@ test('non-adult public share starts for an unauthenticated guest', async () => {
   assert.equal(calls.some((call) => call.url.endsWith('/auth/v1/user')), false);
 });
 
+test('legacy share with a false stored R18 flag is gated by canonical standard ID', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url.includes('/shared_sets?token_hash=')) return response(200, [{ name: 'legacy', card_count: 6, adult_only: false, cards: [{ id: 'intimacy-01', text: 'safe-looking legacy text', r18: false }] }]);
+    throw new Error(`unexpected ${url}`);
+  };
+  const service = createAccountService({ env: { ...env, SUPABASE_SERVICE_ROLE_KEY: 'service-role-test' }, fetchImpl });
+  const metadata = await service.publicShare(req(`/api/share/${token}`, { headers: {} }), token, false);
+  assert.equal(metadata.share.adultOnly, true);
+  assert.equal(metadata.share.ageConfirmationRequired, true);
+  await assert.rejects(() => service.publicShare(req(`/api/share/${token}/start`, { method: 'POST', headers: {}, body: { participants: ['A', 'B'], adultConfirmed: true } }), token, true), (error) => error.code === 'UNAUTHENTICATED');
+  assert.equal(calls.some((url) => url.includes('id=eq.')), false);
+});
+
 test('public share lookup is unavailable without the server-only key', async () => {
-  const service = createAccountService({ env, fetchImpl: async () => { throw new Error('must not call REST'); } });
+  const { SUPABASE_SERVICE_ROLE_KEY, ...publicOnlyEnv } = env;
+  const service = createAccountService({ env: publicOnlyEnv, fetchImpl: async () => { throw new Error('must not call REST'); } });
   await assert.rejects(() => service.publicShare(req(`/api/share/${token}`), token, false), (error) => error.status === 503 && error.code === 'SHARE_UNAVAILABLE');
 });
 
@@ -104,7 +120,7 @@ test('rotation RPC failure leaves the existing link available to owner', async (
     if (url.includes('/my_sets?user_id=') && url.includes('id=eq.')) return response(200, [{ id: setId, name: '週末', card_ids: ['date-01', 'date-02', 'date-03', 'date-04', 'date-05', 'date-06'] }]);
     if (url.includes('/custom_cards?')) return response(200, []);
     if (url.includes('/shared_sets?owner_id=') && options.method !== 'PATCH') return response(200, [{ id: 'share-1', token: oldToken, name: '週末', card_count: 6, adult_only: false }]);
-    if (url.endsWith('/rpc/create_shared_set')) { rotateAttempted = JSON.parse(options.body).p_rotate; return response(500, { code: 'TX_FAILED' }); }
+    if (url.endsWith('/rpc/create_shared_set_server')) { rotateAttempted = JSON.parse(options.body).p_rotate; return response(500, { code: 'TX_FAILED' }); }
     throw new Error(`unexpected ${url}`);
   };
   const service = createAccountService({ env, fetchImpl });
@@ -159,7 +175,7 @@ test('sharing a set with R18 cards needs an age-confirmed owner (issue and rotat
     if (url.includes('/my_sets?user_id=') && url.includes('id=eq.')) return response(200, [{ id: setId, name: '大人', card_ids: ['intimacy-01', 'intimacy-02', 'intimacy-03', 'intimacy-04', 'intimacy-05', 'intimacy-06'] }]);
     if (url.includes('/custom_cards?')) return response(200, []);
     if (url.includes('/shared_sets?owner_id=')) return response(200, []);
-    if (url.endsWith('/rpc/create_shared_set')) { const body = JSON.parse(options.body); return response(200, [{ id: 'share-1', token: body.p_token, name: body.p_name, card_count: body.p_card_count, adult_only: body.p_adult_only }]); }
+    if (url.endsWith('/rpc/create_shared_set_server')) { const body = JSON.parse(options.body); return response(200, [{ id: 'share-1', token: body.p_token, name: body.p_name, card_count: body.p_cards.length, adult_only: body.p_adult_only }]); }
     throw new Error(`unexpected ${options.method || 'GET'} ${url}`);
   };
   const service = createAccountService({ env, fetchImpl });
@@ -170,4 +186,24 @@ test('sharing a set with R18 cards needs an age-confirmed owner (issue and rotat
   assert.equal(created.share.adultOnly, true);
   const rotated = await service.shareSet(req(`/api/account/sets/${setId}/share`, { method: 'PUT' }), setId);
   assert.equal(rotated.share.adultOnly, true);
+});
+
+test('theme R18 metadata survives when every snapshot card is marked safe', async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: owner });
+    if (url.includes('/my_sets?user_id=') && url.includes('id=eq.')) return response(200, [{ id: setId, name: 'テーマ', theme_r18: true, card_ids: ['date-01','date-02','date-03','date-04','date-05','date-06'] }]);
+    if (url.includes('/custom_cards?')) return response(200, []);
+    if (url.includes('/account_profiles?user_id=')) return response(200, [{ adult_confirmed_at: '2026-10-05T09:12:00+00:00' }]);
+    if (url.endsWith('/rpc/create_shared_set_server')) return response(200, [{ id: 'share-theme', token, name: 'テーマ', card_count: 6, adult_only: true }]);
+    if (url.includes('/shared_sets?owner_id=')) return response(200, []);
+    throw new Error(`unexpected ${url}`);
+  };
+  const service = createAccountService({ env, fetchImpl });
+  const result = await service.shareSet(req(`/api/account/sets/${setId}/share`, { method: 'POST' }), setId);
+  assert.equal(result.share.adultOnly, true);
+  const rpc = calls.find((call) => call.url.endsWith('/rpc/create_shared_set_server'));
+  assert.equal(JSON.parse(rpc.options.body).p_adult_only, true);
+  assert.equal(JSON.parse(rpc.options.body).p_cards.every((card) => card.r18 === false), true);
 });

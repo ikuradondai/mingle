@@ -13,7 +13,7 @@ process.env.ANALYTICS_LOCAL_PATH = join(await mkdtemp(join(tmpdir(), 'mingle-ana
 process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
 process.env.ADMIN_PASSWORD = 'test-password';
 const { recordEvent, fetchStats } = await import('../server-side/store.mjs');
-const { signSession, verifySession } = await import('../server-side/http.mjs');
+const { revokeSession, signSession, verifySession, verifySessionAsync } = await import('../server-side/http.mjs');
 const { default: track } = await import('../api/track.js');
 const { statsHandler } = await import('../server-side/admin-api.mjs');
 
@@ -37,6 +37,18 @@ test('signed sessions reject tampering and expiry', () => {
   const old = Buffer.from(JSON.stringify({ exp: Date.now() - 1, n: 'old' })).toString('base64url');
   const expired = `${old}.${createHmac('sha256', process.env.ADMIN_SESSION_SECRET).update(old).digest('base64url')}`;
   assert.equal(verifySession(expired), false);
+  const [payload, signature] = token.split('.');
+  const alternate = `${payload}.${signature.slice(0, -1)}${signature.endsWith('A') ? 'B' : 'A'}`;
+  assert.equal(verifySession(alternate), false);
+});
+
+test('admin logout revokes the exact signed session', async () => {
+  const token = signSession();
+  assert.equal(await verifySessionAsync(token), true);
+  assert.equal(await revokeSession(token), true);
+  assert.equal(verifySession(token), false);
+  assert.equal(await verifySessionAsync(token), false);
+  assert.equal(verifySession(`${token}.extra`), false);
 });
 
 test('tracker rejects unknown fields and invalid ids', async () => {
@@ -47,6 +59,19 @@ test('tracker rejects unknown fields and invalid ids', async () => {
   }
   assert.equal((await invoke({ type: 'page_view', pageId: 'participants', eventId: 'bad', extra: true })).status, 400);
   assert.equal((await invoke({ type: 'page_view', pageId: 'unknown', eventId: 'valid-event-id' })).status, 400);
+});
+
+test('analytics rate limits count only valid writes', async () => {
+  const invoke = async (type, index) => {
+    const payload = type === 'track' ? { type: 'page_view', pageId: 'participants', eventId: `rate-${index}-${Date.now()}` } : { sessionId: `rate-session-${index}`, cursor: 6, themeId: 'date', themeIds: ['date'], rating: 'positive', text: 'ok' };
+    const req = Readable.from([Buffer.from(JSON.stringify(payload))]); req.method = 'POST'; req.url = `/api/${type === 'track' ? 'track' : 'feedback'}`; req.socket = { remoteAddress: `rate-test-${type}` }; req.headers = { 'content-type': 'application/json' };
+    let status; const res = { setHeader() {}, writeHead(code) { status = code; }, end() {} };
+    const handler = type === 'track' ? track : (await import('../api/feedback.js')).default; await handler(req, res); return status;
+  };
+  for (let i = 0; i < 60; i += 1) assert.notEqual(await invoke('track', i), 429);
+  assert.equal(await invoke('track', 60), 429);
+  for (let i = 0; i < 10; i += 1) assert.notEqual(await invoke('feedback', i), 429);
+  assert.equal(await invoke('feedback', 10), 429);
 });
 
 test('progress events validate, deduplicate, and preserve theme-specific counts', async () => {

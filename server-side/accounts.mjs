@@ -1,6 +1,6 @@
 import { decks } from '../dist/data/decks.js';
 import { soloDecks } from '../dist/data/solo-decks.js';
-import { createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { consumeAiQuota, persistentStoreAvailable } from './store.mjs';
 import { readAdultConfirmation, requireAdultConfirmed, setAdultConfirmation, userFromBearer } from './age-confirmation.mjs';
 import { normalizeCreatorDesign, effectiveCreatorAdult } from '../dist/creator-metadata.js';
@@ -36,7 +36,8 @@ export function accountConfig(env = process.env) {
   const key = env.SUPABASE_PUBLISHABLE_KEY || env.SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   let parsed; try { parsed = new URL(url || ''); } catch { return null; }
   const validUrl = (parsed.protocol === 'https:' || (parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname))) && !parsed.username && !parsed.password && (!parsed.pathname || parsed.pathname === '/') && !parsed.search && !parsed.hash;
-  return url && isPublicKey(key) && validUrl ? { url: url.replace(/\/$/, ''), key, serviceKey: env.SUPABASE_SERVICE_ROLE_KEY || '', googleEnabled: env.SUPABASE_GOOGLE_ENABLED === 'true' } : null;
+  const sharedTokenEncryptionKey = typeof env.SHARED_TOKEN_ENCRYPTION_KEY === 'string' ? env.SHARED_TOKEN_ENCRYPTION_KEY : '';
+  return url && isPublicKey(key) && validUrl ? { url: url.replace(/\/$/, ''), key, serviceKey: env.SUPABASE_SERVICE_ROLE_KEY || '', sharedTokenEncryptionKey, googleEnabled: env.SUPABASE_GOOGLE_ENABLED === 'true' } : null;
 }
 
 export function validCardId(id) { return typeof id === 'string' && CARD_IDS.has(id); }
@@ -85,7 +86,11 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
   }
   function customId(uuid) { return typeof uuid === 'string' && uuid.startsWith('custom:') ? uuid : `custom:${uuid}`; }
   function shareHash(token) { return createHash('sha256').update(token).digest('hex'); }
+  function sharedSnapshotAdult(row) { return Boolean(row?.adult_only) || (Array.isArray(row?.cards) && row.cards.some((card) => card && (card.r18 === true || STATIC_CARDS.get(card.id)?.r18 === true))); }
   function shareToken() { return randomBytes(SHARE_TOKEN_BYTES).toString('base64url'); }
+  function shareKey(secret) { return createHash('sha256').update(`mingle shared token v1:${secret}`).digest(); }
+  function encryptShareToken(token, secret) { const iv = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', shareKey(secret), iv); const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]); return `${iv.toString('base64url')}.${cipher.getAuthTag().toString('base64url')}.${encrypted.toString('base64url')}`; }
+  function decryptShareToken(value, secret) { try { const [iv, tag, payload] = String(value || '').split('.').map((part) => Buffer.from(part, 'base64url')); const decipher = createDecipheriv('aes-256-gcm', shareKey(secret), iv); decipher.setAuthTag(tag); return Buffer.concat([decipher.update(payload), decipher.final()]).toString('utf8'); } catch { return null; } }
   function customUuid(value) { const match = typeof value === 'string' && value.match(CUSTOM_ID); return match?.[1] || null; }
   function customText(value) {
     if (typeof value !== 'string') throw fail(400, ACCOUNT_ERRORS.invalid);
@@ -366,21 +371,24 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     const current = async (fallback = null) => {
       const rowsFound = await supabaseFetch(config, `/rest/v1/shared_sets?owner_id=eq.${encodeURIComponent(user.id)}&set_id=eq.${encodeURIComponent(setId)}&revoked_at=is.null&select=*&limit=1`, { headers: { Authorization: authorization } }, fetchImpl);
       const row = Array.isArray(rowsFound) ? rowsFound[0] : null; const saved = row || (fallback && typeof fallback === 'object' ? fallback : null);
+      if (saved && !saved.token && saved.token_ciphertext) { if (!config.sharedTokenEncryptionKey) throw fail(503, ACCOUNT_ERRORS.unavailable); saved.token = decryptShareToken(saved.token_ciphertext, config.sharedTokenEncryptionKey); if (!saved.token) throw fail(503, ACCOUNT_ERRORS.unavailable); }
       const safeDesign = normalizeCreatorDesign(saved?.design);
-      return saved ? { share: { token: saved.token, url: `/?share=${encodeURIComponent(saved.token)}`, name: saved.name, cardCount: saved.card_count, adultOnly: Boolean(saved.adult_only), questionOrder: saved.question_order || 'shuffle', ...(safeDesign ? { design: safeDesign } : {}), id: saved.id || null, audience: sets[0].audience || 'group' } } : { share: null };
+      return saved ? { share: { token: saved.token, url: `/?share=${encodeURIComponent(saved.token)}`, name: saved.name, cardCount: saved.card_count, adultOnly: sharedSnapshotAdult(saved), questionOrder: saved.question_order || 'shuffle', ...(safeDesign ? { design: safeDesign } : {}), id: saved.id || null, audience: sets[0].audience || 'group' } } : { share: null };
     };
     if (req.method === 'GET') return current();
     if (sets[0].audience === 'solo') throw fail(400, 'SOLO_ONLY_SOURCE');
     const snapshot = await snapshotForSet(sets[0], user.id, authorization);
     if (snapshot.adultOnly) await ensureAdult(user, authorization);
     const token = shareToken();
-    const created = await supabaseFetch(config, '/rest/v1/rpc/create_shared_set', { method: 'POST', body: JSON.stringify({ p_set_id: setId, p_token: token, p_token_hash: shareHash(token), p_name: snapshot.name, p_card_count: snapshot.cardCount, p_adult_only: snapshot.adultOnly, p_cards: snapshot.cards, p_rotate: req.method === 'PUT' }), headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl);
+    if (!config.serviceKey || config.sharedTokenEncryptionKey.length < 32) throw fail(503, ACCOUNT_ERRORS.unavailable);
+    const created = await supabaseFetch({ ...config, key: config.serviceKey }, '/rest/v1/rpc/create_shared_set_server', { method: 'POST', body: JSON.stringify({ p_owner_id: user.id, p_set_id: setId, p_token: token, p_token_hash: shareHash(token), p_token_ciphertext: encryptShareToken(token, config.sharedTokenEncryptionKey), p_name: snapshot.name, p_cards: snapshot.cards, p_adult_only: snapshot.adultOnly, p_question_order: snapshot.questionOrder, p_design: snapshot.design, p_rotate: req.method === 'PUT' }), headers: { Authorization: `Bearer ${config.serviceKey}`, Prefer: 'return=representation' } }, fetchImpl);
     return current(Array.isArray(created) ? created[0] : created);
   }
   async function stopShare(req, setId = '') {
     const { user, authorization } = await requireUser(req);
     if (!/^[0-9a-f-]{16,64}$/i.test(setId)) throw fail(400, ACCOUNT_ERRORS.invalid);
-    await supabaseFetch(config, '/rest/v1/rpc/revoke_shared_set', { method: 'POST', body: JSON.stringify({ p_set_id: setId }), headers: { Authorization: authorization, Prefer: 'return=representation' } }, fetchImpl);
+    if (!config.serviceKey) throw fail(503, ACCOUNT_ERRORS.unavailable);
+    await supabaseFetch({ ...config, key: config.serviceKey }, '/rest/v1/rpc/revoke_shared_set_server', { method: 'POST', body: JSON.stringify({ p_owner_id: user.id, p_set_id: setId }), headers: { Authorization: `Bearer ${config.serviceKey}`, Prefer: 'return=representation' } }, fetchImpl);
     return { revoked: true, setId };
   }
   async function publicShare(req, token, start = false) {
@@ -394,7 +402,7 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     if (!share) throw fail(404, 'NOT_FOUND');
     if (!start) {
       const safeDesign = normalizeCreatorDesign(share.design);
-      const summary = { name: share.name, cardCount: share.card_count, adultOnly: Boolean(share.adult_only), ...(share.question_order ? { questionOrder: share.question_order } : {}), ...(safeDesign ? { design: safeDesign } : {}), active: true, ageConfirmationRequired: false };
+      const summary = { name: share.name, cardCount: share.card_count, adultOnly: sharedSnapshotAdult(share), ...(share.question_order ? { questionOrder: share.question_order } : {}), ...(safeDesign ? { design: safeDesign } : {}), active: true, ageConfirmationRequired: false };
       if (!summary.adultOnly) return { share: summary };
       // Adult shares reveal nothing unless the (optional) Bearer belongs to an age-confirmed account.
       const viewer = await userFromBearer({ config, authorization: authHeader(req), fetchImpl });
@@ -404,7 +412,8 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     }
     const input = req.body || {};
     if (!input || typeof input !== 'object' || Array.isArray(input) || !Array.isArray(input.participants) || input.participants.length < 2 || input.participants.length > 8 || input.participants.some((value) => typeof value !== 'string' || /[\u0000-\u001f\u007f\u2028\u2029]/u.test(value) || !value.trim() || Array.from(value.trim()).length > 40) || Object.keys(input).some((key) => !['participants', 'adultConfirmed'].includes(key)) || typeof input.adultConfirmed !== 'boolean') throw fail(400, ACCOUNT_ERRORS.invalid);
-    if (share.adult_only) {
+    const adultShare = sharedSnapshotAdult(share);
+    if (adultShare) {
       // Adult shared sets require an authenticated account as well as the
       // existing per-session all-participants consent.
       const viewer = await requireUser(req);
@@ -412,7 +421,7 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
       if (input.adultConfirmed !== true) throw fail(403, 'ADULT_CONSENT_REQUIRED');
     }
     const safeDesign = normalizeCreatorDesign(share.design);
-    return { share: { name: share.name, cardCount: share.card_count, adultOnly: Boolean(share.adult_only), ...(share.question_order ? { questionOrder: share.question_order } : {}), ...(safeDesign ? { design: safeDesign } : {}), active: true, ageConfirmationRequired: false }, participants: input.participants.map((value) => value.trim()), cards: Array.isArray(share.cards) ? share.cards : [] };
+    return { share: { name: share.name, cardCount: share.card_count, adultOnly: adultShare, ...(share.question_order ? { questionOrder: share.question_order } : {}), ...(safeDesign ? { design: safeDesign } : {}), active: true, ageConfirmationRequired: false }, participants: input.participants.map((value) => value.trim()), cards: Array.isArray(share.cards) ? share.cards : [] };
   }
 
   function avatarPath(userId) { return AVATAR_PATH(userId); }

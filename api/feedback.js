@@ -1,6 +1,6 @@
 import { ALLOWED_THEME_IDS } from '../server-side/config.mjs';
-import { bodyWithLimit, exactKeys, json, sameOrigin } from '../server-side/http.mjs';
-import { persistentStoreAvailable, recordFeedback } from '../server-side/store.mjs';
+import { bodyWithLimit, clientRateKey, exactKeys, json, sameOrigin } from '../server-side/http.mjs';
+import { consumeRate, persistentStoreAvailable, recordFeedback } from '../server-side/store.mjs';
 import { decks } from '../dist/data/decks.js';
 
 const CURSORS = new Set([6, 12, 18, 24, 30, 36, 40]);
@@ -28,6 +28,7 @@ export default async function feedback(req, res) {
   if (typeof input.text !== 'string') return json(res, 400, { error: 'invalid_feedback' });
   const text = input.text.trim();
   if (text.length > 1000 || (input.rating === null && !text)) return json(res, 400, { error: 'invalid_feedback' });
+  try { if (await consumeRate(clientRateKey(req, 'feedback')) > 10) return json(res, 429, { error: 'rate_limited' }); } catch { return json(res, 503, { error: 'analytics_unavailable' }); }
   const createdAt = new Date().toISOString();
   try {
     const written = await recordFeedback({ sessionId: input.sessionId, cursor: input.cursor, themeId: input.themeId, themeIds: input.themeIds, rating: input.rating, text, createdAt, date: todayJst(new Date(createdAt)) });

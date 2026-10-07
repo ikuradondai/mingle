@@ -6,6 +6,7 @@ import { accountConfig } from './accounts.mjs';
 import { AGE_ERRORS, requireAdultConfirmed } from './age-confirmation.mjs';
 import { normalizeCreatorDesign } from '../dist/creator-metadata.js';
 import { participantRuleForDeck, participantRuleForSavedSet } from '../dist/participant-rule.js';
+import { consumeRate, persistentStoreAvailable } from './store.mjs';
 
 const MIN = 2;
 const MAX = 8;
@@ -47,6 +48,7 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
   const config = accountConfig(env);
   const service = config?.serviceKey ? { ...config, key: config.serviceKey } : null;
   let lastCleanup = 0;
+  async function ownerRate(ownerId) { if (!persistentStoreAvailable()) { if (env.NODE_ENV === 'production' || env.VERCEL) throw fail(503, 'RATE_LIMIT_UNAVAILABLE'); return; } try { if (await consumeRate(`group-create:${ownerId}`) > 10) throw fail(429, 'RATE_LIMITED'); } catch (error) { if (error.code === 'RATE_LIMITED') throw error; if (env.NODE_ENV === 'production' || env.VERCEL) throw fail(503, 'RATE_LIMIT_UNAVAILABLE'); } }
     const staticCards = new Map([...decks, ...soloDecks].flatMap((deck) => [...(deck.questions || []), ...(deck.r18Questions || [])].map((card) => [card.id, { id: card.id, text: card.text, r18: Boolean(card.r18 || deck.adultOnly), sourceDeckId: deck.id }])));
   async function host(req) {
     if (!service) throw fail(503, 'GROUP_UNAVAILABLE');
@@ -108,7 +110,7 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     if (input.adultConfirmed !== true) throw fail(403, 'ADULT_CONSENT_REQUIRED');
   }
   async function create(req) {
-    const owner = await host(req); const input = bodyObject(req.body); optionalBoolean(input.participantsAdultAttested); let gated = false; const deckId = text(input.deckId, 80); const setId = text(input.setId, 80); const deck = decks.find((item) => item.id === deckId);
+    const owner = await host(req); await ownerRate(owner.id); const input = bodyObject(req.body); optionalBoolean(input.participantsAdultAttested); let gated = false; const deckId = text(input.deckId, 80); const setId = text(input.setId, 80); const deck = decks.find((item) => item.id === deckId);
     let source;
     const hostName = text(input.hostName, 40) || '代表者';
     if (setId) {
