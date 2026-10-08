@@ -4,21 +4,30 @@ import { adminSession, body, clientRateKey, clearCookie, exactKeys, json, revoke
 import { consumeRate, fetchFeedback, fetchStats, knownDates, persistentStoreAvailable, recordEvent } from './store.mjs';
 import { decks } from '../dist/data/decks.js';
 const themes = THEME_LABELS;
-function configured() { return Boolean(process.env.ADMIN_PASSWORD && process.env.ADMIN_SESSION_SECRET) && (!isProduction() || (process.env.ADMIN_PASSWORD.length >= 32 && process.env.ADMIN_SESSION_SECRET.length >= 32)) && persistentStoreAvailable(); }
+function configurationIssue() {
+  if (!process.env.ADMIN_PASSWORD) return 'config_missing:password';
+  if (!process.env.ADMIN_SESSION_SECRET) return 'config_missing:session_secret';
+  if (isProduction() && process.env.ADMIN_PASSWORD.length < 32) return 'config_weak:password';
+  if (isProduction() && process.env.ADMIN_SESSION_SECRET.length < 32) return 'config_weak:session_secret';
+  if (!persistentStoreAvailable()) return 'store_unconfigured';
+  return '';
+}
+function logUnavailable(reason) { console.error(`admin_session_unavailable reason=${reason}`); }
 function ipKey(req) { return clientRateKey(req, 'admin-login'); }
 export async function sessionHandler(req, res) {
   if (!sameOrigin(req)) return json(res, 403, { error: 'forbidden' });
   if (req.method === 'GET') return await verifySessionAsync(adminSession(req)) ? json(res, 200, { authenticated: true }) : json(res, 401, { authenticated: false });
   if (req.method === 'DELETE') { await revokeSession(adminSession(req)); clearCookie(res); return json(res, 200, { ok: true }); }
   if (req.method !== 'POST') return json(res, 405, { error: 'method_not_allowed' });
-  if (!configured()) return json(res, 503, { error: 'analytics_unavailable' });
+  const issue = configurationIssue();
+  if (issue) { logUnavailable(issue); return json(res, 503, { error: 'analytics_unavailable' }); }
   let input; try { input = await body(req); } catch (e) { return json(res, e.status || 400, { error: 'invalid_request' }); }
   if (!exactKeys(input, ['password']) || typeof input.password !== 'string' || input.password.length > 512) return json(res, 400, { error: 'invalid_request' });
-  let attempts; try { attempts = await consumeRate(ipKey(req)); } catch { return json(res, 503, { error: 'analytics_unavailable' }); }
+  let attempts; try { attempts = await consumeRate(ipKey(req)); } catch { logUnavailable('store_unavailable'); return json(res, 503, { error: 'analytics_unavailable' }); }
   if (attempts > 10) return json(res, 429, { error: 'rate_limited' });
   const a = Buffer.from(input.password), b = Buffer.from(process.env.ADMIN_PASSWORD); const valid = a.length === b.length && timingSafeEqual(a, b);
   if (!valid) return json(res, 401, { error: 'invalid_password' });
-  try { setCookie(res, signSession(), 4 * 60 * 60); return json(res, 200, { ok: true }); } catch { return json(res, 503, { error: 'analytics_unavailable' }); }
+  try { setCookie(res, signSession(), 4 * 60 * 60); return json(res, 200, { ok: true }); } catch { logUnavailable('session_sign_failed'); return json(res, 503, { error: 'analytics_unavailable' }); }
 }
 function datesFor(range) { const now = new Date(); const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }); const end = fmt.format(now); const count = range === 'today' ? 1 : range === '7d' ? 7 : range === '30d' ? 30 : 0; if (!count) return []; const dates = []; let d = new Date(`${end}T00:00:00+09:00`); for (let i = count - 1; i >= 0; i--) { const x = new Date(d); x.setDate(x.getDate() - i); dates.push(fmt.format(x)); } return dates; }
 export async function statsHandler(req, res) {
