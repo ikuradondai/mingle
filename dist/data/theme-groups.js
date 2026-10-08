@@ -1,4 +1,4 @@
-export const groupLabels = { all: 'すべて', relationship: '恋愛・夫婦', friends: '友人', family: '家族', work: '仕事', sports: 'スポーツ', 'first-meeting': '初対面', roleplay: 'なりきり', adult: 'R18' };
+export const groupLabels = { all: 'すべて', relationship: '恋愛・夫婦', friends: '友人', family: '家族', work: '仕事', sports: 'スポーツ', 'first-meeting': '初対面', roleplay: 'なりきり', game: 'ゲーム', adult: 'R18' };
 
 // Curated relationship metadata keeps filtering useful without inspecting question copy.
 export const themeGroups = {

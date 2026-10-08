@@ -1,0 +1,26 @@
+// Launch metadata for games shown in the group theme explorer.
+// Keep game entries separate from question decks so the normal deck launcher
+// never attempts to create a card session for a game.
+export const groupGames = [
+  {
+    id: 'minority-topic',
+    title: 'ひとりだけ違うお題',
+    subtitle: 'ヒントを出し合い、少数派を見つけるゲーム',
+    meta: '3〜8人 · 全6ラウンド',
+    href: '/minority-room.html?create=1',
+  },
+  {
+    id: 'match',
+    title: 'せーので一致！',
+    subtitle: '同じ答えを思い浮かべて、せーので答えるゲーム',
+    meta: '2〜8人 · 全6問',
+    href: '/social-game.html?game=match',
+  },
+  {
+    id: 'choice',
+    title: 'あなたなら、こっち！',
+    subtitle: '相手ならどっちを選ぶか、2人で当て合うゲーム',
+    meta: '2人 · 全6問',
+    href: '/social-game.html?game=choice',
+  },
+];

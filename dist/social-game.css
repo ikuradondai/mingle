@@ -1,0 +1,221 @@
+.social-shell {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 8px 24px 44px;
+}
+.social-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+}
+.social-brand img {
+  display: block;
+  width: 132px;
+  height: auto;
+}
+.social-exit {
+  color: var(--muted);
+  font-size: 13px;
+}
+.social-main {
+  display: grid;
+  gap: 16px;
+}
+.social-main h1 {
+  font-size: clamp(30px, 7vw, 48px);
+  overflow-wrap: anywhere;
+}
+#social-game-app[data-turn="0"] .social-main h1 {
+  color: var(--participant-0-fg);
+}
+#social-game-app[data-turn="1"] .social-main h1 {
+  color: var(--participant-1-fg);
+}
+.social-lead {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.social-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: clamp(24px, 6vw, 52px);
+  box-shadow: var(--shadow);
+  text-align: center;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+.stage-change {
+  animation: social-stage 0.22s ease-out;
+}
+.social-question {
+  margin: 0;
+  font-size: clamp(27px, 6vw, 44px);
+  line-height: 1.35;
+  font-weight: 800;
+}
+.social-kicker {
+  margin: 0 0 12px;
+  color: var(--blue);
+  font-weight: 900;
+}
+.social-actions {
+  display: grid;
+  gap: 10px;
+}
+.social-actions.two {
+  grid-template-columns: 1fr 1fr;
+}
+.social-actions button {
+  min-height: 54px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-weight: 900;
+  transition:
+    transform 0.12s ease,
+    filter 0.12s ease;
+}
+.social-actions button:active,
+.social-option button:active {
+  transform: scale(0.97);
+  filter: brightness(0.96);
+}
+.social-actions .primary {
+  border: 0;
+  background: var(--blue);
+  color: #fff;
+}
+.social-actions .match {
+  background: var(--coral);
+  border: 0;
+}
+.social-actions .split {
+  background: var(--lime);
+  border: 0;
+}
+.social-note {
+  color: var(--muted);
+  font-size: 14px;
+  text-align: center;
+}
+.social-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.social-names span {
+  padding: 6px 10px;
+  border-radius: 99px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.social-result {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border-left: 4px solid var(--blue);
+  background: #f3f7ff;
+  text-align: left;
+}
+.social-result strong {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.social-result span,
+.social-question,
+.social-lead,
+.social-note {
+  overflow-wrap: anywhere;
+}
+.social-list {
+  display: grid;
+  gap: 8px;
+}
+.social-handoff {
+  background: var(--blue-soft);
+  border-radius: 16px;
+  padding: 18px;
+  text-align: center;
+}
+.social-handoff strong {
+  font-size: 22px;
+}
+.social-option {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.social-option button {
+  text-align: left;
+  padding: 16px;
+  min-height: 56px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 800;
+  transition:
+    transform 0.12s ease,
+    background 0.12s ease;
+}
+.social-option button:focus-visible {
+  outline: 3px solid var(--lime);
+  outline-offset: 2px;
+}
+.social-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.social-footer button {
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font-weight: 900;
+}
+@keyframes social-stage {
+  from {
+    opacity: 0.35;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (max-width: 600px) {
+  .social-shell {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .social-actions.two {
+    grid-template-columns: 1fr;
+  }
+  .social-card {
+    padding: 28px 20px;
+  }
+  .social-option {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .social-card,
+  .stage-change,
+  .social-actions button,
+  .social-option button {
+    animation: none;
+    transition: none !important;
+  }
+  .social-actions button:active,
+  .social-option button:active {
+    transform: none;
+  }
+}

@@ -21,6 +21,8 @@ import { themeExampleForDeck } from "./theme-examples.js";
 import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText } from "./participant-rule.js";
 import { consumeMinorityAuthIntent, clearMinorityAuthIntent } from "./minority-auth-intent.js";
+import { groupGames } from "./data/game-registry.js";
+import { consumeSocialGameIntent, saveSocialGameIntent } from "./social-game-intent.js";
 const root = document.querySelector("#app");
 const state = {
   shared: null,
@@ -84,10 +86,31 @@ function clearLibraryReturnIntent() { try { sessionStorage.removeItem(LIBRARY_RE
 const venueOnboardingQuery = new URLSearchParams(location.search).get('venueOnboarding') === '1';
 const libraryQuery = new URLSearchParams(location.search).get('library') === '1';
 const minorityAuthQuery = new URLSearchParams(location.search).get('minorityAuth') === '1';
+const socialGameReturnQuery = new URLSearchParams(location.search).get('socialGameReturn') === '1';
 if (libraryQuery) { saveLibraryReturnIntent(); state.account.libraryReturn = true; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (venueOnboardingQuery) { clearLibraryReturnIntent(); saveVenueOnboardingIntent(); state.account.venueOnboarding = true; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 else { state.account.venueOnboarding = loadVenueOnboardingIntent(); if (!state.account.venueOnboarding && loadLibraryReturnIntent()) state.account.libraryReturn = true; }
 if (minorityAuthQuery) { state.account.open = true; state.account.status = 'ログイン後にルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
+if (socialGameReturnQuery) {
+  const returned = consumeSocialGameIntent();
+  if (returned) {
+    state.participants = [...returned.names];
+    state.groupParticipants = [...returned.names];
+    state.participantNameOrigin = null;
+    state.participantNameAutoValue = '';
+    state.participantNameUserEdited = true;
+    state.themeMode = 'single';
+    state.participantTab = 'group';
+    state.screen = 'decks';
+    state.themeExplorerShelf = 'game';
+    state.selectedDeckId = 'friends';
+    state.selectedDeckIds = ['friends'];
+    state.selectedMySetId = null;
+  }
+  const returnUrl = new URL(location.href);
+  returnUrl.searchParams.delete('socialGameReturn');
+  history.replaceState({}, '', `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`);
+}
 function saveAuthReturnIntent() {
   if (state.screen === "play" && state.session?.mode === "solo") {
     const sessionId = state.session.sessionId;
@@ -708,7 +731,8 @@ function frame(content, eyebrow = "Mingle.Cards", withHeader = true) { const sol
   const store = state.venue?.venue.storeUrl ? `<a class="text-button venue-store-link" href="${esc(state.venue.venue.storeUrl)}" target="_blank" rel="noopener noreferrer">店舗の公式サイト</a>` : "";
   const footer = state.venue ? `<div class="venue-footer-links">${store}<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button></div>` : `<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button>`;
   const landingHint = state.venue ? "テーマと人数を選んで、会話をはじめましょう。" : "質問内容は、参加者を入力して始めるまで表示されません。";
-  return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? (venueSet?.adultOnly && !displayAllowed ? "R18を含むテーマ" : title) : (blocked || (shared.adultOnly && !displayAllowed) ? "共有セット" : (shared.name || "共有セット")))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${!blocked && Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}${blocked ? "" : `<p class="account-hint">${landingHint}</p>`}${blockedPanel}${blocked ? "" : `<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${sharedDisplaySettings}${venueAgeTap}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${sharedSubmitDisabled() ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button>${state.venue ? `<a class="text-button" href="/minority-room.html?venue=${encodeURIComponent(state.venue.token || '')}">ひとりだけ違うお題で遊ぶ</a>` : ''}</form>`}${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
+  const venueGames = state.venue ? `<section aria-labelledby="venue-games-heading"><p class="eyebrow" id="venue-games-heading">ゲーム</p><div class="inline-actions"><button type="button" class="text-button" data-action="game-launch" data-game-id="match">せーので一致！</button><button type="button" class="text-button" data-action="game-launch" data-game-id="choice" ${state.participants.length === 2 ? '' : 'disabled'}>あなたなら、こっち！${state.participants.length === 2 ? '' : '（2人）'}</button><a class="text-button" href="/minority-room.html?venue=${encodeURIComponent(state.venue.token || '')}">ひとりだけ違うお題</a></div></section>` : '';
+  return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? (venueSet?.adultOnly && !displayAllowed ? "R18を含むテーマ" : title) : (blocked || (shared.adultOnly && !displayAllowed) ? "共有セット" : (shared.name || "共有セット")))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${!blocked && Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}${blocked ? "" : `<p class="account-hint">${landingHint}</p>`}${blockedPanel}${blocked ? "" : `<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${sharedDisplaySettings}${venueAgeTap}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${sharedSubmitDisabled() ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button>${state.venue ? venueGames : ''}</form>`}${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
 
 function participantsView() {
   syncAccountParticipantName();
@@ -1050,6 +1074,17 @@ function themeExplorerShelf(id, title, decksForShelf, options = {}) {
   const controls = state.themeExplorerView === 'list' ? '' : `<div class="theme-explorer-shelf-controls"><button type="button" class="icon-button" data-action="theme-shelf-scroll" data-target="${esc(id)}" data-direction="-1" aria-label="${esc(title)}を左へ" title="左へ">${actionIcon('left')}</button><button type="button" class="icon-button" data-action="theme-shelf-scroll" data-target="${esc(id)}" data-direction="1" aria-label="${esc(title)}を右へ" title="右へ">${actionIcon('right')}</button></div>`;
   return `<section class="theme-explorer-shelf" aria-labelledby="${esc(id)}-heading"><div class="theme-explorer-shelf-head"><h2 id="${esc(id)}-heading">${esc(title)}</h2>${controls}</div><div class="theme-explorer-track ${state.themeExplorerView === 'list' ? 'is-list' : ''}" id="${esc(id)}" tabindex="0" data-theme-rail>${cards}</div></section>`;
 }
+function themeGameCard(game, shelfId = 'game') {
+  const icon = '<svg viewBox="0 0 72 56" focusable="false"><rect x="18" y="8" width="38" height="40" rx="5" fill="currentColor" opacity=".28" transform="rotate(9 18 8)"/><rect x="11" y="10" width="38" height="40" rx="5" fill="currentColor" opacity=".9"/><rect x="24" y="17" width="38" height="40" rx="5" fill="#f07867" opacity=".92"/><path d="M34 28h17M34 34h11" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>';
+  const choiceBlocked = game.id === 'choice' && state.participants.length !== 2;
+  const meta = choiceBlocked ? '2人で遊べます' : game.meta;
+  return `<div class="theme-explorer-card-wrap"><button type="button" class="theme-explorer-card theme-game-card${choiceBlocked ? ' is-locked' : ''}" data-action="game-launch" data-game-id="${esc(game.id)}" data-theme-key="${esc(shelfId)}:${esc(game.id)}" aria-disabled="${choiceBlocked}" ${choiceBlocked ? 'disabled' : ''}><span class="theme-explorer-image-wrap theme-game-icon" aria-hidden="true">${icon}</span><span class="theme-explorer-card-body"><strong>${esc(game.title)}</strong><small>${esc(game.subtitle)}</small><span class="theme-explorer-meta">${esc(meta)}</span></span></button></div>`;
+}
+function themeGameShelf(games) {
+  const cards = games.map((game) => themeGameCard(game)).join('');
+  if (!cards) return themeExplorerEmpty();
+  return `<section class="theme-explorer-shelf" aria-labelledby="group-games-heading"><div class="theme-explorer-shelf-head"><h2 id="group-games-heading">ゲーム</h2></div><div class="theme-explorer-track ${state.themeExplorerView === 'list' ? 'is-list' : ''}" id="group-games" data-theme-rail>${cards}</div></section>`;
+}
 
 function themeExplorerUnique(decksForResult) {
   return [...new Map(decksForResult.map((deck) => [deck.id, deck])).values()];
@@ -1060,9 +1095,10 @@ function themeExplorerEmpty() {
 function themeTagMatches(id, tagFilter, bookmarkedIds, experiencedIds) {
   return tagFilter === 'bookmarked' ? bookmarkedIds.has(id) : tagFilter === 'experienced' ? experiencedIds.has(id) : true;
 }
-function themeExplorerToolbar({ solo = false, filters = '', mix = false } = {}) {
+function themeExplorerToolbar({ solo = false, filters = '', mix = false, hideTag = false } = {}) {
   const mixControl = mix ? `<label class="mode-switch compact-mode-switch"><input type="checkbox" data-mode-mixed ${state.themeMode === 'mixed' ? 'checked' : ''}/> <span>テーマミックス</span><small>2〜3テーマ</small></label>` : '';
-  return `<div class="theme-explorer-toolbar-row">${mixControl}<div class="theme-explorer-toolbar"><label class="theme-explorer-search"><span class="sr-only">テーマを検索</span><input type="search" data-theme-explorer-search value="${esc(state.themeExplorerQuery)}" placeholder="テーマを検索" autocomplete="off" /></label><select class="theme-explorer-tag-filter" data-theme-tag-filter aria-label="テーマのタグ"><option value="all" ${state.themeExplorerTagFilter === 'all' ? 'selected' : ''}>すべて</option><option value="bookmarked" ${state.themeExplorerTagFilter === 'bookmarked' ? 'selected' : ''}>保存済み</option><option value="experienced" ${state.themeExplorerTagFilter === 'experienced' ? 'selected' : ''}>体験済み</option></select><div class="theme-explorer-view" role="group" aria-label="表示形式"><button type="button" class="icon-button ${state.themeExplorerView === 'cards' ? 'is-active' : ''}" data-action="theme-view" data-view="cards" aria-pressed="${state.themeExplorerView === 'cards'}" title="カード表示">${actionIcon('grid')}</button><button type="button" class="icon-button ${state.themeExplorerView === 'list' ? 'is-active' : ''}" data-action="theme-view" data-view="list" aria-pressed="${state.themeExplorerView === 'list'}" title="リスト表示">${actionIcon('list')}</button></div></div></div>${filters ? `<div class="filter-chips theme-explorer-filters" role="toolbar" aria-label="テーマカテゴリ">${filters}</div>` : ''}`;
+  const tagControl = hideTag ? '' : `<select class="theme-explorer-tag-filter" data-theme-tag-filter aria-label="テーマのタグ"><option value="all" ${state.themeExplorerTagFilter === 'all' ? 'selected' : ''}>すべて</option><option value="bookmarked" ${state.themeExplorerTagFilter === 'bookmarked' ? 'selected' : ''}>保存済み</option><option value="experienced" ${state.themeExplorerTagFilter === 'experienced' ? 'selected' : ''}>体験済み</option></select>`;
+  return `<div class="theme-explorer-toolbar-row">${mixControl}<div class="theme-explorer-toolbar"><label class="theme-explorer-search"><span class="sr-only">テーマを検索</span><input type="search" data-theme-explorer-search value="${esc(state.themeExplorerQuery)}" placeholder="テーマを検索" autocomplete="off" /></label>${tagControl}<div class="theme-explorer-view" role="group" aria-label="表示形式"><button type="button" class="icon-button ${state.themeExplorerView === 'cards' ? 'is-active' : ''}" data-action="theme-view" data-view="cards" aria-pressed="${state.themeExplorerView === 'cards'}" title="カード表示">${actionIcon('grid')}</button><button type="button" class="icon-button ${state.themeExplorerView === 'list' ? 'is-active' : ''}" data-action="theme-view" data-view="list" aria-pressed="${state.themeExplorerView === 'list'}" title="リスト表示">${actionIcon('list')}</button></div></div></div>${filters ? `<div class="filter-chips theme-explorer-filters" role="toolbar" aria-label="テーマカテゴリ">${filters}</div>` : ''}`;
 }
 function themeExplorerSelectedBar({ solo = false, selected, selectedMySet = null, mixed = false, showSettings = false, optionsOpen = state.themeOptionsOpen, canStart = true, participantRule = 'group' } = {}) {
   const mixedLabel = state.selectedDeckIds.map((id) => [...decks, ...soloDecks].find((deck) => deck.id === id)?.title).filter(Boolean).join('・');
@@ -1170,6 +1206,8 @@ function decksView() {
   const historyRows = history.map((deck) => ({ themeIds: [deck.id] }));
   const filters = Object.entries(groupLabels).filter(([id]) => id !== 'adult' || (!mixed && ageConfirmed() && r18DisplayVisible())).map(([id, label]) => `<button type="button" class="filter-chip ${((mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf) === id) ? 'is-active' : ''}" data-theme-category="${esc(id)}">${esc(label)}</button>`).join('');
   const categoryId = mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf;
+  const gameQuery = state.themeExplorerQuery.trim().toLocaleLowerCase('ja-JP');
+  const visibleGames = groupGames.filter((game) => !gameQuery || `${game.title} ${game.subtitle} ${game.meta}`.toLocaleLowerCase('ja-JP').includes(gameQuery));
   const categoryDecks = categoryId !== 'all' && categoryId !== 'adult' ? regular.filter((deck) => themeGroups[deck.id]?.includes(categoryId)) : categoryId === 'adult' ? adult : regular;
   const recommendedIds = state.participants.length >= 3
     ? ['friends', 'family-reunion', 'team', 'group-mixer', 'party-first-meeting', 'business-meetup', 'bar-first-meeting', 'date']
@@ -1181,7 +1219,7 @@ function decksView() {
     isAvailable: (deck) => canUseDeck(deck),
     categoryOf: (deck) => themeGroups[deck?.id] || [],
   });
-  const groupCategoryShelves = Object.entries(groupLabels).filter(([id]) => !['all', 'adult'].includes(id)).map(([id, label]) => themeExplorerShelf(`group-category-${id}`, label, regular.filter((deck) => themeGroups[deck.id]?.includes(id)), { mixed })).join('');
+  const groupCategoryShelves = Object.entries(groupLabels).filter(([id]) => !['all', 'adult', 'game'].includes(id)).map(([id, label]) => themeExplorerShelf(`group-category-${id}`, label, regular.filter((deck) => themeGroups[deck.id]?.includes(id)), { mixed })).join('');
   const mySetEntries = mySets.map((set) => ({ id: `set:${set.id}`, title: set.name || 'マイセット', __mySet: set })).filter(tagMatches);
   const historyEntries = historyIds.map((id) => {
     const deck = history.find((item) => item.id === id);
@@ -1210,10 +1248,13 @@ function decksView() {
     : [];
   const groupFlat = themeExplorerUnique([...(categoryId === 'all' ? listPool : categoryDecks), ...visibleMySetEntries]);
   const groupNeedsFlat = state.themeExplorerView === 'list' || query.length > 0 || categoryId !== 'all' || state.themeExplorerTagFilter !== 'all';
-  const groupBrowse = groupNeedsFlat
-    ? (groupFlat.length ? themeExplorerShelf('group-filtered', categoryId === 'all' ? 'テーマ一覧' : categoryId === 'adult' ? 'R18のテーマ' : 'カテゴリ別', groupFlat, { mixed, selectedMySet }) : themeExplorerEmpty())
-    : `${themeExplorerShelf('recommended', 'おすすめ', recommended.filter(matches), { mixed, selectedMySet })}${historyEntries.length ? themeExplorerShelf('history', '最近遊んだテーマ', historyEntries, { mixed, selectedMySet }) : ''}${mySetEntries.length ? themeExplorerShelf('group-mysets', 'マイセット', mySetEntries, { mixed, selectedMySet }) : ''}${groupCategoryShelves}${adultShelf}`;
-  return frame(`<div class="theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>質問テーマを選ぶ</h1><a class="text-button minority-game-entry" href="/minority-room.html?create=1">ゲーム：ひとりだけ違うお題（3〜8人）</a></div>${!isRegisteredUser() ? `<p class="guest-theme-note">無料登録で、さらに多くのテーマが使えます。</p>` : ''}${themeExplorerToolbar({ filters, mix: true })}${groupBrowse}${controls}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'Mingle.Cards', true);
+  const groupBrowse = categoryId === 'game'
+    ? themeGameShelf(visibleGames)
+    : groupNeedsFlat
+    ? `${groupFlat.length ? themeExplorerShelf('group-filtered', categoryId === 'all' ? 'テーマ一覧' : categoryId === 'adult' ? 'R18のテーマ' : 'カテゴリ別', groupFlat, { mixed, selectedMySet }) : (categoryId === 'all' && state.themeExplorerTagFilter === 'all' && visibleGames.length ? '' : themeExplorerEmpty())}${categoryId === 'all' && state.themeExplorerTagFilter === 'all' && visibleGames.length ? themeGameShelf(visibleGames) : ''}`
+    : `${themeExplorerShelf('recommended', 'おすすめ', recommended.filter(matches), { mixed, selectedMySet })}${historyEntries.length ? themeExplorerShelf('history', '最近遊んだテーマ', historyEntries, { mixed, selectedMySet }) : ''}${mySetEntries.length ? themeExplorerShelf('group-mysets', 'マイセット', mySetEntries, { mixed, selectedMySet }) : ''}${groupCategoryShelves}${adultShelf}${state.themeExplorerTagFilter === 'all' && visibleGames.length ? themeGameShelf(visibleGames) : ''}`;
+  const gameCategory = categoryId === 'game';
+  return frame(`<div class="theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>質問テーマを選ぶ</h1></div>${!isRegisteredUser() ? `<p class="guest-theme-note">無料登録で、さらに多くのテーマが使えます。</p>` : ''}${themeExplorerToolbar({ filters, mix: !gameCategory, hideTag: gameCategory })}${state.error ? `<p class="form-error" role="alert">${esc(state.error)}</p>` : ''}${groupBrowse}${gameCategory ? '' : controls}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'Mingle.Cards', true);
 }
 
 function participantChips(session) { return session.participants.map((name, index) => { const initial = Array.from(name.trim())[0] ?? '・'; return `<span class="participant-chip participant-color-${index} ${index === currentParticipantIndex(session) ? "is-current" : ""}"><i aria-hidden="true">${esc(initial)}</i>${esc(name)}</span>`;
@@ -1917,11 +1958,34 @@ function restoreGroupHomeState() {
   else state.groupParticipants = [...state.participants];
   state.themeMode = "single"; state.participantTab = "group"; state.selectedDeckId = "friends"; state.selectedDeckIds = ["friends"]; state.selectedMySetId = null; state.session = null;
 }
+function launchSocialGame(game) {
+  if (!game?.href) return;
+  if (game.id === 'choice' && state.participants.length !== 2) {
+    state.error = '「あなたなら、こっち！」は2人で遊べます。'; render(); return;
+  }
+  let names = state.participants.map((name, index) => {
+    const trimmed = String(name || '').trim();
+    return state.venue && !trimmed ? `参加者${index + 1}` : trimmed;
+  });
+  try { names = normalizeParticipants(names); }
+  catch { state.error = 'ゲームを始める前に、参加者の呼び名を入力してください。'; render(); return; }
+  const venueToken = state.venue?.token || '';
+  if (!saveSocialGameIntent({ gameId: game.id, names, venueToken })) {
+    state.error = 'ゲームを開始できませんでした。もう一度お試しください。'; render(); return;
+  }
+  location.assign(game.href);
+}
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
   if (action === "audio-toggle") { event.stopPropagation(); state.focusAction = "audio-toggle"; toggleCardAudio(); render(); return; }
   if (action === "theme-bookmark") { event.stopPropagation(); const id = event.currentTarget.dataset.bookmarkId; toggleThemeExplorerBookmark(id, state.account.user?.id); state.focusSelector = `[data-action="theme-bookmark"][data-bookmark-id="${CSS.escape(id)}"]`; render(); return; }
   if (action === "theme-experienced") { event.stopPropagation(); const id = event.currentTarget.dataset.experiencedId; toggleThemeExplorerExperienced(id, state.account.user?.id); state.focusSelector = `[data-action="theme-experienced"][data-experienced-id="${CSS.escape(id)}"]`; render(); return; }
+  if (action === "game-launch") {
+    const game = groupGames.find((item) => item.id === event.currentTarget.dataset.gameId);
+    if (game?.id === 'match' || game?.id === 'choice') launchSocialGame(game);
+    else if (game?.href) location.assign(game.href);
+    return;
+  }
   if (state.busy && action !== "continue" && action !== "home") return;
   state.focusAction = action;
   if (action === "theme-select") {

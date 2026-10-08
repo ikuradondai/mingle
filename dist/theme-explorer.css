@@ -61,6 +61,8 @@
 .theme-explorer-image { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; background: #f6eadb; }
 .theme-explorer-card-body { display: grid; gap: 4px; padding: 10px 12px 12px; min-width: 0; }
 .theme-explorer-image-wrap { position: relative; display: block; min-width: 0; }
+.theme-game-icon { display: grid; place-items: center; min-height: 132px; color: var(--blue); background: linear-gradient(135deg, rgba(23,105,232,.12), rgba(245,194,66,.24)); }
+.theme-game-icon svg { width: 52px; height: 52px; }
 .theme-explorer-label { position: absolute; left: 8px; bottom: 8px; max-width: calc(100% - 16px); padding: 3px 6px; color: #fff; background: rgba(20,33,61,.88); font-size: 11px; font-weight: 800; line-height: 1.2; letter-spacing: .01em; }
 .theme-explorer-label:empty { display: none; }
 .theme-explorer-card-body strong { font-size: 15px; line-height: 1.3; }
