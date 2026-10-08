@@ -21,6 +21,7 @@ import { themeExampleForDeck } from "./theme-examples.js";
 import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText } from "./participant-rule.js";
 import { consumeMinorityAuthIntent, clearMinorityAuthIntent } from "./minority-auth-intent.js";
+import { gameCardImage } from "./game-card-images.js";
 import { groupGames } from "./data/game-registry.js";
 import { consumeSocialGameIntent, saveSocialGameIntent } from "./social-game-intent.js";
 const root = document.querySelector("#app");
@@ -1078,7 +1079,8 @@ function themeGameCard(game, shelfId = 'game') {
   const icon = '<svg viewBox="0 0 72 56" focusable="false"><rect x="18" y="8" width="38" height="40" rx="5" fill="currentColor" opacity=".28" transform="rotate(9 18 8)"/><rect x="11" y="10" width="38" height="40" rx="5" fill="currentColor" opacity=".9"/><rect x="24" y="17" width="38" height="40" rx="5" fill="#f07867" opacity=".92"/><path d="M34 28h17M34 34h11" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>';
   const choiceBlocked = game.id === 'choice' && state.participants.length !== 2;
   const meta = choiceBlocked ? '2人で遊べます' : game.meta;
-  return `<div class="theme-explorer-card-wrap"><button type="button" class="theme-explorer-card theme-game-card${choiceBlocked ? ' is-locked' : ''}" data-action="game-launch" data-game-id="${esc(game.id)}" data-theme-key="${esc(shelfId)}:${esc(game.id)}" aria-disabled="${choiceBlocked}" ${choiceBlocked ? 'disabled' : ''}><span class="theme-explorer-image-wrap theme-game-icon" aria-hidden="true">${icon}</span><span class="theme-explorer-card-body"><strong>${esc(game.title)}</strong><small>${esc(game.subtitle)}</small><span class="theme-explorer-meta">${esc(meta)}</span></span></button></div>`;
+  const imageSrc = gameCardImage(game.id); const image = imageSrc ? `<span class="theme-explorer-image-wrap theme-game-image-wrap"><img class="theme-explorer-image theme-game-image" src="${esc(imageSrc)}" alt="" loading="lazy" decoding="async" width="960" height="640" /></span>` : `<span class="theme-explorer-image-wrap theme-game-icon" aria-hidden="true">${icon}</span>`;
+  return `<div class="theme-explorer-card-wrap"><button type="button" class="theme-explorer-card theme-game-card${choiceBlocked ? ' is-locked' : ''}" data-action="game-launch" data-game-id="${esc(game.id)}" data-theme-key="${esc(shelfId)}:${esc(game.id)}" aria-disabled="${choiceBlocked}" ${choiceBlocked ? 'disabled' : ''}>${image}<span class="theme-explorer-card-body"><strong>${esc(game.title)}</strong><small>${esc(game.subtitle)}</small><span class="theme-explorer-meta">${esc(meta)}</span></span></button></div>`;
 }
 function themeGameShelf(games) {
   const cards = games.map((game) => themeGameCard(game)).join('');
