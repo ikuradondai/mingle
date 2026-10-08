@@ -35,10 +35,13 @@ test('admin diagnostics classify configuration without exposing secrets', () => 
   assert.match(missingSecret.stderr, /reason=config_missing:session_secret/);
   assert.doesNotMatch(missingSecret.stderr, /p{32}/);
 
-  const weak = run({ ADMIN_PASSWORD: 'p'.repeat(8), ADMIN_SESSION_SECRET: 's'.repeat(32), UPSTASH_REDIS_REST_URL: 'https://redis.invalid', UPSTASH_REDIS_REST_TOKEN: 'opaque' });
-  assert.equal(weak.result.status, 503);
-  assert.match(weak.stderr, /reason=config_weak:password/);
-  assert.doesNotMatch(weak.stderr, /p{8}|s{32}|opaque/);
+  const shortPassword = run({ ADMIN_PASSWORD: 'p'.repeat(8), ADMIN_SESSION_SECRET: 's'.repeat(32), UPSTASH_REDIS_REST_URL: 'https://redis.invalid', UPSTASH_REDIS_REST_TOKEN: 'opaque' }, 'success', 'normal', { password: 'p'.repeat(8) });
+  assert.deepEqual(shortPassword.result, { status: 200, hasCookie: true, redisCalls: 1 });
+  assert.equal(shortPassword.stderr, '');
+
+  const shortPasswordWrong = run({ ADMIN_PASSWORD: 'p'.repeat(8), ADMIN_SESSION_SECRET: 's'.repeat(32), UPSTASH_REDIS_REST_URL: 'https://redis.invalid', UPSTASH_REDIS_REST_TOKEN: 'opaque' }, 'success', 'normal', { password: 'q'.repeat(8) });
+  assert.equal(shortPasswordWrong.result.status, 401);
+  assert.equal(shortPasswordWrong.stderr, '');
 
   const weakSecret = run({ ADMIN_PASSWORD: 'p'.repeat(32), ADMIN_SESSION_SECRET: 's'.repeat(8), UPSTASH_REDIS_REST_URL: 'https://redis.invalid', UPSTASH_REDIS_REST_TOKEN: 'opaque' });
   assert.equal(weakSecret.result.status, 503);

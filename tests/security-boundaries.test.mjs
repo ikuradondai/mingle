@@ -14,17 +14,17 @@ function child(source, extra = {}, keepRedis = false) {
   return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
 }
 
-test('production cookie flags and weak password fail closed without exposing values', () => {
+test('production cookie flags allow configured short password and keep weak session secret closed', () => {
   const result = child(`
     delete process.env.NODE_ENV; process.env.VERCEL='1'; process.env.ADMIN_SESSION_SECRET='s'.repeat(32); process.env.ADMIN_PASSWORD='short'; process.env.ANALYTICS_LOCAL_STORE='0'; process.env.UPSTASH_REDIS_REST_URL='https://fake.invalid'; process.env.UPSTASH_REDIS_REST_TOKEN='opaque-token';
     globalThis.fetch=async()=>new Response(JSON.stringify([{result:1}]),{status:200});
     const { setCookie } = await import('./server-side/http.mjs'); const { sessionHandler } = await import('./server-side/admin-api.mjs');
     const headers={}; setCookie({setHeader(k,v){headers[k]=v}}, 'opaque-test-token', 10);
     async function login(password){ const req={method:'POST',url:'/api/admin/session',headers:{'content-type':'application/json'},body:{password}}; let status; const out={}; const res={writeHead(c,h){status=c;Object.assign(out,h||{})},setHeader(k,v){out[k]=v},end(){}}; await sessionHandler(req,res); return status; }
-    const strong='a'.repeat(32); process.env.ADMIN_PASSWORD=strong; const baseline=await login(strong); process.env.ADMIN_PASSWORD='short'; const weakPassword=await login(strong); process.env.ADMIN_PASSWORD=strong; process.env.ADMIN_SESSION_SECRET='short'; const weakSecret=await login(strong);
-    console.log(JSON.stringify({secure:String(headers['Set-Cookie']).includes('Secure'), strict:String(headers['Set-Cookie']).includes('SameSite=Strict'), path:String(headers['Set-Cookie']).includes('Path=/'), host:String(headers['Set-Cookie']).startsWith('__Host-mingle_admin='), httpOnly:String(headers['Set-Cookie']).includes('HttpOnly'), noDomain:!String(headers['Set-Cookie']).includes('Domain='), baseline, weakPassword, weakSecret}));
+    const strong='a'.repeat(32); process.env.ADMIN_PASSWORD=strong; const baseline=await login(strong); process.env.ADMIN_PASSWORD='short'; const shortPassword=await login('short'); const wrongPassword=await login('wrong'); process.env.ADMIN_SESSION_SECRET='short'; const weakSecret=await login('short');
+    console.log(JSON.stringify({secure:String(headers['Set-Cookie']).includes('Secure'), strict:String(headers['Set-Cookie']).includes('SameSite=Strict'), path:String(headers['Set-Cookie']).includes('Path=/'), host:String(headers['Set-Cookie']).startsWith('__Host-mingle_admin='), httpOnly:String(headers['Set-Cookie']).includes('HttpOnly'), noDomain:!String(headers['Set-Cookie']).includes('Domain='), baseline, shortPassword, wrongPassword, weakSecret}));
   `, {}, true);
-  assert.deepEqual(result, { secure: true, strict: true, path: true, host: true, httpOnly: true, noDomain: true, baseline: 200, weakPassword: 503, weakSecret: 503 });
+  assert.deepEqual(result, { secure: true, strict: true, path: true, host: true, httpOnly: true, noDomain: true, baseline: 200, shortPassword: 200, wrongPassword: 401, weakSecret: 503 });
 });
 
 test('production Redis failure returns 503 from tracking rate limiter', () => {

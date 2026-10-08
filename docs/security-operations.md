@@ -10,7 +10,7 @@ This runbook records the rotation order and the provider checks required before 
 4. Deploy and run the smallest safe health checks. Confirm the application starts, protected admin/session flows work, token decrypt/read paths work where applicable, and scheduled/webhook authentication accepts the new value. Do not test against production Redis from this local workspace.
 5. Revoke or remove the old value only after the deployment is healthy and no old workers remain. Record the rotation date and affected key name without recording the value.
 
-Before a production release, verify the required key names are present and confirm `ADMIN_PASSWORD` is at least 32 characters. The production admin API intentionally fails closed when that minimum is not met, so a missing or short value is a release blocker and can lock operators out.
+Before a production release, verify the required key names are present and confirm `ADMIN_SESSION_SECRET` is at least 32 characters. The production admin API intentionally fails closed when the password is missing or the session secret is too short, so either condition is a release blocker and can lock operators out.
 
 The linked Vercel project can be checked read-only with `vercel env ls --format json`; this returns environment-variable names without secret values. Provision `SHARED_TOKEN_ENCRYPTION_KEY` through the Vercel dashboard or `vercel env add SHARED_TOKEN_ENCRYPTION_KEY production --sensitive` using an approved secret-input method. Never pass a real value in a committed file or shell history. The CLI can confirm presence but cannot safely report the stored secret length; validate the required length through the deployment release check or provider UI without printing the value.
 

@@ -7,7 +7,6 @@ const themes = THEME_LABELS;
 function configurationIssue() {
   if (!process.env.ADMIN_PASSWORD) return 'config_missing:password';
   if (!process.env.ADMIN_SESSION_SECRET) return 'config_missing:session_secret';
-  if (isProduction() && process.env.ADMIN_PASSWORD.length < 32) return 'config_weak:password';
   if (isProduction() && process.env.ADMIN_SESSION_SECRET.length < 32) return 'config_weak:session_secret';
   if (!persistentStoreAvailable()) return 'store_unconfigured';
   return '';

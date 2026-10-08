@@ -14,9 +14,9 @@ Group join, preview, and action endpoints also have room/IP aggregate limits to 
 
 ## Admin sessions
 
-Admin sessions remain signed, expiring tokens. In Redis deployments, logout atomically records a hash of the token with its remaining lifetime and subsequent verification rejects it. Development and tests use an in-process fallback. Production requires `ADMIN_PASSWORD` and `ADMIN_SESSION_SECRET`, each at least 32 characters; shorter values fail closed. The production cookie is `__Host-mingle_admin` with Secure, HttpOnly, Path=/, and SameSite=Strict. The legacy cookie is not accepted for authentication in production and is cleared during logout.
+Admin sessions remain signed, expiring tokens. In Redis deployments, logout atomically records a hash of the token with its remaining lifetime and subsequent verification rejects it. Development and tests use an in-process fallback. Production requires `ADMIN_PASSWORD` and an `ADMIN_SESSION_SECRET` of at least 32 characters; a missing password or a short session secret fails closed. The production cookie is `__Host-mingle_admin` with Secure, HttpOnly, Path=/, and SameSite=Strict. The legacy cookie is not accepted for authentication in production and is cleared during logout.
 
-Before deploying, verify the presence of `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, and the configured Redis URL/token by key name only. A production password shorter than 32 characters intentionally returns configuration failure; set the required value before rollout to avoid an administrative lockout.
+Before deploying, verify the presence of `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, and the configured Redis URL/token by key name only. Keep the session secret at 32 characters or longer to avoid an administrative lockout.
 
 ## Response headers and CSP rollout
 
