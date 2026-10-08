@@ -112,10 +112,12 @@ export const accountApi = {
   marketplaceLike: (payload) => marketplaceRequest('/like', { method: 'POST', body: payload }),
   marketplaceWithdraw: (payload) => marketplaceRequest('/withdraw', { method: 'POST', body: payload }),
   createGroupRoom: (deckId, hostName, setId, includeR18, adultConfirmed, participantsAdultAttested) => groupRequest('/rooms', { method: 'POST', body: { ...(deckId ? { deckId } : {}), ...(setId ? { setId } : {}), hostName, includeR18: includeR18 === true, adultConfirmed: adultConfirmed === true, participantsAdultAttested: participantsAdultAttested === true } }),
+  createMinorityRoom: (hostName, venueToken) => groupRequest('/rooms', { method: 'POST', body: { gameType: 'minority_topic', hostName, ...(venueToken ? { venueToken } : {}) } }),
   groupState: (id, memberToken) => groupRequest(`/rooms/${encodeURIComponent(id)}`, memberToken ? { headers: { 'x-group-member-token': memberToken } } : {}),
   joinGroupRoom: (id, inviteToken, name, adultConfirmed, memberSecret, ageConfirmed) => groupRequest(`/rooms/${encodeURIComponent(id)}/join`, { method: 'POST', body: { inviteToken, name, ageConfirmed: ageConfirmed === true, adultConfirmed: adultConfirmed === true, ...(memberSecret ? { memberSecret } : {}) } }),
   previewGroupRoom: (id, inviteToken) => groupRequest(`/rooms/${encodeURIComponent(id)}/preview`, { method: 'POST', body: { inviteToken } }),
   groupAction: (id, memberToken, action, revision) => groupRequest(`/rooms/${encodeURIComponent(id)}/action`, { method: 'POST', body: { action, revision }, headers: memberToken ? { 'x-group-member-token': memberToken } : {} }),
+  minorityAction: (id, memberToken, action, revision, targetId, roundNo) => groupRequest(`/rooms/${encodeURIComponent(id)}/action`, { method: 'POST', body: { action, revision, ...(Number.isInteger(roundNo) ? { roundNo } : {}), ...(targetId ? { targetId } : {}) }, headers: memberToken ? { 'x-group-member-token': memberToken } : {} }),
 };
 export function cardPayload(card, deckId) { return { id: card.id, deckId: deckId || card.sourceDeckId || null }; }
 export function createAccountClientForTest({ fetchImpl, sdk, locationRef = { origin: 'http://localhost:5180', pathname: '/' } }) { sdkLoader = async () => sdk; fetcher = fetchImpl; globalThis.location ||= locationRef; return { config: accountConfig, discover: () => discoverAccountConfig({ fetchImpl }), api: accountApi }; }

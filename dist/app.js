@@ -20,6 +20,7 @@ import { loadRecommendationLabels, recommendationLabel } from "./recommendation-
 import { themeExampleForDeck } from "./theme-examples.js";
 import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText } from "./participant-rule.js";
+import { consumeMinorityAuthIntent, clearMinorityAuthIntent } from "./minority-auth-intent.js";
 const root = document.querySelector("#app");
 const state = {
   shared: null,
@@ -82,9 +83,11 @@ function loadLibraryReturnIntent() { try { const value = JSON.parse(sessionStora
 function clearLibraryReturnIntent() { try { sessionStorage.removeItem(LIBRARY_RETURN_KEY); } catch {} state.account.libraryReturn = false; }
 const venueOnboardingQuery = new URLSearchParams(location.search).get('venueOnboarding') === '1';
 const libraryQuery = new URLSearchParams(location.search).get('library') === '1';
+const minorityAuthQuery = new URLSearchParams(location.search).get('minorityAuth') === '1';
 if (libraryQuery) { saveLibraryReturnIntent(); state.account.libraryReturn = true; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (venueOnboardingQuery) { clearLibraryReturnIntent(); saveVenueOnboardingIntent(); state.account.venueOnboarding = true; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 else { state.account.venueOnboarding = loadVenueOnboardingIntent(); if (!state.account.venueOnboarding && loadLibraryReturnIntent()) state.account.libraryReturn = true; }
+if (minorityAuthQuery) { state.account.open = true; state.account.status = 'ログイン後にルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 function saveAuthReturnIntent() {
   if (state.screen === "play" && state.session?.mode === "solo") {
     const sessionId = state.session.sessionId;
@@ -705,7 +708,7 @@ function frame(content, eyebrow = "Mingle.Cards", withHeader = true) { const sol
   const store = state.venue?.venue.storeUrl ? `<a class="text-button venue-store-link" href="${esc(state.venue.venue.storeUrl)}" target="_blank" rel="noopener noreferrer">店舗の公式サイト</a>` : "";
   const footer = state.venue ? `<div class="venue-footer-links">${store}<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button></div>` : `<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button>`;
   const landingHint = state.venue ? "テーマと人数を選んで、会話をはじめましょう。" : "質問内容は、参加者を入力して始めるまで表示されません。";
-  return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? (venueSet?.adultOnly && !displayAllowed ? "R18を含むテーマ" : title) : (blocked || (shared.adultOnly && !displayAllowed) ? "共有セット" : (shared.name || "共有セット")))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${!blocked && Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}${blocked ? "" : `<p class="account-hint">${landingHint}</p>`}${blockedPanel}${blocked ? "" : `<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${sharedDisplaySettings}${venueAgeTap}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${sharedSubmitDisabled() ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button></form>`}${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
+  return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? (venueSet?.adultOnly && !displayAllowed ? "R18を含むテーマ" : title) : (blocked || (shared.adultOnly && !displayAllowed) ? "共有セット" : (shared.name || "共有セット")))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${!blocked && Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}${blocked ? "" : `<p class="account-hint">${landingHint}</p>`}${blockedPanel}${blocked ? "" : `<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${sharedDisplaySettings}${venueAgeTap}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${sharedSubmitDisabled() ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button>${state.venue ? `<a class="text-button" href="/minority-room.html?venue=${encodeURIComponent(state.venue.token || '')}">ひとりだけ違うお題で遊ぶ</a>` : ''}</form>`}${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
 
 function participantsView() {
   syncAccountParticipantName();
@@ -1210,7 +1213,7 @@ function decksView() {
   const groupBrowse = groupNeedsFlat
     ? (groupFlat.length ? themeExplorerShelf('group-filtered', categoryId === 'all' ? 'テーマ一覧' : categoryId === 'adult' ? 'R18のテーマ' : 'カテゴリ別', groupFlat, { mixed, selectedMySet }) : themeExplorerEmpty())
     : `${themeExplorerShelf('recommended', 'おすすめ', recommended.filter(matches), { mixed, selectedMySet })}${historyEntries.length ? themeExplorerShelf('history', '最近遊んだテーマ', historyEntries, { mixed, selectedMySet }) : ''}${mySetEntries.length ? themeExplorerShelf('group-mysets', 'マイセット', mySetEntries, { mixed, selectedMySet }) : ''}${groupCategoryShelves}${adultShelf}`;
-  return frame(`<div class="theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>質問テーマを選ぶ</h1></div>${!isRegisteredUser() ? `<p class="guest-theme-note">無料登録で、さらに多くのテーマが使えます。</p>` : ''}${themeExplorerToolbar({ filters, mix: true })}${groupBrowse}${controls}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'Mingle.Cards', true);
+  return frame(`<div class="theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>質問テーマを選ぶ</h1><a class="text-button minority-game-entry" href="/minority-room.html?create=1">ゲーム：ひとりだけ違うお題（3〜8人）</a></div>${!isRegisteredUser() ? `<p class="guest-theme-note">無料登録で、さらに多くのテーマが使えます。</p>` : ''}${themeExplorerToolbar({ filters, mix: true })}${groupBrowse}${controls}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'Mingle.Cards', true);
 }
 
 function participantChips(session) { return session.participants.map((name, index) => { const initial = Array.from(name.trim())[0] ?? '・'; return `<span class="participant-chip participant-color-${index} ${index === currentParticipantIndex(session) ? "is-current" : ""}"><i aria-hidden="true">${esc(initial)}</i>${esc(name)}</span>`;
@@ -1448,6 +1451,8 @@ async function loadAccount() {
     state.account.profileDraft = state.account.user?.displayName || "";
     syncAccountParticipantName();
     if (state.account.user) {
+      const minorityIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeMinorityAuthIntent();
+      if (minorityIntent) { state.account.open = false; location.replace(`/minority-room.html?create=1${minorityIntent.venueToken ? `&venue=${encodeURIComponent(minorityIntent.venueToken)}` : ''}`); return; }
       intentFailed = await applyAdultIntent();
       if (!current()) return;
       restoreAuthReturnIntent();
@@ -1987,7 +1992,7 @@ async function handleAction(event) {
     state.account.avatarRevision += 1;
     state.account.avatarDraft = "";
     state.account.avatarError = "";
-    if (state.account.venueOnboarding) clearVenueOnboardingIntent(); if (state.account.libraryReturn) clearLibraryReturnIntent(); clearAccountShare({ close: true }); state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.focusAction = "account";
+    if (state.account.venueOnboarding) clearVenueOnboardingIntent(); if (state.account.libraryReturn) clearLibraryReturnIntent(); clearMinorityAuthIntent(); clearAccountShare({ close: true }); state.account.open = false; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.focusAction = "account";
     if (state.account.enabled && !state.account.authReady) loadAccount();
     render();
     return;

@@ -7,6 +7,7 @@ import { AGE_ERRORS, requireAdultConfirmed } from './age-confirmation.mjs';
 import { normalizeCreatorDesign } from '../dist/creator-metadata.js';
 import { participantRuleForDeck, participantRuleForSavedSet } from '../dist/participant-rule.js';
 import { consumeRate, persistentStoreAvailable } from './store.mjs';
+import { minorityTopics } from '../dist/data/minority-topics.js';
 
 const MIN = 2;
 const MAX = 8;
@@ -36,9 +37,9 @@ async function rest(config, path, options = {}, fetchImpl = fetch) {
   if (!response.ok) {
     const message = data?.message || data?.hint || data?.details || (typeof data === 'string' ? data : '');
     const forbidden = ['ADULT_CONSENT_REQUIRED', AGE_ERRORS.required, AGE_ERRORS.attestation, AGE_ERRORS.participant];
-    const known = ['GROUP_FULL', 'GROUP_EXPIRED', 'GROUP_ALREADY_STARTED', ...forbidden, 'DUPLICATE'];
+    const known = ['GROUP_FULL', 'GROUP_EXPIRED', 'GROUP_ALREADY_STARTED', 'GROUP_STALE', 'FORBIDDEN', 'MINORITY_SELF_VOTE', 'MINORITY_ALREADY_VOTED', 'MINORITY_VOTE_CLOSED', 'MINORITY_PHASE', 'MINORITY_STALE_ROUND', 'MINORITY_PAIRS_EXHAUSTED', 'MINORITY_NOT_STARTED', ...forbidden, 'DUPLICATE'];
     const code = known.find((item) => String(message).includes(item)) || (response.status === 404 ? 'NOT_FOUND' : 'GROUP_UNAVAILABLE');
-    const status = code === 'GROUP_EXPIRED' ? 410 : forbidden.includes(code) ? 403 : ['GROUP_FULL', 'GROUP_ALREADY_STARTED', 'DUPLICATE'].includes(code) ? 409 : response.status === 404 ? 404 : 502;
+    const status = code === 'GROUP_EXPIRED' ? 410 : forbidden.includes(code) || code === 'FORBIDDEN' ? 403 : ['GROUP_FULL', 'GROUP_ALREADY_STARTED', 'DUPLICATE', 'GROUP_STALE', 'MINORITY_SELF_VOTE', 'MINORITY_ALREADY_VOTED', 'MINORITY_VOTE_CLOSED', 'MINORITY_PHASE', 'MINORITY_STALE_ROUND', 'MINORITY_PAIRS_EXHAUSTED', 'MINORITY_NOT_STARTED'].includes(code) ? 409 : response.status === 404 ? 404 : 502;
     throw fail(status, code);
   }
   return data;
@@ -48,6 +49,7 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
   const config = accountConfig(env);
   const service = config?.serviceKey ? { ...config, key: config.serviceKey } : null;
   let lastCleanup = 0;
+  const MINORITY_MAX_ROUNDS = 6;
   async function ownerRate(ownerId) { if (!persistentStoreAvailable()) { if (env.NODE_ENV === 'production' || env.VERCEL) throw fail(503, 'RATE_LIMIT_UNAVAILABLE'); return; } try { if (await consumeRate(`group-create:${ownerId}`) > 10) throw fail(429, 'RATE_LIMITED'); } catch (error) { if (error.code === 'RATE_LIMITED') throw error; if (env.NODE_ENV === 'production' || env.VERCEL) throw fail(503, 'RATE_LIMIT_UNAVAILABLE'); } }
     const staticCards = new Map([...decks, ...soloDecks].flatMap((deck) => [...(deck.questions || []), ...(deck.r18Questions || [])].map((card) => [card.id, { id: card.id, text: card.text, r18: Boolean(card.r18 || deck.adultOnly), sourceDeckId: deck.id }])));
   async function host(req) {
@@ -64,6 +66,11 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     if (room?.participant_rule === 'group') return 'group';
     if (Array.isArray(room?.cards) && room.cards.some((card) => card?.participantRule === 'pair')) return 'pair';
     return 'group';
+  }
+  function minorityInput(input) {
+    if (input.gameType === undefined || input.gameType === 'cards') return null;
+    if (input.gameType !== 'minority_topic') throw fail(400, 'INVALID_REQUEST');
+    return { type: 'minority_topic', pairs: minorityTopics.map(({ majority, minority }) => ({ majority, minority })) };
   }
   async function cleanupExpired() {
     if (now() - lastCleanup < 5 * 60 * 1000) return;
@@ -82,15 +89,41 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     const rows = (await rest(service, `/rest/v1/group_members?room_id=eq.${encodeURIComponent(id)}&select=id,display_name,role,adult_confirmed,age_confirmed_at,joined_at&order=role.desc,joined_at.asc,id.asc`, {}, fetchImpl)) || [];
     return rows.sort((a, b) => Number(b.role === 'host') - Number(a.role === 'host') || String(a.joined_at).localeCompare(String(b.joined_at)) || String(a.id).localeCompare(String(b.id)));
   }
-  function publicRoom(room, member, includeCard = false, list = []) {
+  function publicRoom(room, member, includeCard = false, list = [], minority = null) {
     const cards = Array.isArray(room.cards) ? room.cards : [];
     const card = includeCard && room.status === 'playing' && room.revealed && cards[room.cursor] ? cards[room.cursor] : null;
     const memberCount = Number(room.member_count ?? list.length);
     const speaker = list.length ? list[(Number(room.cursor || 0) + Number(room.answer_index || 0)) % list.length] : null;
     const participantRule = roomParticipantRule(room);
-    return { room: { id: room.id, deckId: room.deck_id, deckName: room.deck_name, adultOnly: Boolean(room.adult_only), design: normalizeCreatorDesign(room.design), participantRule, participantLimit: participantRule === 'pair' ? 2 : 8, status: room.status, cursor: room.cursor, total: cards.length, revealed: Boolean(room.revealed), answerIndex: room.answer_index, speakerIndex: speaker ? list.indexOf(speaker) : null, speakerName: speaker?.display_name || null, revision: room.revision, expiresAt: room.expires_at, adultAttestedAt: isoOrNull(room.adult_attested_at), memberCount, members: list.map((item) => ({ id: item.id, name: item.display_name, role: item.role, adultConfirmed: item.adult_confirmed, ageConfirmed: Boolean(item.age_confirmed_at) })) }, member: member ? { id: member.id, name: member.display_name, role: member.role, adultConfirmed: member.adult_confirmed, ageConfirmed: Boolean(member.age_confirmed_at) } : null, card: card ? { id: card.id, text: card.text, r18: Boolean(card.r18) } : null };
+    return { room: { id: room.id, gameType: room.game_type || 'cards', deckId: room.deck_id, deckName: room.deck_name, adultOnly: Boolean(room.adult_only), design: normalizeCreatorDesign(room.design), participantRule, participantLimit: participantRule === 'pair' ? 2 : 8, status: room.status, cursor: room.cursor, total: cards.length, revealed: Boolean(room.revealed), answerIndex: room.answer_index, speakerIndex: speaker ? list.indexOf(speaker) : null, speakerName: speaker?.display_name || null, revision: room.revision, expiresAt: room.expires_at, adultAttestedAt: isoOrNull(room.adult_attested_at), memberCount, members: list.map((item) => ({ id: item.id, name: item.display_name, role: item.role, adultConfirmed: item.adult_confirmed, ageConfirmed: Boolean(item.age_confirmed_at) })) }, member: member ? { id: member.id, name: member.display_name, role: member.role, adultConfirmed: member.adult_confirmed, ageConfirmed: Boolean(member.age_confirmed_at) } : null, card: card ? { id: card.id, text: card.text, r18: Boolean(card.r18) } : null, ...(minority ? { minority } : {}) };
   }
-  async function projected(room, member, includeCard) { return publicRoom(room, member, includeCard, await members(room.id)); }
+  async function minorityState(room, member) {
+    if (room.game_type !== 'minority_topic') return null;
+    const games = await rest(service, `/rest/v1/minority_games?room_id=eq.${encodeURIComponent(room.id)}&select=*`, {}, fetchImpl); const game = games?.[0];
+    if (!game) return room.status === 'ended' ? { phase: 'ended', round: 0, maxRounds: MINORITY_MAX_ROUNDS, myWord: null, myRole: null } : { phase: 'lobby', round: 0, maxRounds: MINORITY_MAX_ROUNDS };
+    if (room.status === 'ended' || game.phase === 'ended') return { phase: 'ended', round: Number(game.round_no || 0), maxRounds: MINORITY_MAX_ROUNDS, myWord: null, myRole: null };
+    const rounds = game.round_no ? await rest(service, `/rest/v1/minority_rounds?room_id=eq.${encodeURIComponent(room.id)}&round_no=eq.${game.round_no}&select=*`, {}, fetchImpl) : [];
+    const round = rounds?.[0]; const mine = member && round?.assignments?.[member.id];
+    const voteRows = round ? await rest(service, `/rest/v1/minority_votes?round_id=eq.${encodeURIComponent(round.id)}&select=voter_id,target_id`, {}, fetchImpl) : [];
+    const result = { phase: game.phase, round: Number(game.round_no || 0), maxRounds: MINORITY_MAX_ROUNDS, confirmed: Boolean(round?.confirmed?.[member?.id]), confirmedCount: Object.keys(round?.confirmed || {}).length, memberHasVoted: Boolean(voteRows?.some((vote) => vote.voter_id === member?.id)), votedCount: voteRows?.length || 0, memberCount: Object.keys(round?.assignments || {}).length, myWord: mine?.word || null, myRole: null };
+    if (round && game.phase === 'result' && round.status === 'result') {
+      const votes = voteRows;
+      const tally = {}; for (const vote of votes || []) tally[vote.target_id] = (tally[vote.target_id] || 0) + 1;
+      result.tally = tally; result.assignments = Object.fromEntries(Object.entries(round.assignments || {}).map(([id, value]) => [id, { word: value.word, role: value.role }])); result.majorityWord = round.majority_word; result.minorityWord = round.minority_word; result.minorityMemberId = Object.entries(round.assignments || {}).find(([, value]) => value.role === 'minority')?.[0] || null;
+      const max = Math.max(0, ...Object.values(tally)); const winners = Object.entries(tally).filter(([, count]) => count === max).map(([id]) => id);
+      result.outcome = winners.length !== 1 ? 'draw' : (round.assignments[winners[0]]?.role === 'minority' ? 'majority_win' : 'minority_win');
+    }
+    return result;
+  }
+  function nextMinorityPair(game) {
+    const used = new Set(Array.isArray(game.used_pairs) ? game.used_pairs.map(Number) : []);
+    const candidates = game.pairs.map((pair, index) => ({ pair, index })).filter(({ index }) => !used.has(index));
+    if (!candidates.length) throw fail(409, 'MINORITY_PAIRS_EXHAUSTED');
+    const picked = candidates[randomBytes(2).readUInt16BE(0) % candidates.length];
+    const flipped = randomBytes(1)[0] % 2 === 1;
+    return { pair: flipped ? { majority: picked.pair.minority, minority: picked.pair.majority } : picked.pair, index: picked.index, usedPairs: [...used, picked.index] };
+  }
+  async function projected(room, member, includeCard) { return publicRoom(room, member, includeCard, await members(room.id), await minorityState(room, member)); }
   async function resolveSet(ownerId, setId) {
     if (!setId || !/^[0-9a-f-]{16,64}$/i.test(setId)) throw fail(400, 'INVALID_REQUEST');
     const sets = await rest(service, `/rest/v1/my_sets?id=eq.${encodeURIComponent(setId)}&user_id=eq.${encodeURIComponent(ownerId)}&select=*`, {}, fetchImpl);
@@ -110,10 +143,21 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     if (input.adultConfirmed !== true) throw fail(403, 'ADULT_CONSENT_REQUIRED');
   }
   async function create(req) {
-    const owner = await host(req); await ownerRate(owner.id); const input = bodyObject(req.body); optionalBoolean(input.participantsAdultAttested); let gated = false; const deckId = text(input.deckId, 80); const setId = text(input.setId, 80); const deck = decks.find((item) => item.id === deckId);
+    const owner = await host(req); await ownerRate(owner.id); const input = bodyObject(req.body); optionalBoolean(input.participantsAdultAttested); const minority = minorityInput(input); let gated = false; const deckId = text(input.deckId, 80); const setId = text(input.setId, 80); const deck = decks.find((item) => item.id === deckId);
+    if (minority && (deckId || setId || input.pairs !== undefined)) throw fail(400, 'INVALID_REQUEST');
+    if (minority && input.venueToken !== undefined) {
+      const venueToken = text(input.venueToken, 64);
+      if (!venueToken || !/^[A-Za-z0-9_-]{32}$/.test(venueToken)) throw fail(400, 'INVALID_REQUEST');
+      const venueRows = await rest(service, `/rest/v1/venue_tables?token_hash=eq.${encodeURIComponent(hash(venueToken))}&active=is.true&select=id,venues!inner(id,active)&venues.active=is.true&limit=1`, {}, fetchImpl);
+      if (!venueRows?.[0] || venueRows[0].venues?.active === false) throw fail(404, 'NOT_FOUND');
+    }
     let source;
     const hostName = text(input.hostName, 40) || '代表者';
-    if (setId) {
+    if (minority && !setId && !deckId) {
+      const cards = minority.pairs.map((pair, index) => ({ id: `minority:${index}`, text: pair.majority, r18: false, sourceDeckId: 'minority_topic', participantRule: 'group' }));
+      while (cards.length < 6) cards.push({ ...cards[cards.length % minority.pairs.length], id: `minority:pad:${cards.length}` });
+      source = { id: 'minority_topic', name: 'ひとりだけ違うお題', cards, adultOnly: false, participantRule: 'group' };
+    } else if (setId) {
       source = await resolveSet(owner.id, setId);
       if (source.adultOnly) { await adultGate(owner, input); gated = true; }
       const session = createSavedSession({ participants: [hostName, '参加者2'], cardIds: source.cardIds, customCards: source.customCards, ownerUserId: owner.id, questionOrder: source.questionOrder, r18: source.r18 === true, design: source.design, participantRule: participantRuleForSavedSet(source, 'group'), adultConfirmed: input.adultConfirmed === true });
@@ -133,7 +177,7 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     if (source.adultOnly && !gated) await adultGate(owner, input);
     const invite = token();
     const hostSecret = token();
-    const created = await rest(service, '/rest/v1/rpc/group_create_room', { method: 'POST', body: JSON.stringify({ p_host_user_id: owner.id, p_invite_hash: hash(invite), p_deck_id: source.id, p_deck_name: source.name, p_cards: cards, p_adult_only: source.adultOnly, p_host_secret_hash: hash(hostSecret), p_host_name: hostName, p_expires_at: new Date(now() + TTL_MS).toISOString(), p_adult_attested: source.adultOnly === true && input.participantsAdultAttested === true }) }, fetchImpl);
+    const created = await rest(service, minority ? '/rest/v1/rpc/minority_create_room' : '/rest/v1/rpc/group_create_room', { method: 'POST', body: JSON.stringify(minority ? { p_host_user_id: owner.id, p_invite_hash: hash(invite), p_host_secret_hash: hash(hostSecret), p_host_name: hostName, p_expires_at: new Date(now() + TTL_MS).toISOString(), p_pairs: minority.pairs } : { p_host_user_id: owner.id, p_invite_hash: hash(invite), p_deck_id: source.id, p_deck_name: source.name, p_cards: cards, p_adult_only: source.adultOnly, p_host_secret_hash: hash(hostSecret), p_host_name: hostName, p_expires_at: new Date(now() + TTL_MS).toISOString(), p_adult_attested: source.adultOnly === true && input.participantsAdultAttested === true }) }, fetchImpl);
     const pair = Array.isArray(created) ? created[0] : created;
     const room = await getRoom(pair?.room_id); const hostRows = await rest(service, `/rest/v1/group_members?id=eq.${encodeURIComponent(pair?.host_member_id)}&select=*`, {}, fetchImpl);
     if (!room || !hostRows?.[0]) throw fail(502, 'GROUP_UNAVAILABLE');
@@ -163,7 +207,7 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     const invite = text(input.inviteToken, 128);
     if (!invite || hash(invite) !== room.invite_hash) throw fail(404, 'NOT_FOUND');
     if (room.status !== 'lobby') throw fail(409, 'GROUP_ALREADY_STARTED');
-    return { room: { id: room.id, deckId: room.adult_only ? null : room.deck_id, deckName: room.adult_only ? null : room.deck_name, adultOnly: Boolean(room.adult_only), adultAttestedAt: isoOrNull(room.adult_attested_at), status: room.status, total: Array.isArray(room.cards) ? room.cards.length : 0, memberCount: Number(room.member_count || 0), expiresAt: room.expires_at } };
+    return { room: { id: room.id, gameType: room.game_type || 'cards', deckId: room.adult_only ? null : room.deck_id, deckName: room.adult_only ? null : room.deck_name, adultOnly: Boolean(room.adult_only), adultAttestedAt: isoOrNull(room.adult_attested_at), status: room.status, total: Array.isArray(room.cards) ? room.cards.length : 0, memberCount: Number(room.member_count || 0), expiresAt: room.expires_at } };
   }
   async function member(id, secret, ownerReq = null) {
     const room = await getRoom(id);
@@ -176,12 +220,46 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     const secret = req.headers?.['x-group-member-token'] || req.headers?.['X-Group-Member-Token'] || '';
     const found = await member(id, secret, secret ? null : req);
     const actualMember = found.owner ? (await members(found.room.id)).find((item) => item.role === 'host') || null : found.member;
-    return { ...(await projected(found.room, actualMember, Boolean(actualMember))), host: Boolean(found.owner) };
+    return { ...(await projected(found.room, actualMember, Boolean(actualMember))), host: Boolean(found.owner) || actualMember?.role === 'host' };
   }
   async function action(req, id) {
-    const input = bodyObject(req.body); const found = await member(id, '', req); const room = found.room;
+    const input = bodyObject(req.body); const secret = req.headers?.['x-group-member-token'] || req.headers?.['X-Group-Member-Token'] || '';
+    const initial = await member(id, secret, secret ? null : req); const room = initial.room;
     if (room.status === 'ended') throw fail(409, 'GROUP_ENDED');
-    if (!Number.isInteger(input.revision) || input.revision !== Number(room.revision)) throw fail(409, 'GROUP_STALE');
+    if (room.game_type !== 'minority_topic' && (!Number.isInteger(input.revision) || input.revision !== Number(room.revision))) throw fail(409, 'GROUP_STALE');
+    if (room.game_type === 'minority_topic') {
+      const actor = initial.member || (await members(room.id)).find((item) => item.role === 'host');
+      if (!actor) throw fail(403, 'FORBIDDEN');
+      if (['start','vote_open','next_round','finish'].includes(input.action) && actor.role !== 'host') throw fail(403, 'FORBIDDEN');
+      if (!Number.isInteger(input.roundNo) && input.action !== 'start') throw fail(400, 'INVALID_REQUEST');
+      if (['start','vote_open','next_round','finish'].includes(input.action) && (!Number.isInteger(input.revision) || input.revision !== Number(room.revision))) throw fail(409, 'GROUP_STALE');
+      const gameRows = await rest(service, `/rest/v1/minority_games?room_id=eq.${encodeURIComponent(room.id)}&select=*`, {}, fetchImpl); const game = gameRows?.[0];
+      if (!game) throw fail(409, 'MINORITY_UNAVAILABLE');
+      if (input.action === 'finish') { await rest(service, '/rest/v1/rpc/minority_finish', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: Number(game.round_no || input.roundNo || 0), p_member_id: actor.id, p_expected_revision: room.revision }) }, fetchImpl); const fresh = await getRoom(room.id); return { ...(await projected(fresh, actor, false)), host: actor.role === 'host' }; }
+      if (input.action === 'start') {
+        if (room.status !== 'lobby' || Number(room.member_count) < 3 || Number(room.member_count) > 8) throw fail(400, 'GROUP_PARTICIPANTS');
+        const roster = await members(room.id); const selected = nextMinorityPair(game); const pair = selected.pair; const shuffled = shuffle(roster); const minorityMember = shuffled[0]; const assignments = Object.fromEntries(roster.map((m) => [m.id, { word: m.id === minorityMember.id ? pair.minority : pair.majority, role: m.id === minorityMember.id ? 'minority' : 'majority' }]));
+        await rest(service, '/rest/v1/rpc/minority_start_round', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: 1, p_majority: pair.majority, p_minority: pair.minority, p_assignments: assignments, p_used_pairs: selected.usedPairs, p_expected_revision: room.revision }) }, fetchImpl);
+        const updated = await getRoom(room.id);
+        return { ...(await projected(updated, actor, false)), host: actor.role === 'host' };
+      }
+      if (input.action !== 'start' && Number(input.roundNo) !== Number(game.round_no)) throw fail(409, 'MINORITY_STALE_ROUND');
+      const rounds = await rest(service, `/rest/v1/minority_rounds?room_id=eq.${encodeURIComponent(room.id)}&round_no=eq.${game.round_no}&select=*`, {}, fetchImpl); const round = rounds?.[0];
+      if (!round) throw fail(409, 'MINORITY_NOT_STARTED');
+      if (input.action === 'confirm') {
+        if (round.status !== 'confirm') throw fail(409, 'MINORITY_PHASE'); await rest(service, '/rest/v1/rpc/minority_confirm', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: game.round_no, p_member_id: actor.id }) }, fetchImpl);
+      } else if (input.action === 'vote_open') {
+        if (round.status !== 'talk') throw fail(409, 'MINORITY_PHASE'); await rest(service, '/rest/v1/rpc/minority_set_phase', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: game.round_no, p_member_id: actor.id, p_phase: 'vote', p_expected_revision: room.revision }) }, fetchImpl);
+      } else if (input.action === 'vote') {
+        const targetId = text(input.targetId, 80); if (!UUID.test(targetId || '')) throw fail(400, 'INVALID_REQUEST');
+        await rest(service, '/rest/v1/rpc/minority_cast_vote', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: game.round_no, p_voter_id: actor.id, p_target_id: targetId }) }, fetchImpl);
+      } else if (input.action === 'next_round') {
+        if (round.status !== 'result' || Number(game.round_no) >= MINORITY_MAX_ROUNDS) throw fail(409, 'MINORITY_PHASE'); const nextNo = Number(game.round_no) + 1; const selected = nextMinorityPair(game); const pair = selected.pair; const shuffled = shuffle(await members(room.id)); const minorityMember = shuffled[0]; const assignments = Object.fromEntries(shuffled.map((m) => [m.id, { word: m.id === minorityMember.id ? pair.minority : pair.majority, role: m.id === minorityMember.id ? 'minority' : 'majority' }])); await rest(service, '/rest/v1/rpc/minority_start_round', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: nextNo, p_majority: pair.majority, p_minority: pair.minority, p_assignments: assignments, p_used_pairs: selected.usedPairs, p_expected_revision: room.revision }) }, fetchImpl);
+      } else throw fail(400, 'INVALID_REQUEST');
+      const fresh = await getRoom(room.id); return { ...(await projected(fresh, actor, false)), host: actor.role === 'host' };
+    }
+    // Legacy card-room actions remain bearer-authenticated host operations.
+    const found = await member(id, '', req);
     const update = { revision: room.revision + 1, updated_at: new Date(now()).toISOString() };
     if (input.action === 'start') {
       if (room.status !== 'lobby') throw fail(409, 'GROUP_ALREADY_STARTED');
