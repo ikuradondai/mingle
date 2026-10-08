@@ -8,6 +8,7 @@ import { normalizeCreatorDesign } from '../dist/creator-metadata.js';
 import { participantRuleForDeck, participantRuleForSavedSet } from '../dist/participant-rule.js';
 import { consumeRate, persistentStoreAvailable } from './store.mjs';
 import { minorityTopics } from '../dist/data/minority-topics.js';
+import { questionWolfTopics } from '../dist/data/question-wolf-topics.js';
 
 const MIN = 2;
 const MAX = 8;
@@ -37,9 +38,9 @@ async function rest(config, path, options = {}, fetchImpl = fetch) {
   if (!response.ok) {
     const message = data?.message || data?.hint || data?.details || (typeof data === 'string' ? data : '');
     const forbidden = ['ADULT_CONSENT_REQUIRED', AGE_ERRORS.required, AGE_ERRORS.attestation, AGE_ERRORS.participant];
-    const known = ['GROUP_FULL', 'GROUP_EXPIRED', 'GROUP_ALREADY_STARTED', 'GROUP_STALE', 'FORBIDDEN', 'MINORITY_SELF_VOTE', 'MINORITY_ALREADY_VOTED', 'MINORITY_VOTE_CLOSED', 'MINORITY_PHASE', 'MINORITY_STALE_ROUND', 'MINORITY_PAIRS_EXHAUSTED', 'MINORITY_NOT_STARTED', ...forbidden, 'DUPLICATE'];
+    const known = ['GROUP_FULL', 'GROUP_EXPIRED', 'GROUP_ALREADY_STARTED', 'GROUP_STALE', 'FORBIDDEN', 'MINORITY_SELF_VOTE', 'MINORITY_ALREADY_VOTED', 'MINORITY_VOTE_CLOSED', 'MINORITY_PHASE', 'MINORITY_STALE_ROUND', 'MINORITY_PAIRS_EXHAUSTED', 'MINORITY_NOT_STARTED', 'QUESTION_WOLF_PHASE', 'QUESTION_WOLF_TURN', 'QUESTION_WOLF_DISCUSSION_ACTIVE', 'QUESTION_WOLF_VOTE_CLOSED', 'QUESTION_WOLF_ALREADY_VOTED', 'QUESTION_WOLF_PAIRS_INVALID', 'QUESTION_WOLF_PAIRS_EXHAUSTED', 'QUESTION_WOLF_UNAVAILABLE', 'QUESTION_WOLF_STALE_ROUND', 'QUESTION_WOLF_NOT_STARTED', ...forbidden, 'DUPLICATE'];
     const code = known.find((item) => String(message).includes(item)) || (response.status === 404 ? 'NOT_FOUND' : 'GROUP_UNAVAILABLE');
-    const status = code === 'GROUP_EXPIRED' ? 410 : forbidden.includes(code) || code === 'FORBIDDEN' ? 403 : ['GROUP_FULL', 'GROUP_ALREADY_STARTED', 'DUPLICATE', 'GROUP_STALE', 'MINORITY_SELF_VOTE', 'MINORITY_ALREADY_VOTED', 'MINORITY_VOTE_CLOSED', 'MINORITY_PHASE', 'MINORITY_STALE_ROUND', 'MINORITY_PAIRS_EXHAUSTED', 'MINORITY_NOT_STARTED'].includes(code) ? 409 : response.status === 404 ? 404 : 502;
+    const status = code === 'GROUP_EXPIRED' ? 410 : forbidden.includes(code) || code === 'FORBIDDEN' ? 403 : ['GROUP_FULL', 'GROUP_ALREADY_STARTED', 'DUPLICATE', 'GROUP_STALE', 'MINORITY_SELF_VOTE', 'MINORITY_ALREADY_VOTED', 'MINORITY_VOTE_CLOSED', 'MINORITY_PHASE', 'MINORITY_STALE_ROUND', 'MINORITY_PAIRS_EXHAUSTED', 'MINORITY_NOT_STARTED', 'QUESTION_WOLF_PHASE', 'QUESTION_WOLF_TURN', 'QUESTION_WOLF_DISCUSSION_ACTIVE', 'QUESTION_WOLF_VOTE_CLOSED', 'QUESTION_WOLF_ALREADY_VOTED', 'QUESTION_WOLF_PAIRS_INVALID', 'QUESTION_WOLF_PAIRS_EXHAUSTED', 'QUESTION_WOLF_UNAVAILABLE', 'QUESTION_WOLF_STALE_ROUND', 'QUESTION_WOLF_NOT_STARTED'].includes(code) ? 409 : response.status === 404 ? 404 : 502;
     throw fail(status, code);
   }
   return data;
@@ -69,8 +70,13 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
   }
   function minorityInput(input) {
     if (input.gameType === undefined || input.gameType === 'cards') return null;
-    if (input.gameType !== 'minority_topic') throw fail(400, 'INVALID_REQUEST');
+    if (input.gameType !== 'minority_topic') return null;
     return { type: 'minority_topic', pairs: minorityTopics.map(({ majority, minority }) => ({ majority, minority })) };
+  }
+  function questionWolfInput(input) {
+    if (input.gameType !== undefined && !['cards', 'minority_topic', 'question_wolf'].includes(input.gameType)) throw fail(400, 'INVALID_REQUEST');
+    if (input.gameType !== 'question_wolf') return null;
+    return { type: 'question_wolf', pairs: questionWolfTopics.map(({ majority, minority }) => ({ majority, minority })) };
   }
   async function cleanupExpired() {
     if (now() - lastCleanup < 5 * 60 * 1000) return;
@@ -95,7 +101,7 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     const memberCount = Number(room.member_count ?? list.length);
     const speaker = list.length ? list[(Number(room.cursor || 0) + Number(room.answer_index || 0)) % list.length] : null;
     const participantRule = roomParticipantRule(room);
-    return { room: { id: room.id, gameType: room.game_type || 'cards', deckId: room.deck_id, deckName: room.deck_name, adultOnly: Boolean(room.adult_only), design: normalizeCreatorDesign(room.design), participantRule, participantLimit: participantRule === 'pair' ? 2 : 8, status: room.status, cursor: room.cursor, total: cards.length, revealed: Boolean(room.revealed), answerIndex: room.answer_index, speakerIndex: speaker ? list.indexOf(speaker) : null, speakerName: speaker?.display_name || null, revision: room.revision, expiresAt: room.expires_at, adultAttestedAt: isoOrNull(room.adult_attested_at), memberCount, members: list.map((item) => ({ id: item.id, name: item.display_name, role: item.role, adultConfirmed: item.adult_confirmed, ageConfirmed: Boolean(item.age_confirmed_at) })) }, member: member ? { id: member.id, name: member.display_name, role: member.role, adultConfirmed: member.adult_confirmed, ageConfirmed: Boolean(member.age_confirmed_at) } : null, card: card ? { id: card.id, text: card.text, r18: Boolean(card.r18) } : null, ...(minority ? { minority } : {}) };
+    return { room: { id: room.id, gameType: room.game_type || 'cards', deckId: room.deck_id, deckName: room.deck_name, adultOnly: Boolean(room.adult_only), design: normalizeCreatorDesign(room.design), participantRule, participantLimit: participantRule === 'pair' ? 2 : 8, status: room.status, cursor: room.cursor, total: cards.length, revealed: Boolean(room.revealed), answerIndex: room.answer_index, speakerIndex: speaker ? list.indexOf(speaker) : null, speakerName: speaker?.display_name || null, revision: room.revision, expiresAt: room.expires_at, adultAttestedAt: isoOrNull(room.adult_attested_at), memberCount, members: list.map((item) => ({ id: item.id, name: item.display_name, role: item.role, adultConfirmed: item.adult_confirmed, ageConfirmed: Boolean(item.age_confirmed_at) })) }, member: member ? { id: member.id, name: member.display_name, role: member.role, adultConfirmed: member.adult_confirmed, ageConfirmed: Boolean(member.age_confirmed_at) } : null, card: card ? { id: card.id, text: card.text, r18: Boolean(card.r18) } : null, ...(minority ? (room.game_type === 'question_wolf' ? { questionWolf: minority } : { minority }) : {}) };
   }
   async function minorityState(room, member) {
     if (room.game_type !== 'minority_topic') return null;
@@ -115,6 +121,37 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     }
     return result;
   }
+  async function questionWolfState(room, member) {
+    if (room.game_type !== 'question_wolf') return null;
+    let game; let round; let votes; let stableRoom;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const startRoom = await getRoom(room.id);
+      const games = await rest(service, `/rest/v1/question_wolf_games?room_id=eq.${encodeURIComponent(room.id)}&select=*`, {}, fetchImpl); game = games?.[0];
+      if (!game) { Object.assign(room, startRoom); return { phase: 'lobby', round: 0, maxRounds: 6 }; }
+      if (startRoom.status === 'ended' || game.phase === 'ended') { Object.assign(room, startRoom); return { phase: 'ended', round: Number(game.round_no || 0), maxRounds: 6, myQuestion: null }; }
+      const rows = game.round_no ? await rest(service, `/rest/v1/question_wolf_rounds?room_id=eq.${encodeURIComponent(room.id)}&round_no=eq.${game.round_no}&select=*`, {}, fetchImpl) : [];
+      round = rows?.[0];
+      if (round?.status === 'discussion' && round.discussion_deadline && new Date(round.discussion_deadline).getTime() <= now()) {
+        await rest(service, '/rest/v1/rpc/question_wolf_expire_discussion', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: game.round_no }) }, fetchImpl).catch(() => {});
+        continue;
+      }
+      votes = round ? await rest(service, `/rest/v1/question_wolf_votes?round_id=eq.${encodeURIComponent(round.id)}&select=voter_id,target_id`, {}, fetchImpl) : [];
+      const endRoom = await getRoom(room.id);
+      if (startRoom.revision === endRoom.revision && startRoom.status === endRoom.status) { stableRoom = endRoom; break; }
+    }
+    if (!stableRoom) throw fail(409, 'GROUP_STALE');
+    Object.assign(room, stableRoom);
+    if (stableRoom.status === 'ended' || game.phase === 'ended') return { phase: 'ended', round: Number(game.round_no || 0), maxRounds: 6, myQuestion: null };
+    const mine = member && round?.assignments?.[member.id];
+    const result = { phase: round?.status || game.phase, round: Number(game.round_no || 0), maxRounds: 6, confirmed: Boolean(round?.confirmed?.[member?.id]), confirmedCount: Object.keys(round?.confirmed || {}).length, answerIndex: Number(round?.answer_index || 0), answeredMemberId: round?.answer_order?.[Number(round?.answer_index || 0)] || null, discussionStartedAt: isoOrNull(round?.discussion_started_at), discussionDeadline: isoOrNull(round?.discussion_deadline), serverNow: new Date(now()).toISOString(), memberHasVoted: Boolean(votes?.some((v) => v.voter_id === member?.id)), votedCount: votes?.length || 0, memberCount: Object.keys(round?.assignments || {}).length, myQuestion: mine?.question || null };
+    if (round && round.status === 'result') {
+      result.phase = 'result';
+      const tally = {}; for (const vote of votes || []) tally[vote.target_id] = (tally[vote.target_id] || 0) + 1;
+      result.tally = tally; result.majorityQuestion = round.majority_question; result.minorityQuestion = round.minority_question; result.minorityMemberId = Object.entries(round.assignments || {}).find(([, value]) => value.role === 'minority')?.[0] || null;
+      const max = Math.max(0, ...Object.values(tally)); const winners = Object.entries(tally).filter(([, count]) => count === max).map(([id]) => id); result.outcome = winners.length !== 1 ? 'draw' : (winners[0] === result.minorityMemberId ? 'majority_win' : 'minority_win');
+    }
+    return result;
+  }
   function nextMinorityPair(game) {
     const used = new Set(Array.isArray(game.used_pairs) ? game.used_pairs.map(Number) : []);
     const candidates = game.pairs.map((pair, index) => ({ pair, index })).filter(({ index }) => !used.has(index));
@@ -123,7 +160,15 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     const flipped = randomBytes(1)[0] % 2 === 1;
     return { pair: flipped ? { majority: picked.pair.minority, minority: picked.pair.majority } : picked.pair, index: picked.index, usedPairs: [...used, picked.index] };
   }
-  async function projected(room, member, includeCard) { return publicRoom(room, member, includeCard, await members(room.id), await minorityState(room, member)); }
+  function nextQuestionPair(game) {
+    const used = new Set(Array.isArray(game.used_pairs) ? game.used_pairs.map(Number) : []);
+    const candidates = game.pairs.map((pair, index) => ({ pair, index })).filter(({ index }) => !used.has(index));
+    if (!candidates.length) throw fail(409, 'QUESTION_WOLF_PAIRS_EXHAUSTED');
+    const picked = candidates[randomBytes(2).readUInt16BE(0) % candidates.length];
+    const flipped = randomBytes(1)[0] % 2 === 1;
+    return { pair: flipped ? { majority: picked.pair.minority, minority: picked.pair.majority } : picked.pair, index: picked.index, usedPairs: [...used, picked.index] };
+  }
+  async function projected(room, member, includeCard) { const list = await members(room.id); return publicRoom(room, member, includeCard, list, (await minorityState(room, member)) || (await questionWolfState(room, member))); }
   async function resolveSet(ownerId, setId) {
     if (!setId || !/^[0-9a-f-]{16,64}$/i.test(setId)) throw fail(400, 'INVALID_REQUEST');
     const sets = await rest(service, `/rest/v1/my_sets?id=eq.${encodeURIComponent(setId)}&user_id=eq.${encodeURIComponent(ownerId)}&select=*`, {}, fetchImpl);
@@ -143,9 +188,9 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     if (input.adultConfirmed !== true) throw fail(403, 'ADULT_CONSENT_REQUIRED');
   }
   async function create(req) {
-    const owner = await host(req); await ownerRate(owner.id); const input = bodyObject(req.body); optionalBoolean(input.participantsAdultAttested); const minority = minorityInput(input); let gated = false; const deckId = text(input.deckId, 80); const setId = text(input.setId, 80); const deck = decks.find((item) => item.id === deckId);
-    if (minority && (deckId || setId || input.pairs !== undefined)) throw fail(400, 'INVALID_REQUEST');
-    if (minority && input.venueToken !== undefined) {
+    const owner = await host(req); await ownerRate(owner.id); const input = bodyObject(req.body); optionalBoolean(input.participantsAdultAttested); const minority = minorityInput(input); const questionWolf = questionWolfInput(input); let gated = false; const deckId = text(input.deckId, 80); const setId = text(input.setId, 80); const deck = decks.find((item) => item.id === deckId);
+    if ((minority || questionWolf) && (deckId || setId || input.pairs !== undefined)) throw fail(400, 'INVALID_REQUEST');
+    if ((minority || questionWolf) && input.venueToken !== undefined) {
       const venueToken = text(input.venueToken, 64);
       if (!venueToken || !/^[A-Za-z0-9_-]{32}$/.test(venueToken)) throw fail(400, 'INVALID_REQUEST');
       const venueRows = await rest(service, `/rest/v1/venue_tables?token_hash=eq.${encodeURIComponent(hash(venueToken))}&active=is.true&select=id,venues!inner(id,active)&venues.active=is.true&limit=1`, {}, fetchImpl);
@@ -157,6 +202,8 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
       const cards = minority.pairs.map((pair, index) => ({ id: `minority:${index}`, text: pair.majority, r18: false, sourceDeckId: 'minority_topic', participantRule: 'group' }));
       while (cards.length < 6) cards.push({ ...cards[cards.length % minority.pairs.length], id: `minority:pad:${cards.length}` });
       source = { id: 'minority_topic', name: 'ひとりだけ違うお題', cards, adultOnly: false, participantRule: 'group' };
+    } else if (questionWolf) {
+      source = { id: 'question_wolf', name: '質問ウルフ', cards: questionWolf.pairs.slice(0, 40).map((pair, index) => ({ id: `question-wolf:${index}`, text: pair.majority, r18: false, sourceDeckId: 'question_wolf', participantRule: 'group' })), adultOnly: false, participantRule: 'group' };
     } else if (setId) {
       source = await resolveSet(owner.id, setId);
       if (source.adultOnly) { await adultGate(owner, input); gated = true; }
@@ -173,11 +220,11 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
       source = { id: deck.id, name: deck.title, cards: session.questions.map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true, sourceDeckId: deck.id, participantRule })), adultOnly: session.includeR18 === true || deck.adultOnly === true, participantRule };
     }
     const cards = source.cards;
-    if (cards.length < 6 || cards.length > 40) throw fail(400, 'GROUP_THEME_UNAVAILABLE');
+    if (!questionWolf && (cards.length < 6 || cards.length > 40)) throw fail(400, 'GROUP_THEME_UNAVAILABLE');
     if (source.adultOnly && !gated) await adultGate(owner, input);
     const invite = token();
     const hostSecret = token();
-    const created = await rest(service, minority ? '/rest/v1/rpc/minority_create_room' : '/rest/v1/rpc/group_create_room', { method: 'POST', body: JSON.stringify(minority ? { p_host_user_id: owner.id, p_invite_hash: hash(invite), p_host_secret_hash: hash(hostSecret), p_host_name: hostName, p_expires_at: new Date(now() + TTL_MS).toISOString(), p_pairs: minority.pairs } : { p_host_user_id: owner.id, p_invite_hash: hash(invite), p_deck_id: source.id, p_deck_name: source.name, p_cards: cards, p_adult_only: source.adultOnly, p_host_secret_hash: hash(hostSecret), p_host_name: hostName, p_expires_at: new Date(now() + TTL_MS).toISOString(), p_adult_attested: source.adultOnly === true && input.participantsAdultAttested === true }) }, fetchImpl);
+    const created = await rest(service, minority ? '/rest/v1/rpc/minority_create_room' : questionWolf ? '/rest/v1/rpc/question_wolf_create_room' : '/rest/v1/rpc/group_create_room', { method: 'POST', body: JSON.stringify(minority ? { p_host_user_id: owner.id, p_invite_hash: hash(invite), p_host_secret_hash: hash(hostSecret), p_host_name: hostName, p_expires_at: new Date(now() + TTL_MS).toISOString(), p_pairs: minority.pairs } : questionWolf ? { p_host_user_id: owner.id, p_invite_hash: hash(invite), p_host_secret_hash: hash(hostSecret), p_host_name: hostName, p_expires_at: new Date(now() + TTL_MS).toISOString(), p_pairs: questionWolf.pairs } : { p_host_user_id: owner.id, p_invite_hash: hash(invite), p_deck_id: source.id, p_deck_name: source.name, p_cards: cards, p_adult_only: source.adultOnly, p_host_secret_hash: hash(hostSecret), p_host_name: hostName, p_expires_at: new Date(now() + TTL_MS).toISOString(), p_adult_attested: source.adultOnly === true && input.participantsAdultAttested === true }) }, fetchImpl);
     const pair = Array.isArray(created) ? created[0] : created;
     const room = await getRoom(pair?.room_id); const hostRows = await rest(service, `/rest/v1/group_members?id=eq.${encodeURIComponent(pair?.host_member_id)}&select=*`, {}, fetchImpl);
     if (!room || !hostRows?.[0]) throw fail(502, 'GROUP_UNAVAILABLE');
@@ -226,7 +273,33 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     const input = bodyObject(req.body); const secret = req.headers?.['x-group-member-token'] || req.headers?.['X-Group-Member-Token'] || '';
     const initial = await member(id, secret, secret ? null : req); const room = initial.room;
     if (room.status === 'ended') throw fail(409, 'GROUP_ENDED');
-    if (room.game_type !== 'minority_topic' && (!Number.isInteger(input.revision) || input.revision !== Number(room.revision))) throw fail(409, 'GROUP_STALE');
+    if (!['minority_topic', 'question_wolf'].includes(room.game_type) && (!Number.isInteger(input.revision) || input.revision !== Number(room.revision))) throw fail(409, 'GROUP_STALE');
+    if (room.game_type === 'question_wolf') {
+      const actor = initial.member || (await members(room.id)).find((item) => item.role === 'host');
+      if (!actor) throw fail(403, 'FORBIDDEN');
+      const hostActions = ['start','vote_open','next_round','finish']; if (hostActions.includes(input.action) && actor.role !== 'host') throw fail(403, 'FORBIDDEN');
+      const strictRevisionActions = [...hostActions, 'answer'];
+      if (!Number.isInteger(input.roundNo) && input.action !== 'start') throw fail(400, 'INVALID_REQUEST');
+      if (strictRevisionActions.includes(input.action) && (!Number.isInteger(input.revision) || input.revision !== Number(room.revision))) throw fail(409, 'GROUP_STALE');
+      const gameRows = await rest(service, `/rest/v1/question_wolf_games?room_id=eq.${encodeURIComponent(room.id)}&select=*`, {}, fetchImpl); const game = gameRows?.[0]; if (!game) throw fail(409, 'QUESTION_WOLF_UNAVAILABLE');
+      if (input.action === 'finish') { if (Number(input.roundNo) !== Number(game.round_no)) throw fail(409, 'QUESTION_WOLF_STALE_ROUND'); await rest(service, '/rest/v1/rpc/question_wolf_finish', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: Number(input.roundNo), p_member_id: actor.id, p_expected_revision: room.revision }) }, fetchImpl); const fresh = await getRoom(room.id); return { ...(await projected(fresh, actor, false)), host: true }; }
+      if (input.action === 'start') {
+        if (room.status !== 'lobby' || Number(room.member_count) < 3 || Number(room.member_count) > 8) throw fail(400, 'GROUP_PARTICIPANTS');
+        const roster = await members(room.id); const selected = nextQuestionPair(game); const minorityMember = shuffle(roster)[0]; const assignments = Object.fromEntries(roster.map((m) => [m.id, { question: m.id === minorityMember.id ? selected.pair.minority : selected.pair.majority, role: m.id === minorityMember.id ? 'minority' : 'majority' }]));
+        await rest(service, '/rest/v1/rpc/question_wolf_start_round', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: 1, p_majority: selected.pair.majority, p_minority: selected.pair.minority, p_assignments: assignments, p_used_pairs: selected.usedPairs, p_expected_revision: room.revision }) }, fetchImpl);
+      } else {
+        if (Number(input.roundNo) !== Number(game.round_no)) throw fail(409, 'QUESTION_WOLF_STALE_ROUND');
+        let rows = await rest(service, `/rest/v1/question_wolf_rounds?room_id=eq.${encodeURIComponent(room.id)}&round_no=eq.${game.round_no}&select=*`, {}, fetchImpl); let round = rows?.[0]; if (!round) throw fail(409, 'QUESTION_WOLF_NOT_STARTED');
+        if (input.action === 'confirm') await rest(service, '/rest/v1/rpc/question_wolf_confirm', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: game.round_no, p_member_id: actor.id }) }, fetchImpl);
+        else if (input.action === 'answer') await rest(service, '/rest/v1/rpc/question_wolf_answer', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: game.round_no, p_member_id: actor.id, p_expected_revision: room.revision }) }, fetchImpl);
+        else if (input.action === 'vote_open') await rest(service, '/rest/v1/rpc/question_wolf_open_vote', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: game.round_no, p_member_id: actor.id, p_expected_revision: room.revision }) }, fetchImpl);
+        else if (input.action === 'vote') { const targetId = text(input.targetId, 80); if (!UUID.test(targetId || '')) throw fail(400, 'INVALID_REQUEST'); await rest(service, '/rest/v1/rpc/question_wolf_cast_vote', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: game.round_no, p_voter_id: actor.id, p_target_id: targetId, p_expected_revision: room.revision }) }, fetchImpl); }
+        else if (input.action === 'next_round') {
+          if (round.status !== 'result' || Number(game.round_no) >= 6) throw fail(409, 'QUESTION_WOLF_PHASE'); const nextNo = Number(game.round_no) + 1; const selected = nextQuestionPair(game); const minorityMember = shuffle(await members(room.id))[0]; const assignments = Object.fromEntries((await members(room.id)).map((m) => [m.id, { question: m.id === minorityMember.id ? selected.pair.minority : selected.pair.majority, role: m.id === minorityMember.id ? 'minority' : 'majority' }])); await rest(service, '/rest/v1/rpc/question_wolf_start_round', { method: 'POST', body: JSON.stringify({ p_room_id: room.id, p_round_no: nextNo, p_majority: selected.pair.majority, p_minority: selected.pair.minority, p_assignments: assignments, p_used_pairs: selected.usedPairs, p_expected_revision: room.revision }) }, fetchImpl);
+        } else throw fail(400, 'INVALID_REQUEST');
+      }
+      const fresh = await getRoom(room.id); return { ...(await projected(fresh, actor, false)), host: actor.role === 'host' };
+    }
     if (room.game_type === 'minority_topic') {
       const actor = initial.member || (await members(room.id)).find((item) => item.role === 'host');
       if (!actor) throw fail(403, 'FORBIDDEN');

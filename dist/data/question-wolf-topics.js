@@ -1,0 +1,50 @@
+// Close question pairs for 「質問ウルフ」.
+// Most players receive `majority`; one player receives `minority`.
+// Both questions are intentionally answerable by many people in the room.
+export const questionWolfTopics = Object.freeze([
+  { id: 'first-date-place', majority: '初デートで行きたい場所は？', minority: '一人で行きたい場所は？' },
+  { id: 'childhood-hero-fear', majority: '子どもの頃のヒーローは？', minority: '子どもの頃に怖かった人は？' },
+  { id: 'comfort-food-memory', majority: 'ほっとする食べ物は？', minority: '思い出に残っている食べ物は？' },
+  { id: 'holiday-morning', majority: '休日の朝にしたいことは？', minority: '休日の夜にしたいことは？' },
+  { id: 'travel-sea-mountain', majority: '旅行で行きたい自然の場所は？', minority: '旅行で眺めたい景色は？' },
+  { id: 'favorite-season', majority: '好きな季節は？', minority: '過ごしやすいと思う季節は？' },
+  { id: 'cafe-order', majority: '友だちとのカフェで頼みたい飲み物は？', minority: '一人のカフェで頼みたい飲み物は？' },
+  { id: 'rainy-day', majority: '雨の日に家で楽しみたいことは？', minority: '雨の日に外でしてみたいことは？' },
+  { id: 'weekend-trip', majority: '週末に行きたい場所は？', minority: '平日に寄り道したい場所は？' },
+  { id: 'festival-fun', majority: '地元のお祭りで食べたいものは？', minority: '旅先のお祭りで食べたいものは？' },
+  { id: 'breakfast-choice', majority: '平日の朝ごはんに食べたいものは？', minority: '休日の朝ごはんに食べたいものは？' },
+  { id: 'night-relax', majority: '夜にリラックスする方法は？', minority: '朝に気分を整える方法は？' },
+  { id: 'room-favorite', majority: '家で一番落ち着く場所は？', minority: '家で一番よく過ごす場所は？' },
+  { id: 'gift-choice', majority: '誕生日にもらいたい物は？', minority: '自分へのご褒美に買いたい物は？' },
+  { id: 'park-activity', majority: '友だちと公園でするなら何？', minority: '一人で公園でするなら何？' },
+  { id: 'city-walk', majority: '初めての街で立ち寄りたい場所は？', minority: 'よく知る街で立ち寄りたい場所は？' },
+  { id: 'travel-souvenir', majority: '旅のお土産に選びたいものは？', minority: '旅先で自分用に買いたいものは？' },
+  { id: 'long-ride', majority: '旅行の長い移動中にしたいことは？', minority: '通勤や通学の長い移動中にしたいことは？' },
+  { id: 'movie-atmosphere', majority: '友人と観たい映画は？', minority: '一人で観たい映画は？' },
+  { id: 'reading-time', majority: '本を読みたい場所は？', minority: '昼寝したい場所は？' },
+  { id: 'music-mood', majority: '気分転換に聴きたい音楽は？', minority: '落ち着きたいときに聴きたい音楽は？' },
+  { id: 'childhood-play', majority: '子どもの頃に好きだった遊びは？', minority: '子どもの頃に得意だった遊びは？' },
+  { id: 'school-memory', majority: '学校で楽しかった行事は？', minority: '学校で楽しみだった時間は？' },
+  { id: 'work-break', majority: '休憩時間にしたいことは？', minority: '仕事終わりにしたいことは？' },
+  { id: 'new-hobby', majority: 'これから始めたい趣味は？', minority: '一度体験してみたい趣味は？' },
+  { id: 'indoor-outdoor', majority: '家の中で楽しみたいことは？', minority: '外で楽しみたいことは？' },
+  { id: 'sweet-treat', majority: '甘いものを食べるなら？', minority: '小腹がすいたときに食べるなら？' },
+  { id: 'lunch-choice', majority: '昼ごはんに食べたいものは？', minority: '忙しい日に選びたい昼ごはんは？' },
+  { id: 'favorite-aroma', majority: '好きな香りは？', minority: '家で感じたい香りは？' },
+  { id: 'color-impression', majority: '元気が出る色は？', minority: '落ち着く色は？' },
+  { id: 'weather-plan', majority: '晴れた日にしたいことは？', minority: '曇りの日にしたいことは？' },
+  { id: 'night-sky', majority: '晴れた夜空を見て思い浮かぶものは？', minority: '旅先の夜空を見て思い浮かぶものは？' },
+  { id: 'waterfront', majority: '友だちと水辺で過ごすなら何をしたい？', minority: '一人で水辺で過ごすなら何をしたい？' },
+  { id: 'mountain-day', majority: '友だちと山でするなら何？', minority: '一人で山でするなら何？' },
+  { id: 'home-party', majority: '家に人を招くなら用意したいものは？', minority: '家に招かれたら持っていきたいものは？' },
+  { id: 'photo-subject', majority: '旅先で写真に残したいものは？', minority: '日常で写真に残したいものは？' },
+  { id: 'commute-choice', majority: '通勤や通学で楽しみたいことは？', minority: '休日の移動で楽しみたいことは？' },
+  { id: 'small-happiness', majority: '日常の小さな幸せは？', minority: '最近うれしかった出来事は？' },
+  { id: 'future-day-off', majority: '次の休みにしたいことは？', minority: '急に休みになったらしたいことは？' },
+  { id: 'favorite-place', majority: '何度でも行きたい場所は？', minority: 'まだ行ったことがなくて気になる場所は？' },
+  { id: 'party-drink', majority: '友だちとの集まりで飲みたいものは？', minority: '家族との集まりで飲みたいものは？' },
+]);
+
+export const QUESTION_WOLF_TOPIC_ROUNDS = 6;
+
+export default questionWolfTopics;

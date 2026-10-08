@@ -21,8 +21,10 @@ import { themeExampleForDeck } from "./theme-examples.js";
 import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText } from "./participant-rule.js";
 import { consumeMinorityAuthIntent, clearMinorityAuthIntent } from "./minority-auth-intent.js";
+import { consumeQuestionWolfAuthIntent, saveQuestionWolfAuthIntent } from "./question-wolf-auth-intent.js";
 import { gameCardImage } from "./game-card-images.js";
 import { groupGames } from "./data/game-registry.js";
+import { gameParticipantGate } from "./game-participant-gate.js";
 import { consumeSocialGameIntent, saveSocialGameIntent } from "./social-game-intent.js";
 const root = document.querySelector("#app");
 const state = {
@@ -87,11 +89,13 @@ function clearLibraryReturnIntent() { try { sessionStorage.removeItem(LIBRARY_RE
 const venueOnboardingQuery = new URLSearchParams(location.search).get('venueOnboarding') === '1';
 const libraryQuery = new URLSearchParams(location.search).get('library') === '1';
 const minorityAuthQuery = new URLSearchParams(location.search).get('minorityAuth') === '1';
+const questionWolfAuthQuery = new URLSearchParams(location.search).get('questionWolfAuth') === '1';
 const socialGameReturnQuery = new URLSearchParams(location.search).get('socialGameReturn') === '1';
 if (libraryQuery) { saveLibraryReturnIntent(); state.account.libraryReturn = true; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (venueOnboardingQuery) { clearLibraryReturnIntent(); saveVenueOnboardingIntent(); state.account.venueOnboarding = true; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 else { state.account.venueOnboarding = loadVenueOnboardingIntent(); if (!state.account.venueOnboarding && loadLibraryReturnIntent()) state.account.libraryReturn = true; }
 if (minorityAuthQuery) { state.account.open = true; state.account.status = 'ログイン後にルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
+if (questionWolfAuthQuery) { state.account.open = true; state.account.status = 'ログイン後に質問ウルフのルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (socialGameReturnQuery) {
   const returned = consumeSocialGameIntent();
   if (returned) {
@@ -470,7 +474,7 @@ function render() {
     }),
   );
   root.querySelector("[data-venue-set]")?.addEventListener("change", (event) => { state.selectedVenueSetId = event.currentTarget.value; state.adultConfirmed = false; state.error = ""; syncSelectedVenueSet(); render(); });
-  root.querySelector("[data-venue-count]")?.addEventListener("change", (event) => { const count = Math.max(2, Math.min(MAX_PARTICIPANTS, Number(event.currentTarget.value) || 2)); while (state.participants.length < count) state.participants.push(""); state.participants.length = count; render(); });
+  root.querySelector("[data-venue-count]")?.addEventListener("change", (event) => { const count = Math.max(2, Math.min(MAX_PARTICIPANTS, Number(event.currentTarget.value) || 2)); while (state.participants.length < count) state.participants.push(""); state.participants.length = count; state.error = ""; render(); });
   root.querySelectorAll('input[name="participant"]').forEach((input) => {
     input.addEventListener("input", (event) => { const index = Number(event.target.dataset.index); if (index === 0) { state.participantNameUserEdited = true; if (state.participantNameOrigin === "account" && event.target.value !== state.participantNameAutoValue) {
           state.participantNameOrigin = null;
@@ -732,7 +736,13 @@ function frame(content, eyebrow = "Mingle.Cards", withHeader = true) { const sol
   const store = state.venue?.venue.storeUrl ? `<a class="text-button venue-store-link" href="${esc(state.venue.venue.storeUrl)}" target="_blank" rel="noopener noreferrer">店舗の公式サイト</a>` : "";
   const footer = state.venue ? `<div class="venue-footer-links">${store}<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button></div>` : `<button type="button" class="back-link" data-action="home">通常のMingle.Cardsへ</button>`;
   const landingHint = state.venue ? "テーマと人数を選んで、会話をはじめましょう。" : "質問内容は、参加者を入力して始めるまで表示されません。";
-  const venueGames = state.venue ? `<section aria-labelledby="venue-games-heading"><p class="eyebrow" id="venue-games-heading">ゲーム</p><div class="inline-actions"><button type="button" class="text-button" data-action="game-launch" data-game-id="match">せーので一致！</button><button type="button" class="text-button" data-action="game-launch" data-game-id="choice" ${state.participants.length === 2 ? '' : 'disabled'}>あなたなら、こっち！${state.participants.length === 2 ? '' : '（2人）'}</button><a class="text-button" href="/minority-room.html?venue=${encodeURIComponent(state.venue.token || '')}">ひとりだけ違うお題</a></div></section>` : '';
+  const venueGameButton = (id) => {
+    const game = groupGames.find((item) => item.id === id);
+    const gate = gameParticipantGate(game, state.participants.length);
+    if (!gate.valid) return '';
+    return `<button type="button" class="text-button" data-action="game-launch" data-game-id="${esc(id)}">${esc(game.title)}</button>`;
+  };
+  const venueGames = state.venue ? `<section aria-labelledby="venue-games-heading"><p class="eyebrow" id="venue-games-heading">ゲーム</p><div class="inline-actions">${venueGameButton('match')}${venueGameButton('choice')}${venueGameButton('minority-topic')}${venueGameButton('question-wolf')}</div></section>` : '';
   return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? (venueSet?.adultOnly && !displayAllowed ? "R18を含むテーマ" : title) : (blocked || (shared.adultOnly && !displayAllowed) ? "共有セット" : (shared.name || "共有セット")))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${!blocked && Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}${blocked ? "" : `<p class="account-hint">${landingHint}</p>`}${blockedPanel}${blocked ? "" : `<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${sharedDisplaySettings}${venueAgeTap}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${sharedSubmitDisabled() ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button>${state.venue ? venueGames : ''}</form>`}${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
 
 function participantsView() {
@@ -1077,10 +1087,11 @@ function themeExplorerShelf(id, title, decksForShelf, options = {}) {
 }
 function themeGameCard(game, shelfId = 'game') {
   const icon = '<svg viewBox="0 0 72 56" focusable="false"><rect x="18" y="8" width="38" height="40" rx="5" fill="currentColor" opacity=".28" transform="rotate(9 18 8)"/><rect x="11" y="10" width="38" height="40" rx="5" fill="currentColor" opacity=".9"/><rect x="24" y="17" width="38" height="40" rx="5" fill="#f07867" opacity=".92"/><path d="M34 28h17M34 34h11" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>';
-  const choiceBlocked = game.id === 'choice' && state.participants.length !== 2;
-  const meta = choiceBlocked ? '2人で遊べます' : game.meta;
+  const gate = gameParticipantGate(game, state.participants.length);
+  if (!gate.valid) return '';
+  const meta = game.meta;
   const imageSrc = gameCardImage(game.id); const image = imageSrc ? `<span class="theme-explorer-image-wrap theme-game-image-wrap"><img class="theme-explorer-image theme-game-image" src="${esc(imageSrc)}" alt="" loading="lazy" decoding="async" width="960" height="640" /></span>` : `<span class="theme-explorer-image-wrap theme-game-icon" aria-hidden="true">${icon}</span>`;
-  return `<div class="theme-explorer-card-wrap"><button type="button" class="theme-explorer-card theme-game-card${choiceBlocked ? ' is-locked' : ''}" data-action="game-launch" data-game-id="${esc(game.id)}" data-theme-key="${esc(shelfId)}:${esc(game.id)}" aria-disabled="${choiceBlocked}" ${choiceBlocked ? 'disabled' : ''}>${image}<span class="theme-explorer-card-body"><strong>${esc(game.title)}</strong><small>${esc(game.subtitle)}</small><span class="theme-explorer-meta">${esc(meta)}</span></span></button></div>`;
+  return `<div class="theme-explorer-card-wrap"><button type="button" class="theme-explorer-card theme-game-card" data-action="game-launch" data-game-id="${esc(game.id)}" data-theme-key="${esc(shelfId)}:${esc(game.id)}">${image}<span class="theme-explorer-card-body"><strong>${esc(game.title)}</strong><small>${esc(game.subtitle)}</small><span class="theme-explorer-meta">${esc(meta)}</span></span></button></div>`;
 }
 function themeGameShelf(games) {
   const cards = games.map((game) => themeGameCard(game)).join('');
@@ -1209,7 +1220,7 @@ function decksView() {
   const filters = Object.entries(groupLabels).filter(([id]) => id !== 'adult' || (!mixed && ageConfirmed() && r18DisplayVisible())).map(([id, label]) => `<button type="button" class="filter-chip ${((mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf) === id) ? 'is-active' : ''}" data-theme-category="${esc(id)}">${esc(label)}</button>`).join('');
   const categoryId = mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf;
   const gameQuery = state.themeExplorerQuery.trim().toLocaleLowerCase('ja-JP');
-  const visibleGames = groupGames.filter((game) => !gameQuery || `${game.title} ${game.subtitle} ${game.meta}`.toLocaleLowerCase('ja-JP').includes(gameQuery));
+  const visibleGames = groupGames.filter((game) => gameParticipantGate(game, state.participants.length).valid && (!gameQuery || `${game.title} ${game.subtitle} ${game.meta}`.toLocaleLowerCase('ja-JP').includes(gameQuery)));
   const categoryDecks = categoryId !== 'all' && categoryId !== 'adult' ? regular.filter((deck) => themeGroups[deck.id]?.includes(categoryId)) : categoryId === 'adult' ? adult : regular;
   const recommendedIds = state.participants.length >= 3
     ? ['friends', 'family-reunion', 'team', 'group-mixer', 'party-first-meeting', 'business-meetup', 'bar-first-meeting', 'date']
@@ -1496,6 +1507,8 @@ async function loadAccount() {
     if (state.account.user) {
       const minorityIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeMinorityAuthIntent();
       if (minorityIntent) { state.account.open = false; location.replace(`/minority-room.html?create=1${minorityIntent.venueToken ? `&venue=${encodeURIComponent(minorityIntent.venueToken)}` : ''}`); return; }
+      const questionWolfIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeQuestionWolfAuthIntent();
+      if (questionWolfIntent) { if (!saveQuestionWolfAuthIntent(questionWolfIntent)) { state.account.status = '質問ウルフの復帰情報を保存できませんでした。'; } else { state.account.open = false; location.replace(`/question-wolf.html?create=1${questionWolfIntent.venueToken ? `&venue=${encodeURIComponent(questionWolfIntent.venueToken)}` : ''}`); return; } }
       intentFailed = await applyAdultIntent();
       if (!current()) return;
       restoreAuthReturnIntent();
@@ -1962,8 +1975,9 @@ function restoreGroupHomeState() {
 }
 function launchSocialGame(game) {
   if (!game?.href) return;
-  if (game.id === 'choice' && state.participants.length !== 2) {
-    state.error = '「あなたなら、こっち！」は2人で遊べます。'; render(); return;
+  const gate = gameParticipantGate(game, state.participants.length);
+  if (!gate.valid) {
+    state.error = `「${game.title}」は${gate.label}。`; render(); return;
   }
   let names = state.participants.map((name, index) => {
     const trimmed = String(name || '').trim();
@@ -1984,8 +1998,18 @@ async function handleAction(event) {
   if (action === "theme-experienced") { event.stopPropagation(); const id = event.currentTarget.dataset.experiencedId; toggleThemeExplorerExperienced(id, state.account.user?.id); state.focusSelector = `[data-action="theme-experienced"][data-experienced-id="${CSS.escape(id)}"]`; render(); return; }
   if (action === "game-launch") {
     const game = groupGames.find((item) => item.id === event.currentTarget.dataset.gameId);
+    const gate = gameParticipantGate(game, state.participants.length);
+    if (!game || !gate.valid) {
+      if (game) state.error = `「${game.title}」は${gate.label}。`;
+      render();
+      return;
+    }
     if (game?.id === 'match' || game?.id === 'choice') launchSocialGame(game);
-    else if (game?.href) location.assign(game.href);
+    else if (game?.href) {
+      const href = new URL(game.href, location.href);
+      if (state.venue?.token) href.searchParams.set('venue', state.venue.token);
+      location.assign(`${href.pathname}${href.search}${href.hash}`);
+    }
     return;
   }
   if (state.busy && action !== "continue" && action !== "home") return;

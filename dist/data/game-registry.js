@@ -8,6 +8,8 @@ export const groupGames = [
     subtitle: 'ヒントを出し合い、少数派を見つけるゲーム',
     meta: '3〜8人 · 全6ラウンド',
     href: '/minority-room.html?create=1',
+    minParticipants: 3,
+    maxParticipants: 8,
   },
   {
     id: 'match',
@@ -15,6 +17,8 @@ export const groupGames = [
     subtitle: '同じ答えを思い浮かべて、せーので答えるゲーム',
     meta: '2〜8人 · 全6問',
     href: '/social-game.html?game=match',
+    minParticipants: 2,
+    maxParticipants: 8,
   },
   {
     id: 'choice',
@@ -22,5 +26,16 @@ export const groupGames = [
     subtitle: '相手ならどっちを選ぶか、2人で当て合うゲーム',
     meta: '2人 · 全6問',
     href: '/social-game.html?game=choice',
+    minParticipants: 2,
+    maxParticipants: 2,
+  },
+  {
+    id: 'question-wolf',
+    title: '質問ウルフ',
+    subtitle: '自分だけの質問に答え、話し合って少数派を見つけるゲーム',
+    meta: '3〜8人 · 全6ラウンド',
+    href: '/question-wolf.html?create=1',
+    minParticipants: 3,
+    maxParticipants: 8,
   },
 ];
