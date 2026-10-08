@@ -3,6 +3,7 @@ export const PAGE_LABELS = { participants: 'トップ（参加者入力）', dec
 import { decks } from '../dist/data/decks.js';
 import { soloDecks } from '../dist/data/solo-decks.js';
 export const ALLOWED_THEME_IDS = [...decks.map((deck) => deck.id), ...soloDecks.map((deck) => deck.id), 'mix', 'my-set', 'shared-set'];
+export const OFFICIAL_THEME_IDS = [...decks.map((deck) => deck.id), ...soloDecks.map((deck) => deck.id)];
 export const THEME_LABELS = Object.fromEntries([...decks.map((deck) => [deck.id, deck.title]), ...soloDecks.map((deck) => [deck.id, deck.title]), ['mix', 'テーマミックス'], ['my-set', 'マイセット'], ['shared-set', '共有セット']]);
 export const SESSION_COOKIE = 'mingle_admin';
 export const LEGACY_SESSION_COOKIE = 'mingle_admin';

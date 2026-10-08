@@ -12,7 +12,7 @@ process.env.ANALYTICS_NAMESPACE = `test-${process.pid}-${Date.now()}`;
 process.env.ANALYTICS_LOCAL_PATH = join(await mkdtemp(join(tmpdir(), 'mingle-analytics-')), 'analytics.json');
 process.env.ADMIN_SESSION_SECRET = 'test-session-secret';
 process.env.ADMIN_PASSWORD = 'test-password';
-const { recordEvent, fetchStats } = await import('../server-side/store.mjs');
+const { recordEvent, recordThemeLike, fetchStats } = await import('../server-side/store.mjs');
 const { revokeSession, signSession, verifySession, verifySessionAsync } = await import('../server-side/http.mjs');
 const { default: track, recommendationLabels } = await import('../api/track.js');
 const { statsHandler } = await import('../server-side/admin-api.mjs');
@@ -99,6 +99,75 @@ test('tracker rejects unknown fields and invalid ids', async () => {
   assert.equal((await invoke({ type: 'page_view', pageId: 'unknown', eventId: 'valid-event-id' })).status, 400);
 });
 
+test('theme likes deduplicate by browser token and reject non-official or text-bearing payloads', async () => {
+  async function invoke(payload, address = 'theme-like-test') {
+    const req = Readable.from([Buffer.from(JSON.stringify(payload))]); req.method = 'POST'; req.url = '/api/track'; req.socket = { remoteAddress: address }; req.headers = { 'content-type': 'application/json' };
+    let status; let result; const res = { setHeader() {}, writeHead(code) { status = code; }, end(value) { result = JSON.parse(value); } };
+    await track(req, res); return { status, result };
+  }
+  const token = 'voter-token-abcdefghijklmnopqrstuvwxyz';
+  const first = await invoke({ type: 'theme_like', themeId: 'date', voterToken: token, eventId: 'theme-like-event-1' });
+  const retry = await invoke({ type: 'theme_like', themeId: 'date', voterToken: token, eventId: 'theme-like-event-2' });
+  const otherTheme = await invoke({ type: 'theme_like', themeId: 'friends', voterToken: token, eventId: 'theme-like-event-3' });
+  assert.deepEqual(first, { status: 202, result: { ok: true, accepted: true } });
+  assert.deepEqual(retry, { status: 202, result: { ok: true, accepted: false } });
+  assert.deepEqual(otherTheme, { status: 202, result: { ok: true, accepted: true } });
+  for (const themeId of ['mix', 'my-set', 'shared-set', 'unknown-theme']) assert.equal((await invoke({ type: 'theme_like', themeId, voterToken: token, eventId: `theme-like-${themeId}` })).status, 400);
+  assert.equal((await invoke({ type: 'theme_like', themeId: 'date', voterToken: token, eventId: 'theme-like-event-5', text: 'private' })).status, 400);
+  assert.equal((await invoke({ type: 'theme_like', themeId: 'date', voterToken: 'short', eventId: 'theme-like-event-6' })).status, 400);
+});
+
+test('theme likes use a separate low rate bucket without limiting page events', async () => {
+  async function invoke(payload, address) {
+    const req = Readable.from([Buffer.from(JSON.stringify(payload))]); req.method = 'POST'; req.url = '/api/track'; req.socket = { remoteAddress: address }; req.headers = { 'content-type': 'application/json' };
+    let status; const res = { setHeader() {}, writeHead(code) { status = code; }, end() {} }; await track(req, res); return status;
+  }
+  const token = 'voter-token-rate-limit-abcdefghijklmnopqrstuvwxyz';
+  for (let i = 0; i < 20; i += 1) assert.notEqual(await invoke({ type: 'theme_like', themeId: 'date', voterToken: `${token}${String(i).padStart(2, '0')}`, eventId: `theme-rate-${i}` }, 'theme-like-rate'), 429);
+  assert.equal(await invoke({ type: 'theme_like', themeId: 'date', voterToken: `${token}21`, eventId: 'theme-rate-21' }, 'theme-like-rate'), 429);
+  assert.notEqual(await invoke({ type: 'page_view', pageId: 'participants', eventId: 'page-after-theme-rate' }, 'theme-like-rate'), 429);
+});
+
+test('Redis theme-like EVAL and stats pipeline preserve atomic dedup, TTL, timestamps, and new fields', async () => {
+  const originalFetch = globalThis.fetch; const originalUrl = process.env.UPSTASH_REDIS_REST_URL; const originalToken = process.env.UPSTASH_REDIS_REST_TOKEN; const calls = []; let redisEvalCount = 0;
+  process.env.UPSTASH_REDIS_REST_URL = 'https://redis.test'; process.env.UPSTASH_REDIS_REST_TOKEN = 'redis-token';
+  globalThis.fetch = async (_url, options = {}) => {
+    const commands = JSON.parse(options.body); calls.push(commands);
+    if (commands.length === 1 && commands[0][0] === 'EVAL') return { ok: true, async json() { return [{ result: redisEvalCount++ === 0 ? 1 : 0 }]; } };
+    return { ok: true, async json() {
+      return commands.map((_command, index) => {
+        let result = [];
+        if (index === 0) result = ['themeLikes', '2'];
+        else if (index === 1) result = '2026-10-08T00:00:00.000Z';
+        else if (index === 2) result = '2026-10-08T01:00:00.000Z';
+        else if (index === 3) result = ['date', '1', 'friends', '1'];
+        else if (index === 4) result = ['themeLikes', '2'];
+        else if (index === 8) result = ['date', '1', 'friends', '1'];
+        return { result };
+      });
+    } };
+  };
+  try {
+    assert.equal(await recordThemeLike({ themeId: 'date', voterTokenHash: 'redis-hash', date: '2026-10-08' }), 1);
+    assert.equal(await recordThemeLike({ themeId: 'date', voterTokenHash: 'redis-hash', date: '2026-10-08' }), 0);
+    const evalCommand = calls[0][0]; assert.equal(evalCommand[0], 'EVAL'); assert.equal(evalCommand[2], 8); assert.equal(evalCommand[14], '7776000'); assert.ok(evalCommand.some((value) => String(value).includes(':themeLikeDedup:'))); assert.ok(String(evalCommand[1]).includes('SETNX')); assert.ok(String(evalCommand[1]).includes("'SET'"));
+    const redisStats = await fetchStats(['2026-10-08']);
+    assert.equal(redisStats.totals.themeLikes, 2); assert.deepEqual(redisStats.themeLikeThemes, { date: 1, friends: 1 }); assert.equal(redisStats.days[0].day.themeLikes, 2); assert.deepEqual(redisStats.days[0].themeLikeThemes, { date: 1, friends: 1 });
+  } finally { globalThis.fetch = originalFetch; if (originalUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL; else process.env.UPSTASH_REDIS_REST_URL = originalUrl; if (originalToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN; else process.env.UPSTASH_REDIS_REST_TOKEN = originalToken; }
+});
+
+test('theme likes expose bounded daily and total theme counts without changing existing metrics', async () => {
+  const date = `2099-theme-like-${process.pid}-${Date.now()}`;
+  assert.equal(await recordThemeLike({ themeId: 'date', voterTokenHash: 'hash-a', date }), 1);
+  assert.equal(await recordThemeLike({ themeId: 'date', voterTokenHash: 'hash-a', date }), 0);
+  assert.equal(await recordThemeLike({ themeId: 'friends', voterTokenHash: 'hash-a', date }), 1);
+  const result = await fetchStats([date]);
+  assert.equal(result.days[0].day.themeLikes, 2);
+  assert.deepEqual(result.days[0].themeLikeThemes, { date: 1, friends: 1 });
+  assert.ok(result.totals.themeLikeThemes.date >= 1);
+  assert.equal(result.days[0].day.pageViews || 0, 0);
+});
+
 test('analytics rate limits count only valid writes', async () => {
   const invoke = async (type, index) => {
     const payload = type === 'track' ? { type: 'page_view', pageId: 'participants', eventId: `rate-${index}-${Date.now()}` } : { sessionId: `rate-session-${index}`, cursor: 6, themeId: 'date', themeIds: ['date'], rating: 'positive', text: 'ok' };
@@ -140,6 +209,7 @@ test('admin stats exposes progress counters consistently for every range', async
   await recordEvent({ type: 'round_complete', themeId: 'date', eventId: `stats-round-${Date.now()}`, date: today });
   await recordEvent({ type: 'round_continue', themeId: 'date', eventId: `stats-continue-${Date.now()}`, date: today });
   await recordEvent({ type: 'session_complete', themeId: 'date', eventId: `stats-session-${Date.now()}`, date: today });
+  await recordThemeLike({ themeId: 'date', voterTokenHash: `stats-like-${Date.now()}`, date: today });
   async function invoke(range) {
     const req = Readable.from([]); req.method = 'GET'; req.url = `/api/admin/stats?range=${range}`; req.headers = { cookie: `mingle_admin=${signSession()}` };
     let status; let result; const res = { setHeader() {}, writeHead(code) { status = code; }, end(value) { result = JSON.parse(value); } };
@@ -151,11 +221,14 @@ test('admin stats exposes progress counters consistently for every range', async
     assert.ok(result.totals.roundCompletes >= 1);
     assert.ok(result.totals.roundContinues >= 1);
     assert.ok(result.totals.sessionCompletes >= 1);
+    assert.ok(result.totals.themeLikes >= 1);
     const theme = result.themes.find((item) => item.id === 'date');
     assert.equal(theme.roundCompletes, 1);
     assert.equal(theme.roundContinues, 1);
     assert.equal(theme.sessionCompletes, 1);
+    assert.ok(theme.likeCount >= 1);
     assert.ok(result.daily.some((item) => item.roundCompletes >= 1));
+    assert.ok(result.daily.some((item) => item.themeLikes >= 1));
   }
 });
 

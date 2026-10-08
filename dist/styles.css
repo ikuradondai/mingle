@@ -149,6 +149,19 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 .round-break .like-totals,.round-break .round-favorites,.round-break .feedback-box { border:0; box-shadow:none; }
 .round-break .like-totals { padding:14px 16px; border-radius:22px; background:#eef5ff; }
 .round-break .round-favorites { padding:16px; border-radius:22px; background:#fff3d6; }
+.theme-likes { margin-top:14px; padding:12px 0; border-top:1px solid #eadfce; border-bottom:1px solid #eadfce; }
+.theme-likes-copy { margin:4px 0 8px; color:var(--muted); font-size:13px; }
+.theme-like-list { display:flex; flex-wrap:wrap; gap:8px 12px; }
+.theme-like-item { display:flex; align-items:center; gap:8px; min-width:0; }
+.theme-like-button { display:inline-flex; align-items:center; gap:7px; min-height:44px; padding:0 4px; border:0; color:var(--ink); background:transparent; font-weight:800; cursor:pointer; }
+.theme-like-button:hover:not(:disabled),.theme-like-button:focus-visible:not(:disabled) { color:var(--coral); }
+.theme-like-button.is-liked { color:#c74f43; }
+.theme-like-button.is-liked .action-icon { fill:currentColor; }
+.theme-like-button:disabled { cursor:default; opacity:.82; }
+.theme-like-button .action-icon { width:18px; height:18px; }
+.theme-like-thanks { color:#b24d42; font-size:12px; font-weight:800; white-space:nowrap; }
+.theme-like-error { color:#b42318; font-size:12px; }
+@media (prefers-reduced-motion: reduce) { .theme-like-button { transition:none; } }
 .round-break .feedback-box { padding:16px; border-radius:22px; background:#fff; box-shadow:0 8px 22px rgba(20,33,61,.07); }
 .round-break .break-actions { position:sticky; bottom:0; z-index:2; margin:18px -8px 0; padding:12px 8px max(8px,env(safe-area-inset-bottom)); background:linear-gradient(180deg,rgba(255,250,243,0),rgba(255,250,243,.96) 24%); }
 .round-break .break-actions .primary-button,.round-break .break-actions .secondary-button { min-height:52px; border-radius:17px; }

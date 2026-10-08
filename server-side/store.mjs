@@ -13,9 +13,11 @@ function saveLocal() { writeFileSync(localPath, JSON.stringify(local)); }
 const PROGRESS_TYPES = { round_complete: 'roundCompletes', round_continue: 'roundContinues', session_complete: 'sessionCompletes' };
 const RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 const DEDUP_MS = 48 * 60 * 60 * 1000;
+export const THEME_LIKE_TTL_SECONDS = 90 * 24 * 60 * 60;
+const THEME_LIKE_TTL_MS = THEME_LIKE_TTL_SECONDS * 1000;
 const MAX_FEEDBACK = 10000;
 const localRetentionEnabled = process.env.NODE_ENV !== 'test';
-function dayData(db, date) { return db.days[date] ||= { pageViews: 0, themeStarts: 0, pages: {}, themes: {}, progress: {}, progressThemes: {} }; }
+function dayData(db, date) { return db.days[date] ||= { pageViews: 0, themeStarts: 0, themeLikes: 0, themeLikeThemes: {}, pages: {}, themes: {}, progress: {}, progressThemes: {} }; }
 function localRate(key, now) { const db = readLocal(); for (const [stored, value] of Object.entries(db.rate || {})) if (!value || value.reset <= now) delete db.rate[stored]; const r = db.rate[key] ||= { count: 0, reset: now + 60000 }; r.count += 1; saveLocal(); return r.count; }
 
 export function persistentStoreAvailable() { return hasRedis() || localEnabled; }
@@ -57,6 +59,21 @@ export async function recordEvent({ type, pageId, themeId, eventId, date }) {
   if (PROGRESS_TYPES[type]) { const metric = PROGRESS_TYPES[type]; d.progress[metric] = (d.progress[metric] || 0) + 1; db.totals.progress[metric] = (db.totals.progress[metric] || 0) + 1; const key = `${themeId}:${metric}`; d.progressThemes[key] = (d.progressThemes[key] || 0) + 1; db.totals.progressThemes[key] = (db.totals.progressThemes[key] || 0) + 1; }
   db.startedAt ||= new Date().toISOString(); db.updatedAt = new Date().toISOString(); saveLocal(); return 1;
 }
+export async function recordThemeLike({ themeId, voterTokenHash, date }) {
+  if (hasRedis()) {
+    const script = "if redis.call('SET', KEYS[6] .. ARGV[1], '1', 'NX', 'EX', ARGV[4]) == false then return 0 end; redis.call('HINCRBY', KEYS[1], 'themeLikes', 1); redis.call('HINCRBY', KEYS[2], 'themeLikes', 1); redis.call('HINCRBY', KEYS[3], ARGV[2], 1); redis.call('HINCRBY', KEYS[4], ARGV[2], 1); redis.call('SADD', KEYS[5], ARGV[3]); redis.call('SETNX', KEYS[7], ARGV[5]); redis.call('SET', KEYS[8], ARGV[5]); return 1";
+    const day = `${REDIS_PREFIX}:day:${date}`, totals = `${REDIS_PREFIX}:totals`, dayThemes = `${REDIS_PREFIX}:themeLikes:${date}`, totalThemes = `${REDIS_PREFIX}:themeLikeThemes`, dates = `${REDIS_PREFIX}:dates`, dedup = `${REDIS_PREFIX}:themeLikeDedup:`, started = `${REDIS_PREFIX}:startedAt`, updated = `${REDIS_PREFIX}:updatedAt`;
+    return Number(await redisCommand(['EVAL', script, 8, day, totals, dayThemes, totalThemes, dates, dedup, started, updated, `${voterTokenHash}:${themeId}`, themeId, date, String(THEME_LIKE_TTL_SECONDS), new Date().toISOString()]));
+  }
+  if (!localEnabled) throw new Error('store unavailable');
+  const db = readLocal(); const now = Date.now(); const d = dayData(db, date); db.themeLikeDedup ||= {};
+  for (const [stored, expires] of Object.entries(db.themeLikeDedup)) if (Number(expires) <= now) delete db.themeLikeDedup[stored];
+  const dedupKey = `${voterTokenHash}:${themeId}`; if (db.themeLikeDedup[dedupKey]) return 0;
+  db.themeLikeDedup[dedupKey] = now + THEME_LIKE_TTL_MS; db.dates ||= {}; db.dates[date] = true;
+  db.totals ||= { pageViews: 0, themeStarts: 0, pages: {}, themes: {}, progress: {}, progressThemes: {} }; db.totals.themeLikes = (db.totals.themeLikes || 0) + 1; db.totals.themeLikeThemes ||= {};
+  d.themeLikes = (d.themeLikes || 0) + 1; d.themeLikeThemes ||= {}; d.themeLikeThemes[themeId] = (d.themeLikeThemes[themeId] || 0) + 1; db.totals.themeLikeThemes[themeId] = (db.totals.themeLikeThemes[themeId] || 0) + 1;
+  db.startedAt ||= new Date().toISOString(); db.updatedAt = new Date().toISOString(); saveLocal(); return 1;
+}
 export async function recordFeedback({ sessionId, cursor, themeId, themeIds, rating, text, createdAt, date }) {
   const id = `${sessionId}:${cursor}`;
   const item = { id, createdAt, date, themeId, themeIds: [...themeIds], cursor, rating, text };
@@ -91,10 +108,11 @@ export async function fetchStats(dates) {
   dates = await dates;
   if (hasRedis()) {
     const commands = [['HGETALL', `${REDIS_PREFIX}:totals`], ['GET', `${REDIS_PREFIX}:startedAt`], ['GET', `${REDIS_PREFIX}:updatedAt`]];
-    for (const d of dates) commands.push(['HGETALL', `${REDIS_PREFIX}:day:${d}`], ['HGETALL', `${REDIS_PREFIX}:pages:${d}`], ['HGETALL', `${REDIS_PREFIX}:themes:${d}`], ['HGETALL', `${REDIS_PREFIX}:progressThemes:${d}`]);
-    const out = await redisPipeline(commands); return { totals: hash(out[0]), startedAt: out[1], updatedAt: out[2], days: dates.map((date, i) => ({ date, day: hash(out[3 + i * 4]), pages: hash(out[4 + i * 4]), themes: hash(out[5 + i * 4]), progressThemes: hash(out[6 + i * 4]) })) };
+    commands.push(['HGETALL', `${REDIS_PREFIX}:themeLikeThemes`]);
+    for (const d of dates) commands.push(['HGETALL', `${REDIS_PREFIX}:day:${d}`], ['HGETALL', `${REDIS_PREFIX}:pages:${d}`], ['HGETALL', `${REDIS_PREFIX}:themes:${d}`], ['HGETALL', `${REDIS_PREFIX}:progressThemes:${d}`], ['HGETALL', `${REDIS_PREFIX}:themeLikes:${d}`]);
+    const out = await redisPipeline(commands); return { totals: hash(out[0]), themeLikeThemes: hash(out[3]), startedAt: out[1], updatedAt: out[2], days: dates.map((date, i) => ({ date, day: hash(out[4 + i * 5]), pages: hash(out[5 + i * 5]), themes: hash(out[6 + i * 5]), progressThemes: hash(out[7 + i * 5]), themeLikeThemes: hash(out[8 + i * 5]) })) };
   }
-  if (!localEnabled) throw new Error('store unavailable'); const db = readLocal(); return { totals: db.totals || {}, days: dates.map((date) => { const source = db.days[date] || {}; const day = { ...source, ...(source.progress || {}) }; return { date, day, pages: source.pages || {}, themes: source.themes || {}, progressThemes: source.progressThemes || {} }; }), startedAt: db.startedAt, updatedAt: db.updatedAt };
+  if (!localEnabled) throw new Error('store unavailable'); const db = readLocal(); return { totals: db.totals || {}, themeLikeThemes: db.totals?.themeLikeThemes || {}, days: dates.map((date) => { const source = db.days[date] || {}; const day = { ...source, ...(source.progress || {}) }; return { date, day, pages: source.pages || {}, themes: source.themes || {}, progressThemes: source.progressThemes || {}, themeLikeThemes: source.themeLikeThemes || {} }; }), startedAt: db.startedAt, updatedAt: db.updatedAt };
 }
 export async function fetchThemeStartStats(dates) {
   dates = await dates;

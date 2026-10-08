@@ -12,6 +12,7 @@ const themeTotal = document.querySelector('#theme-starts-total');
 const roundCompletesTotal = document.querySelector('#round-completes-total');
 const roundContinuesTotal = document.querySelector('#round-continues-total');
 const sessionCompletesTotal = document.querySelector('#session-completes-total');
+const themeLikesTotal = document.querySelector('#theme-likes-total');
 const pagesList = document.querySelector('#pages-list');
 const themesList = document.querySelector('#themes-list');
 const dailyList = document.querySelector('#daily-list');
@@ -74,11 +75,11 @@ function renderThemes(values) {
   if (!Array.isArray(values) || values.length === 0) { setEmpty(themesList, 'データがありません'); return; }
   const table = document.createElement('div'); table.className = 'theme-metric-table';
   const header = document.createElement('div'); header.className = 'theme-metric-row theme-metric-header';
-  ['テーマ', '開始', '6枚', '続行', '全40枚'].forEach((label) => { const cell = document.createElement('span'); cell.textContent = label; header.append(cell); }); table.append(header);
-  values.forEach((item) => {
+  ['テーマ', '開始', '6枚', '続行', '全40枚', 'いいね'].forEach((label) => { const cell = document.createElement('span'); cell.textContent = label; header.append(cell); }); table.append(header);
+  [...values].sort((a, b) => (Number(b?.likeCount) || 0) - (Number(a?.likeCount) || 0)).forEach((item) => {
     const row = document.createElement('div'); row.className = 'theme-metric-row';
     const label = document.createElement('span'); label.className = 'theme-name'; label.textContent = String(item?.label ?? item?.id ?? '名称未設定'); row.append(label);
-    for (const key of ['count', 'roundCompletes', 'roundContinues', 'sessionCompletes']) { const cell = document.createElement('span'); cell.className = 'theme-metric-value'; cell.textContent = formatNumber(Number(item?.[key]) || 0); row.append(cell); }
+    for (const key of ['count', 'roundCompletes', 'roundContinues', 'sessionCompletes', 'likeCount']) { const cell = document.createElement('span'); cell.className = 'theme-metric-value'; cell.textContent = formatNumber(Number(item?.[key]) || 0); row.append(cell); }
     table.append(row);
   });
   themesList.append(table);
@@ -145,6 +146,7 @@ function renderStats(stats) {
   roundCompletesTotal.textContent = formatNumber(Number(totals.roundCompletes));
   roundContinuesTotal.textContent = formatNumber(Number(totals.roundContinues));
   sessionCompletesTotal.textContent = formatNumber(Number(totals.sessionCompletes));
+  themeLikesTotal.textContent = formatNumber(Number(totals.themeLikes));
   updatedAt.textContent = formatDateTime(stats?.updatedAt);
   renderMetrics(pagesList, stats?.pages, 'PV');
   renderThemes(stats?.themes);

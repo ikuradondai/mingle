@@ -1,6 +1,7 @@
-import { ALLOWED_THEME_IDS, PAGE_IDS } from '../server-side/config.mjs';
+import { ALLOWED_THEME_IDS, OFFICIAL_THEME_IDS, PAGE_IDS } from '../server-side/config.mjs';
+import { createHash } from 'node:crypto';
 import { adminSession, body, clientRateKey, exactKeys, json, sameOrigin } from '../server-side/http.mjs';
-import { consumeRate, fetchThemeStartStats, persistentStoreAvailable, recordEvent } from '../server-side/store.mjs';
+import { consumeRate, fetchThemeStartStats, persistentStoreAvailable, recordEvent, recordThemeLike } from '../server-side/store.mjs';
 function todayJst() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 function dateOffset(date, offset) { const [year, month, day] = String(date).split('-').map(Number); const value = new Date(Date.UTC(year, month - 1, day + offset)); return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(value); }
 export function recommendationLabels(stats) {
@@ -46,10 +47,12 @@ export default async function track(req, res) {
   if (!persistentStoreAvailable()) return json(res, 503, { error: 'analytics_unavailable' });
   let input; try { input = await body(req); } catch (e) { return json(res, e.status || 400, { error: 'invalid_request' }); }
   const progressTypes = ['round_complete', 'round_continue', 'session_complete'];
-  const keys = input.type === 'page_view' ? ['type', 'pageId', 'eventId'] : ['theme_start', ...progressTypes].includes(input.type) ? ['type', 'themeId', 'eventId'] : [];
+  const themeLike = input.type === 'theme_like';
+  const keys = input.type === 'page_view' ? ['type', 'pageId', 'eventId'] : ['theme_start', ...progressTypes].includes(input.type) ? ['type', 'themeId', 'eventId'] : themeLike ? ['type', 'themeId', 'voterToken', 'eventId'] : [];
   if (!keys.length || !exactKeys(input, keys) || typeof input.eventId !== 'string' || input.eventId.length < 8 || input.eventId.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(input.eventId)) return json(res, 400, { error: 'invalid_event' });
   if (input.type === 'page_view' && (!PAGE_IDS.includes(input.pageId))) return json(res, 400, { error: 'invalid_event' });
-  if (input.type !== 'page_view' && (!ALLOWED_THEME_IDS.includes(input.themeId))) return json(res, 400, { error: 'invalid_event' });
-  try { if (await consumeRate(clientRateKey(req, 'track')) > 60) return json(res, 429, { error: 'rate_limited' }); } catch { return json(res, 503, { error: 'analytics_unavailable' }); }
-  try { await recordEvent({ ...input, date: todayJst() }); return json(res, 202, { ok: true }); } catch { return json(res, 503, { error: 'analytics_unavailable' }); }
+  if (input.type !== 'page_view' && (!ALLOWED_THEME_IDS.includes(input.themeId) || (themeLike && !OFFICIAL_THEME_IDS.includes(input.themeId)))) return json(res, 400, { error: 'invalid_event' });
+  if (themeLike && (typeof input.voterToken !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/.test(input.voterToken))) return json(res, 400, { error: 'invalid_event' });
+  try { const bucket = themeLike ? 'track-theme-like' : 'track'; const limit = themeLike ? 20 : 60; if (await consumeRate(clientRateKey(req, bucket)) > limit) return json(res, 429, { error: 'rate_limited' }); } catch { return json(res, 503, { error: 'analytics_unavailable' }); }
+  try { if (themeLike) { const voterTokenHash = createHash('sha256').update(input.voterToken).digest('hex'); const accepted = await recordThemeLike({ themeId: input.themeId, voterTokenHash, date: todayJst() }); return json(res, 202, { ok: true, accepted: accepted === 1 }); } await recordEvent({ ...input, date: todayJst() }); return json(res, 202, { ok: true }); } catch { return json(res, 503, { error: 'analytics_unavailable' }); }
 }
