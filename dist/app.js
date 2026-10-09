@@ -1379,7 +1379,7 @@ function likeTotalsView(session) {
   const currentStart = Math.max(0, Math.min(session.cursor, session.roundStart ?? 0));
   const current = summarizeLikes(session, currentStart, session.cursor);
   const duplicateNames = new Set(session.participants.filter((name, index, names) => names.indexOf(name) !== index));
-  const rows = (totals) => totals.map((item) => `<li class="like-total-row participant-color-${item.index}"><span class="like-total-person"><i aria-hidden="true">${esc(Array.from(item.name.trim())[0] || "・")}</i>${esc(item.name)}${duplicateNames.has(item.name) ? `（${item.index + 1}人目）` : ""}</span><strong>${Number.isSafeInteger(item.likes) && item.likes >= 0 ? item.likes : 0}</strong><span aria-hidden="true">いいね</span></li>`).join("");
+  const rows = (totals) => totals.map((item) => `<li class="like-total-row participant-color-${item.index}"><span class="like-total-person"><i aria-hidden="true"></i>${esc(item.name)}${duplicateNames.has(item.name) ? `（${item.index + 1}人目）` : ""}</span><strong>${Number.isSafeInteger(item.likes) && item.likes >= 0 ? item.likes : 0}</strong><span aria-hidden="true">いいね</span></li>`).join("");
   const total = session.questions.length; const isFinal = session.cursor >= total;
   const body = isFinal
     ? `<p class="like-total-label">今回の全${total}枚</p><ul>${rows(all)}</ul>${currentStart < session.cursor ? `<p class="like-total-label">最後の${session.cursor - currentStart}枚</p><ul>${rows(current)}</ul>` : ""}` : `<p class="like-total-label">今回の${session.cursor - currentStart}枚</p><ul>${rows(current)}</ul>${currentStart > 0 ? `<p class="like-total-label">これまでの合計（${session.cursor}枚）</p><ul>${rows(all)}</ul>` : ""}`;
