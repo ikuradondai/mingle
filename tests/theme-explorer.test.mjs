@@ -83,7 +83,7 @@ globalThis.localStorage.getItem = () => stored;
 
 const registry = JSON.parse(fs.readFileSync(path.resolve('outputs/theme-explorer/registry-v1.json'), 'utf8'));
 const ids = registry.items.map((theme) => theme.id);
-assert.equal(ids.length, 51);
+assert.equal(ids.length, 56);
 assert.equal(new Set(ids).size, ids.length);
 assert.deepEqual(new Set(ids), new Set([...decks, ...soloDecks].map((deck) => deck.id)));
 for (const id of ids) {
@@ -92,7 +92,7 @@ for (const id of ids) {
   assert.ok(fs.existsSync(path.resolve('dist', image.slice(1))), `missing asset: ${id}`);
 }
 assert.equal(themeExplorerImage('__unknown__'), null);
-assert.equal(Object.keys(THEME_EXPLORER_IMAGES).length, 51);
+assert.equal(Object.keys(THEME_EXPLORER_IMAGES).length, 56);
 
 const catalog = [...decks, ...soloDecks];
 assert.equal(Object.keys(THEME_EXAMPLE_QUESTION_IDS).length, catalog.length);

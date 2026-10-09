@@ -1,7 +1,7 @@
 {
   "version": 1,
   "generatedAt": "2026-10-06",
-  "count": 51,
+  "count": 56,
   "items": [
     {
       "id": "date",
@@ -486,7 +486,7 @@
     {
       "id": "self-love-now",
       "title": "この恋、このままでいい？",
-      "subtitle": "付き合っている人とのモヤモヤを整理する",
+      "subtitle": "付き合っている人とのモヤモヤを、次の一歩に変える",
       "mode": "solo",
       "category": "恋愛のこと",
       "rawPath": "sources/self-love-now-v1.png",
@@ -510,7 +510,7 @@
     {
       "id": "self-breakup-decided",
       "title": "別れを決めた自分へ",
-      "subtitle": "自分から終わらせた恋を、ちゃんと終わらせる",
+      "subtitle": "自分で決めた別れを、ちゃんと自分の力にする",
       "mode": "solo",
       "category": "恋愛のこと",
       "rawPath": "sources/self-breakup-decided-v1.png",
@@ -522,7 +522,7 @@
     {
       "id": "self-breakup-lingering",
       "title": "まだ、好きかもしれない",
-      "subtitle": "振られた恋の未練と、ゆっくり向き合う",
+      "subtitle": "好きな気持ちを責めずに、少しずつ自分を取り戻す",
       "mode": "solo",
       "category": "恋愛のこと",
       "rawPath": "sources/self-breakup-lingering-v1.png",
@@ -533,8 +533,8 @@
     },
     {
       "id": "self-strengths",
-      "title": "自分の「好き」探し",
-      "subtitle": "何が向いているのか、何が楽しいのかを見つける",
+      "title": "自分に向いてること、知りたい",
+      "subtitle": "得意と好きから、自分の強みを見つける",
       "mode": "solo",
       "category": "仕事のこと",
       "rawPath": "sources/self-strengths-v1.png",
@@ -546,7 +546,7 @@
     {
       "id": "self-work",
       "title": "職場、ちょっとしんどい",
-      "subtitle": "仕事や人間関係のモヤモヤを吐き出す",
+      "subtitle": "仕事や人間関係のモヤモヤを、少し軽くする",
       "mode": "solo",
       "category": "仕事のこと",
       "rawPath": "sources/self-work-v1.png",
@@ -557,8 +557,8 @@
     },
     {
       "id": "self-school",
-      "title": "学校のこと、考えてた",
-      "subtitle": "勉強・クラス・進路のモヤモヤを整理する",
+      "title": "学校、ちょっとしんどい",
+      "subtitle": "勉強・クラス・先生のモヤモヤを、少し軽くする",
       "mode": "solo",
       "category": "学校・部活のこと",
       "rawPath": "sources/self-school-v1.png",
@@ -569,8 +569,8 @@
     },
     {
       "id": "self-club",
-      "title": "部活・競技のこと",
-      "subtitle": "練習や試合、仲間のことを振り返る",
+      "title": "もっと、うまくなりたい",
+      "subtitle": "練習・試合・仲間のことを、次につなげる",
       "mode": "solo",
       "category": "学校・部活のこと",
       "rawPath": "sources/self-club-v1.png",
@@ -581,10 +581,10 @@
     },
     {
       "id": "self-friends",
-      "title": "友だちのこと、考えてた",
-      "subtitle": "気になっている友達との関係を見つめる",
+      "title": "友だちと、ちょっとモヤモヤ",
+      "subtitle": "気になる友だちとのことを、ひとりで整理する",
       "mode": "solo",
-      "category": "友だちのこと",
+      "category": "友だち・人間関係のこと",
       "rawPath": "sources/self-friends-v1.png",
       "webpPath": "/assets/theme-explorer/self-friends-v1.webp",
       "status": "generated",
@@ -594,7 +594,7 @@
     {
       "id": "self-values",
       "title": "自分のトリセツ",
-      "subtitle": "自分の扱い方を、自分で知る",
+      "subtitle": "落ちこんだときの、自分の立て直し方を知る",
       "mode": "solo",
       "category": "自分のこと",
       "rawPath": "sources/self-values-v1.png",
@@ -606,11 +606,71 @@
     {
       "id": "self-checkin",
       "title": "今日の自分",
-      "subtitle": "5分でできる、毎日のチェックイン",
+      "subtitle": "今日のよかったことと疲れを確かめて、ゆっくり休む",
       "mode": "solo",
       "category": "自分のこと",
       "rawPath": "sources/self-checkin-v1.png",
       "webpPath": "/assets/theme-explorer/self-checkin-v1.webp",
+      "status": "generated",
+      "adultOnly": false,
+      "optionalR18": false
+    },
+    {
+      "id": "self-path",
+      "title": "進路、どうしよう",
+      "subtitle": "やりたいことが分からなくても、次の一歩は決められる",
+      "mode": "solo",
+      "category": "学校・部活のこと",
+      "rawPath": "sources/self-path-v1.png",
+      "webpPath": "/assets/theme-explorer/self-path-v1.webp",
+      "status": "generated",
+      "adultOnly": false,
+      "optionalR18": false
+    },
+    {
+      "id": "self-people-tired",
+      "title": "人に合わせて、疲れちゃう",
+      "subtitle": "人間関係でがんばりすぎる自分を、少しゆるめる",
+      "mode": "solo",
+      "category": "友だち・人間関係のこと",
+      "rawPath": "sources/self-people-tired-v1.png",
+      "webpPath": "/assets/theme-explorer/self-people-tired-v1.webp",
+      "status": "generated",
+      "adultOnly": false,
+      "optionalR18": false
+    },
+    {
+      "id": "self-confidence",
+      "title": "自信、なくしちゃった",
+      "subtitle": "失敗や落ちこみから、自分を立て直して、少しずつ好きになる",
+      "mode": "solo",
+      "category": "自分のこと",
+      "rawPath": "sources/self-confidence-v1.png",
+      "webpPath": "/assets/theme-explorer/self-confidence-v1.webp",
+      "status": "generated",
+      "adultOnly": false,
+      "optionalR18": false
+    },
+    {
+      "id": "self-decision",
+      "title": "迷って、決められない",
+      "subtitle": "選べないときに、自分の大事なことから決める",
+      "mode": "solo",
+      "category": "自分のこと",
+      "rawPath": "sources/self-decision-v1.png",
+      "webpPath": "/assets/theme-explorer/self-decision-v1.webp",
+      "status": "generated",
+      "adultOnly": false,
+      "optionalR18": false
+    },
+    {
+      "id": "self-future",
+      "title": "将来が、なんとなく不安",
+      "subtitle": "ぼんやりした不安を、今できることに変える",
+      "mode": "solo",
+      "category": "自分のこと",
+      "rawPath": "sources/self-future-v1.png",
+      "webpPath": "/assets/theme-explorer/self-future-v1.webp",
       "status": "generated",
       "adultOnly": false,
       "optionalR18": false

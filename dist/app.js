@@ -1030,7 +1030,7 @@ function soloHistoryView() {
   if (!state.account.user) return `<section class="solo-history"><h2>保存したメモ</h2><p>保存済みメモを見るにはログインしてください。</p><button type="button" class="secondary-button" data-action="account">ログインする</button><button type="button" class="text-button" data-action="solo-history-close">閉じる</button></section>`;
   const rows = state.soloHistory.map((note) => { const editing = state.soloHistoryEditing?.id === note.id; const label = note.slotKind === "summary" ? `第${note.roundNumber}ラウンドまとめ` : (note.questionText || "質問メモ"); const disabled = state.busy ? "disabled" : ""; const locked = note.locked === true || (note.r18 === true && (!ageConfirmed() || !r18DisplayVisible())); const title = locked ? "R18のメモ" : (note.sourceTitle || "ひとりで"); const lockedMessage = note.r18 === true && r18DisplayVisible() === false && ageConfirmed() ? "「R18を表示する」を選ぶと表示できます。" : "年齢確認後に表示できます。"; return `<article class="solo-history-row"><time>${esc(new Date(note.createdAt || note.created_at).toLocaleString("ja-JP"))}</time><strong>${esc(title)}</strong><span>${esc(locked ? "R18のメモ" : label)}</span>${locked ? `<p class="account-hint">${lockedMessage}</p>` : editing ? `<textarea data-history-edit maxlength="2000" ${disabled}>${esc(state.soloHistoryEditing.note)}</textarea><div><button class="secondary-button" data-action="solo-history-save" data-note-id="${esc(note.id)}" ${disabled}>保存</button><button class="text-button" data-action="solo-history-cancel" ${disabled}>キャンセル</button></div>` : `<p class="solo-history-note">${esc(note.note)}</p><button class="text-button" data-action="solo-history-edit" data-note-id="${esc(note.id)}" ${disabled}>編集</button>`}<button class="text-button" data-action="solo-history-delete" data-note-id="${esc(note.id)}" ${disabled}>削除</button></article>`; }).join("");
   const retry = state.soloHistoryError ? `<button type="button" class="secondary-button" data-action="solo-history-retry" ${state.soloHistoryLoading || state.busy ? "disabled" : ""}>再試行</button>` : "";
-  return `<section class="solo-history"><div class="solo-history-head"><h2>保存したメモ</h2><button type="button" class="text-button" data-action="solo-history-close">閉じる</button></div>${state.soloHistoryLoading ? "<p>読み込み中…</p>" : ""}${state.soloHistoryError ? `<p class="form-error">${esc(state.soloHistoryError)}</p>${retry}` : ""}${rows || (!state.soloHistoryLoading && !state.soloHistoryError ? "<p>保存済みメモはありません。</p>" : "")}${state.soloHistoryHasMore ? `<button class="secondary-button" data-action="solo-history-more" ${state.busy ? "disabled" : ""}>もっと見る</button>` : ""}</section>`;
+  return `<section class="solo-history"><div class="solo-history-head"><h2>保存したメモ</h2><button type="button" class="text-button" data-action="solo-history-close">閉じる</button></div>${state.soloHistoryLoading ? "<p>読み込み中…</p>" : ""}${state.soloHistoryError ? `<p class="form-error">${esc(state.soloHistoryError)}</p>${retry}` : ""}${rows || (!state.soloHistoryLoading && !state.soloHistoryError ? "<p>保存済みメモはありません。</p>" : "")}${state.soloHistoryHasMore ? `<button class="secondary-button" data-action="solo-history-more" ${state.busy ? "disabled" : ""}>もっと見る</button>` : ""}${soloSupportView({ general: true })}</section>`;
 }
 async function loadSoloHistory(append = false) {
   if (!state.account.user || state.soloHistoryLoading || state.busy) return;
@@ -1051,7 +1051,32 @@ const SOLO_TOPIC_ICONS = {
   "self-friends": '<circle cx="9" cy="9" r="3"/><circle cx="16" cy="10" r="2.5"/><path d="M3.5 19c.6-3 2.6-5 5.5-5s4.9 2 5.5 5M14.5 19c.3-2 1.4-3.5 3-3.5 1.4 0 2.6 1.2 3 3.5"/>',
   "self-values": '<path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
   "self-checkin": '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
+  "self-path": '<path d="M12 21V9"/><path d="M12 9 5.5 6.5v-3H12"/><path d="M12 13l6.5-2.5v-3H12"/><path d="M9 21h6"/>',
+  "self-people-tired": '<circle cx="9" cy="8" r="3"/><path d="M3.5 20c.5-3.6 2.6-6 5.5-6 1.2 0 2.2.4 3 1"/><rect x="14.5" y="15" width="6.5" height="4" rx="1"/><path d="M22 16.5v1"/><path d="M16 17h1.5"/>',
+  "self-confidence": '<path d="M12 21v-9"/><path d="M12 12c0-3.5-2.4-5.5-6-5.5 0 3.5 2.4 5.5 6 5.5Z"/><path d="M12 14c0-3 2.2-5 5.5-5 0 3-2.2 5-5.5 5Z"/><path d="M8 21h8"/>',
+  "self-decision": '<path d="M12 21v-7"/><path d="M12 14c0-3.5-2.5-4.5-5.5-5"/><path d="M12 14c0-3.5 2.5-4.5 5.5-5"/><path d="m6.5 6.5 0 2.5 2.5 0"/><path d="m17.5 6.5 0 2.5-2.5 0"/>',
+  "self-future": '<path d="M3 18h18"/><path d="M6.5 18a5.5 5.5 0 0 1 11 0"/><path d="M12 6.5V9M5.2 9.7l1.6 1.4M18.8 9.7l-1.6 1.4"/>',
 };
+// 相談先の案内。自動検知や入力文の解析はせず、固定の文を静かに出すだけ。
+const SUPPORT_LINKS = {
+  mhlw: "https://www.mhlw.go.jp/mamorouyokokoro/",
+  childline: "https://childline.or.jp/",
+  mext: "https://www.mext.go.jp/a_menu/shotou/seitoshidou/06112210.htm",
+  dv: "https://soudanplus.jp/"
+};
+function supportLink(href, label) { return `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`; }
+function soloSupportView({ general = false, youth = false, dv = false } = {}) {
+  const lines = [];
+  if (general) lines.push(`つらさが強いときや、消えてしまいたい気持ちがあるときは、ひとりで抱えずに相談してね。${supportLink(SUPPORT_LINKS.mhlw, "相談できるところ")}`);
+  if (youth) lines.push(`18歳までの人は、${supportLink(SUPPORT_LINKS.childline, "チャイルドライン")}や${supportLink(SUPPORT_LINKS.mext, "『24時間子供SOSダイヤル』")}に${general ? "も" : ""}相談できます。`);
+  if (dv) lines.push(`相手といて、こわいと感じることがあるときは、${supportLink(SUPPORT_LINKS.dv, "DV相談＋（プラス）")}に相談できます。`);
+  return lines.length ? `<div class="solo-support" role="note">${lines.map((line) => `<p>${line}</p>`).join("")}</div>` : "";
+}
+function soloStartNoteView(deck) {
+  if (!deck) return "";
+  const support = soloSupportView({ general: deck.care === "distress", youth: deck.category === "school", dv: deck.care === "love" });
+  return support ? `<section class="solo-start-note" aria-label="はじめる前に">${support}</section>` : "";
+}
 function soloTopicIcon(deck) { const path = SOLO_TOPIC_ICONS[String(deck?.id || "")] || '<circle cx="12" cy="12" r="7"/><path d="m12 8 1.2 2.6L16 12l-2.8 1.4L12 16l-1.2-2.6L8 12l2.8-1.4z"/>'; return `<svg viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`; }
 function participantRuleVisibleForParticipants(rule) {
   if (state.themeMode === 'solo') return rule === 'solo';
@@ -1162,7 +1187,7 @@ function soloDecksView() {
     const set = sets.find((item) => item.id === id);
     return set ? { id: `set:${set.id}`, title: set.name || 'マイセット', __mySet: set } : null;
   }).filter(Boolean);
-  const recommendedIds = ['self-values', 'self-checkin', 'self-work', 'self-friends', 'self-love-now', 'self-school', 'self-strengths', 'self-club'];
+  const recommendedIds = ['self-checkin', 'self-values', 'self-confidence', 'self-work', 'self-school', 'self-love-now', 'self-decision', 'self-strengths'];
   const recommended = rankThemeRecommendations({
     decks: all,
     historyRows,
@@ -1317,7 +1342,7 @@ function sharedPlayView(session) {
   const segments = Array.from({ length: roundTotal }, (_, index) => `<span class="round-segment ${index < roundPosition ? "is-done" : ""} ${index === roundPosition ? "is-current" : ""}"></span>`).join("");
   const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
   const measurement = !revealed && displayText ? `<span class="shared-card-measure" aria-hidden="true">${esc(displayText)}</span>` : "";
-  return frame(`<div class="shared-play-shell ${solo ? "is-solo" : "is-group"}"><div class="shared-play-head"><div><p class="play-deck">${esc(playTitle)}</p><p class="progress-copy" aria-label="全${session.questions.length}枚中${session.cursor + 1}枚目">${roundPosition + 1} / ${roundTotal}</p></div><button type="button" class="icon-action theme-change-button" data-action="decks" aria-label="テーマを変更">${actionIcon("grid")}</button></div><div class="round-progress shared-round-progress" aria-label="今回の進み具合">${segments}</div><article style="${cardArtStyle}" data-card-family="${cardDesign.family}" class="${cardClass}" ${!revealed ? 'data-action="reveal" role="button" tabindex="0" aria-label="カードをめくる"' : ""} aria-live="polite"><span class="shared-art-rail" aria-hidden="true"></span><span class="shared-card-copy">${isChallenge ? '<span class="challenge-badge">やってみて</span>' : ""}${question}</span>${measurement}<span class="shared-card-motif" aria-hidden="true">${cardThemeMark || ""}</span><span class="shared-bubbles" aria-hidden="true"><i></i><i></i></span>${favorite}${cardAudio}</article>${speaker}${actions}<p class="shared-pass-hint">話したくない質問はパスしてOK</p><p class="form-error" role="alert">${esc(state.error)}</p>${accountOverlay}</div>`, "Mingle.Cards", true);
+  return frame(`<div class="shared-play-shell ${solo ? "is-solo" : "is-group"}"><div class="shared-play-head"><div><p class="play-deck">${esc(playTitle)}</p><p class="progress-copy" aria-label="全${session.questions.length}枚中${session.cursor + 1}枚目">${roundPosition + 1} / ${roundTotal}</p></div><button type="button" class="icon-action theme-change-button" data-action="decks" aria-label="テーマを変更">${actionIcon("grid")}</button></div><div class="round-progress shared-round-progress" aria-label="今回の進み具合">${segments}</div><article style="${cardArtStyle}" data-card-family="${cardDesign.family}" class="${cardClass}" ${!revealed ? 'data-action="reveal" role="button" tabindex="0" aria-label="カードをめくる"' : ""} aria-live="polite"><span class="shared-art-rail" aria-hidden="true"></span><span class="shared-card-copy">${isChallenge ? '<span class="challenge-badge">やってみて</span>' : ""}${question}</span>${measurement}<span class="shared-card-motif" aria-hidden="true">${cardThemeMark || ""}</span><span class="shared-bubbles" aria-hidden="true"><i></i><i></i></span>${favorite}${cardAudio}</article>${speaker}${actions}<p class="shared-pass-hint">話したくない質問はパスしてOK</p>${solo && session.cursor === 0 ? soloStartNoteView(session.customSet ? null : soloDecks.find((item) => item.id === session.deckId)) : ""}<p class="form-error" role="alert">${esc(state.error)}</p>${accountOverlay}</div>`, "Mingle.Cards", true);
 }
 
 function playView() {
@@ -1860,7 +1885,7 @@ function soloRoundView(session) {
   const seenCards = session.questions.slice(start, Math.min(session.cursor, totalCards)).filter((card) => seen.has(card.id));
   const seenMarkup = seenCards.length ? `<details class="solo-seen-questions"><summary>このラウンドで見た質問（${seenCards.length}）</summary><ul>${seenCards.map((card) => `<li>${esc(card.text)}</li>`).join("")}</ul></details>` : "";
   const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(state.session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
-  return frame(`<div class="round-break solo-round-break"><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>${isFinal ? "振り返りを終えました" : "ここまでの振り返り"}</h1>${roundThemeLikeView(session)}<div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy ? "disabled" : ""}>${state.busy ? "確認中…" : `${actionIcon("right")}つづける`}</button>` : ""}<button class="secondary-button" data-action="finish" aria-label="プレイを終わる" title="終わる">${actionIcon("stop")}終わる</button></div>${seenMarkup}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更">▦ テーマ</button></div>${accountOverlay}`);
+  return frame(`<div class="round-break solo-round-break"><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>${isFinal ? "振り返りを終えました" : "ここまでの振り返り"}</h1>${roundThemeLikeView(session)}<p class="solo-round-prompt">少し整理できたことは？ 次にやることを一つ決めるなら？</p><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy ? "disabled" : ""}>${state.busy ? "確認中…" : `${actionIcon("right")}つづける`}</button>` : ""}<button class="secondary-button" data-action="finish" aria-label="プレイを終わる" title="終わる">${actionIcon("stop")}終わる</button></div>${seenMarkup}${isFinal ? soloSupportView({ general: true, youth: true }) : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更">▦ テーマ</button></div>${accountOverlay}`);
 }
 function updateAdultButton() { updateGroupLink(); if (state.themeMode === "mixed") return;
   const button = root.querySelector(".selected-start"); const selected = decks.find((deck) => deck.id === state.selectedDeckId); const selectedMySet = playableSavedSets(state.account.sets, state.account.customCards).find((set) => set.id === state.selectedMySetId); const requiresAdultConsent = selectedMySet ? selectedMySet.hasR18 === true : selected?.adultOnly === true; if (button && requiresAdultConsent) button.disabled = !state.adultConfirmed || state.busy; }
