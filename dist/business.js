@@ -122,7 +122,7 @@ function loginView() {
   return `<div class="modal"><section class="modal-card"><h2>企業スペースにログイン</h2><p class="muted">登録済みのメールアドレスへ確認コードを送ります。</p><form class="stack" data-login><label>メールアドレス<input type="email" name="email" autocomplete="email" required value="${esc(state.otpEmail)}"></label>${state.otpSent ? '<label>確認コード<input name="token" inputmode="numeric" autocomplete="one-time-code" required></label>' : ""}<div class="actions"><button class="primary" type="submit">${state.otpSent ? "確認してログイン" : "確認コードを送る"}</button><button type="button" data-login-cancel>戻る</button></div><p class="muted">${esc(state.error || state.notice)}</p></form></section></div>`;
 }
 function shell(body) {
-  app.innerHTML = `<div class="shell"><header class="topbar"><a class="brand" href="/">Mingle.Cards</a><span>企業スペース</span><span class="spacer"></span><span class="muted">${esc(state.user?.email || "")}</span><button data-logout type="button">ログアウト</button></header>${state.notice ? `<div class="notice">${esc(state.notice)}</div>` : ""}${state.error ? `<div class="notice error" role="alert">${esc(state.error)}</div>` : ""}${body}</div>`;
+  app.innerHTML = `<div class="shell"><header class="topbar"><a class="brand" href="https://mingle.cards/">Mingle.Cards</a><span>企業スペース</span><span class="spacer"></span><span class="muted">${esc(state.user?.email || "")}</span><button data-logout type="button">ログアウト</button></header>${state.notice ? `<div class="notice">${esc(state.notice)}</div>` : ""}${state.error ? `<div class="notice error" role="alert">${esc(state.error)}</div>` : ""}${body}</div>`;
   bind();
   bindDangerous();
 }

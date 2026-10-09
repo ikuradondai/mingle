@@ -3,6 +3,34 @@
   "outputDirectory": "dist",
   "routes": [
     {
+      "src": "/business\\.html$",
+      "has": [{ "type": "host", "value": "mingle.cards" }],
+      "missing": [
+        { "type": "query", "key": "code" },
+        { "type": "query", "key": "error" }
+      ],
+      "dest": "https://business.mingle.cards/",
+      "status": 308
+    },
+    {
+      "src": "/business-play\\.html$",
+      "has": [{ "type": "host", "value": "mingle.cards" }],
+      "dest": "https://business.mingle.cards/business-play.html",
+      "status": 308
+    },
+    {
+      "src": "/business-activities\\.html$",
+      "has": [{ "type": "host", "value": "mingle.cards" }],
+      "dest": "https://business.mingle.cards/business-activities.html",
+      "status": 308
+    },
+    {
+      "src": "/business-marketplace\\.html$",
+      "has": [{ "type": "host", "value": "mingle.cards" }],
+      "dest": "https://business.mingle.cards/business-marketplace.html",
+      "status": 308
+    },
+    {
       "src": "/(.*)",
       "headers": {
         "Content-Security-Policy-Report-Only": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; form-action 'self'",

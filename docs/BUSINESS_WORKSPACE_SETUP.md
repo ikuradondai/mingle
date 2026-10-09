@@ -36,7 +36,17 @@ SSO、企業workspaceの通常テーマを自由編集する機能、企業向�
 
 ## URLと既存店舗導線
 
-`business.mingle.cards` はVercel用ホストルーティングをコードに追加済みです。DNS、Vercel domain、Supabaseのallowed redirect URL設定は未反映です。既存店舗向けLPの `https://partnerplan.mingle.cards` は維持します。
+`business.mingle.cards` は同じVercelプロジェクトの企業ホストとして運用します。既存の `mingle.cards/business*.html` は企業ホストへリダイレクトし、`orgId` などのクエリを引き継ぎます。旧 `mingle.cards/business.html` で開始済みのPKCE callback（`code` または `error` を含むURL）は旧hostのページで処理するため、新hostへ転送しません。SupabaseのURL Configurationを設定するまでは本番切替を行わず、Site URLは `https://mingle.cards/`、Redirect URLsは次の5件を登録します。
+
+- `https://business.mingle.cards/`
+- `https://business.mingle.cards/business.html`
+- `https://business.mingle.cards/business-play.html`
+- `https://business.mingle.cards/business-activities.html`
+- `https://business.mingle.cards/business-marketplace.html`
+
+既存の `https://mingle.cards/business.html` は許可URLとして別途維持します。
+
+既存店舗向けLPの `https://partnerplan.mingle.cards` は維持します。
 
 ## ローカル確認
 
