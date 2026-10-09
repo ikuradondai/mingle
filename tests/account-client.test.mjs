@@ -20,6 +20,33 @@ test('account client discovers config, sends current bearer, and never calls API
   token = null; const before = calls.length; assert.deepEqual(await client.api.me(), { user: null, favorites: [], sets: [] }); await assert.rejects(() => client.api.favorite({ id: 'date-01' }, true), (error) => error.status === 401); assert.equal(calls.length, before);
 });
 
+test('business page bootstrap hydrates a saved session before protected page loading', async () => {
+  const calls = [];
+  let releaseConfig;
+  const configReady = new Promise((resolve) => { releaseConfig = resolve; });
+  const auth = { async getSession() { calls.push({ url: 'session' }); return { data: { session: { access_token: 'saved-session' } }, error: null }; } };
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url === '/api/account/config') { await configReady; return { ok: true, async json() { return { enabled: true, url: 'https://project.supabase.co', publishableKey: 'sb_publishable_public' }; } }; }
+    if (url === '/api/business/organizations') return { ok: true, async json() { return { organizations: [] }; } };
+    return { ok: true, async json() { return { user: { id: 'saved-user' } }; } };
+  };
+  const client = module.createAccountClientForTest({ fetchImpl, sdk: { createClient() { return { auth }; } } });
+  let loaded = false;
+  const boot = module.initializeBusinessPage(async () => { loaded = true; const me = await client.api.me(); const organizations = await module.businessRequest('/organizations'); return { me, organizations }; }, { fetchImpl });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(loaded, false);
+  assert.deepEqual(calls.map(({ url }) => url), ['/api/account/config']);
+  releaseConfig();
+  const result = await boot;
+  assert.equal(loaded, true);
+  assert.equal(result.me.user.id, 'saved-user');
+  assert.deepEqual(result.organizations.organizations, []);
+  assert.deepEqual(calls.map(({ url }) => url), ['/api/account/config', 'session', '/api/account/me', 'session', '/api/business/organizations']);
+  assert.equal(calls[2].options.headers.authorization, 'Bearer saved-session');
+  assert.equal(calls[4].options.headers.authorization, 'Bearer saved-session');
+});
+
 test('profile, deletion, and local signout use the fixed account contract', async () => {
   const calls = []; let signOutOptions = null;
   const auth = {

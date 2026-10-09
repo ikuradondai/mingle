@@ -11,6 +11,7 @@ export async function discoverAccountConfig({ fetchImpl = fetch } = {}) {
   try { const response = await fetchImpl('/api/account/config', { credentials: 'same-origin' }); if (!response.ok) return accountConfig; const remote = await response.json(); if (remote?.enabled !== true || typeof remote.url !== 'string' || typeof remote.publishableKey !== 'string') return accountConfig; if (!await initializeClient(remote.url, remote.publishableKey)) return accountConfig; accountConfig.enabled = true; accountConfig.google = remote.googleEnabled === true; accountConfig.emailOtp = remote.emailOtp !== false; } catch { supabase = null; }
   return accountConfig;
 }
+export async function initializeBusinessPage(loadPage, options = {}) { await discoverAccountConfig(options); return loadPage(); }
 async function sessionToken() { if (!supabase) return null; try { const result = await supabase.auth.getSession(); if (result.error) throw result.error; return result.data?.session?.access_token || null; } catch { return null; } }
 async function request(path, options = {}) {
   const token = await sessionToken(); if (!token) { if (path === '/me') return { user: null, favorites: [], sets: [] }; throw authError(); }

@@ -1,4 +1,4 @@
-import { accountApi, businessRequest } from './account.js';
+import { accountApi, businessRequest, initializeBusinessPage } from './account.js';
 
 const root = document.querySelector('#business-marketplace-app');
 const officialNames = { '1on1-mutual':'1on1・相互理解', '1on1-consult':'1on1・相談', '1on1-reflect':'1on1・振り返り', 'meeting-checkin':'会議前3分', 'onboarding-day1':'新人オンボーディング 初日', 'onboarding-week1':'新人オンボーディング 1週目', 'onboarding-month1':'新人オンボーディング 1か月' };
@@ -60,4 +60,4 @@ function bindPlaySetup(){
   root.querySelectorAll('[data-exit]').forEach(b=>b.onclick=()=>{if(state.busy)return;nextGeneration();state.playSetup=null;state.tab='catalog';render();});
 }
 function bindPlay(){root.querySelector('[data-next]')?.addEventListener('click',()=>{if(state.busy)return;state.play.index++;render();});root.querySelector('[data-prev]')?.addEventListener('click',()=>{if(state.busy)return;state.play.index=Math.max(0,state.play.index-1);render();});root.querySelector('[data-pass]')?.addEventListener('click',()=>{if(state.busy)return;state.play.index++;render();});root.querySelectorAll('[data-exit]').forEach(b=>b.onclick=()=>{if(state.busy)return;nextGeneration();state.play=null;state.tab='catalog';render();});}function bind(){}
-load();
+initializeBusinessPage(load);
