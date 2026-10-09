@@ -13,6 +13,24 @@ test("participant gate includes both boundaries and rejects adjacent counts", ()
     assert.equal(gameParticipantGate(entry, 8).valid, true);
     assert.equal(gameParticipantGate(entry, 9).valid, false);
   }
+  const ochi = game("ochi-kara");
+  assert.equal(ochi.href, "/ochi-room.html?create=1");
+  assert.equal(gameParticipantGate(ochi, 1).valid, false);
+  assert.equal(gameParticipantGate(ochi, 2).valid, true);
+  assert.equal(gameParticipantGate(ochi, 8).valid, true);
+  assert.equal(gameParticipantGate(ochi, 9).valid, false);
+  const oneCut = game("one-cut");
+  assert.equal(oneCut.href, "/one-cut.html?create=1");
+  assert.equal(gameParticipantGate(oneCut, 1).valid, false);
+  assert.equal(gameParticipantGate(oneCut, 2).valid, true);
+  assert.equal(gameParticipantGate(oneCut, 8).valid, true);
+  assert.equal(gameParticipantGate(oneCut, 9).valid, false);
+  const mission = game("mission-mingle");
+  assert.equal(mission.href, "/mission-mingle.html?create=1");
+  assert.equal(gameParticipantGate(mission, 2).valid, false);
+  assert.equal(gameParticipantGate(mission, 3).valid, true);
+  assert.equal(gameParticipantGate(mission, 8).valid, true);
+  assert.equal(gameParticipantGate(mission, 9).valid, false);
   for (const count of [2, 3, 8]) assert.equal(gameParticipantGate(game("match"), count).valid, true);
   assert.equal(gameParticipantGate(game("match"), 1).valid, false);
   assert.equal(gameParticipantGate(game("match"), 9).valid, false);

@@ -1,3 +1,4 @@
+import { clearOtherGameAuthIntents } from './game-auth-intent-keys.js';
 const KEY = 'mingle.cards.minority-auth-return.v1';
 const TTL = 30 * 60 * 1000;
 const tokenOk = (value) => value === undefined || value === '' || (typeof value === 'string' && /^[A-Za-z0-9_-]{32}$/.test(value));
@@ -5,6 +6,7 @@ export function saveMinorityAuthIntent({ venueToken, name } = {}, storage = glob
   if (!storage) return false;
   const createdAt = now();
   if (!tokenOk(venueToken) || typeof name !== 'string' || Array.from(name).length > 40) return false;
+  clearOtherGameAuthIntents('minority', storage);
   try { storage.setItem(KEY, JSON.stringify({ createdAt, expiresAt: createdAt + TTL, venueToken: venueToken || '', name: name.trim() })); return true; } catch { return false; }
 }
 export function consumeMinorityAuthIntent(storage = globalThis.sessionStorage, now = Date.now) {
