@@ -1,0 +1,518 @@
+#one-cut-app {
+  max-width: 680px;
+  margin: auto;
+  padding: 12px 16px 40px;
+  color: var(--ink);
+}
+.oc-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 52px;
+}
+.oc-brand img {
+  width: 132px;
+  height: auto;
+}
+.oc-brand a {
+  color: var(--muted);
+  font-size: 13px;
+}
+.oc-brand-side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.oc-sound {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+.oc-sound[aria-pressed="true"] {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+.oc-banner {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--lime);
+  font-weight: 800;
+  text-align: center;
+}
+.oc-card {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 22px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+}
+.oc-card h1 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.oc-sub {
+  margin: 0;
+  font-size: 1rem;
+}
+.oc-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.oc-error {
+  color: #a12b36;
+  font-weight: 800;
+}
+.oc-form {
+  display: grid;
+  gap: 12px;
+}
+.oc-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 800;
+}
+.oc-form input,
+.oc-form select {
+  min-height: 46px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+  font: inherit;
+}
+.oc-progress {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.oc-award {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--coral-soft);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+.oc-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.oc-members li {
+  padding: 8px 10px;
+  border-left: 4px solid var(--participant-0-fg);
+  background: var(--participant-0-soft);
+  overflow-wrap: anywhere;
+}
+.oc-howto {
+  margin: 0;
+  padding-left: 1.4em;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.oc-actions {
+  display: grid;
+  gap: 10px;
+}
+.oc-actions button,
+.oc-link {
+  min-height: 50px;
+}
+.oc-link {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+.oc-options,
+.oc-tally {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.oc-options li,
+.oc-tally li {
+  display: grid;
+  grid-template-columns: 2.2em minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  line-height: 1.45;
+}
+.oc-options li {
+  grid-template-columns: 2.2em minmax(0, 1fr);
+  font-size: 1.05rem;
+}
+.oc-options b,
+.oc-tally b,
+.oc-choices b {
+  display: grid;
+  place-items: center;
+  width: 2em;
+  height: 2em;
+  border-radius: 50%;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 900;
+}
+.oc-tally em {
+  color: var(--muted);
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.oc-tally li.is-answer {
+  border-color: var(--coral);
+  background: var(--coral-soft);
+  font-weight: 900;
+}
+.oc-tally li.is-answer b {
+  background: var(--coral);
+  color: #fff;
+}
+.oc-choices {
+  display: grid;
+  gap: 8px;
+}
+.oc-choices button {
+  display: grid;
+  grid-template-columns: 2.2em minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 800;
+  text-align: left;
+  line-height: 1.45;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.oc-choices button:active {
+  transform: scale(0.97);
+  filter: brightness(0.96);
+}
+.oc-choices .oc-pass {
+  display: block;
+  text-align: center;
+  color: var(--muted);
+}
+.oc-secret {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  border-radius: 14px;
+  text-align: center;
+  background: linear-gradient(135deg, #edf5ff, #fff1ed);
+  font-size: clamp(1.3rem, 5.5vw, 2rem);
+  font-weight: 900;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.oc-secret[hidden] {
+  display: none;
+}
+.oc-secret.is-masked {
+  color: var(--muted);
+  font-size: 1rem;
+  font-weight: 700;
+}
+.oc-hold {
+  min-height: 56px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.oc-answer {
+  padding: 16px;
+  border-radius: 14px;
+  text-align: center;
+  background: #f3f7f3;
+  font-size: clamp(1.3rem, 6vw, 2.1rem);
+  font-weight: 900;
+  line-height: 1.4;
+}
+.oc-answer small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.oc-talk {
+  margin: 0;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--coral-soft);
+  text-align: center;
+  font-size: clamp(1.1rem, 4.5vw, 1.5rem);
+  font-weight: 900;
+  line-height: 1.5;
+}
+.oc-rows {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.oc-rows li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+.oc-points {
+  color: var(--coral);
+  font-weight: 900;
+  white-space: nowrap;
+}
+.oc-pair-score {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(1.6rem, 7vw, 2.4rem);
+  font-weight: 900;
+}
+.oc-likes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.oc-likes button {
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 800;
+}
+.oc-likes button.is-picked {
+  border-color: var(--coral);
+  background: var(--coral-soft);
+}
+.oc-titles {
+  display: grid;
+  gap: 10px;
+}
+.oc-titles > div {
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--coral-soft);
+  line-height: 1.6;
+}
+.oc-titles strong {
+  display: block;
+  font-size: 1.1rem;
+}
+.oc-qr {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.oc-qr img {
+  width: 180px;
+  height: 180px;
+}
+.oc-qr input {
+  width: 100%;
+  min-height: 42px;
+}
+.oc-proxy {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+/* ---- the shooting sequence -------------------------------------------------------------------------------------- */
+.oc-stage {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  min-height: min(62vh, 520px);
+  padding: 18px;
+  border-radius: 18px;
+  background: #14213d;
+  color: #fff;
+  text-align: center;
+  align-content: center;
+  justify-items: center;
+}
+.oc-stage-main {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.oc-stage-text {
+  margin: 0;
+  font-size: clamp(2rem, 11vw, 4rem);
+  font-weight: 900;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.oc-stage-sub {
+  margin: 0;
+  min-height: 1.4em;
+  color: #c9d3ea;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.oc-stage[data-stage="count"] .oc-stage-text {
+  font-size: clamp(5rem, 36vw, 11rem);
+  font-variant-numeric: tabular-nums;
+}
+.oc-stage[data-stage="action"] {
+  background: var(--coral);
+  color: #14213d;
+}
+.oc-stage[data-stage="action"] .oc-stage-text {
+  font-size: clamp(2rem, 10.5vw, 4.6rem);
+}
+.oc-stage[data-stage="cut"] {
+  background: var(--blue);
+}
+.oc-ring {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: min(60vw, 260px);
+  height: min(60vw, 260px);
+  display: none;
+  transform: rotate(-90deg);
+}
+.oc-stage[data-stage="count"] .oc-ring {
+  display: block;
+}
+.oc-ring circle {
+  fill: none;
+  stroke-width: 5;
+}
+.oc-ring-bg {
+  stroke: rgba(255, 255, 255, 0.18);
+}
+.oc-ring-fg {
+  stroke: var(--lime);
+  stroke-linecap: round;
+  stroke-dasharray: 276.5;
+  stroke-dashoffset: 276.5;
+}
+.oc-slate {
+  position: relative;
+  width: 120px;
+  height: 78px;
+  border-radius: 8px;
+  background: #fff;
+  background-image: linear-gradient(#14213d, #14213d);
+  background-size: 100% 30px;
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  display: none;
+}
+.oc-slate span {
+  position: absolute;
+  left: -2px;
+  top: -16px;
+  width: 124px;
+  height: 18px;
+  border-radius: 6px;
+  background: repeating-linear-gradient(115deg, #fff 0 14px, #14213d 14px 28px);
+  border: 2px solid #fff;
+  transform-origin: left bottom;
+  transform: rotate(-16deg);
+  transition: transform 0.08s ease-out;
+}
+.oc-stage[data-stage="slate"] .oc-slate,
+.oc-stage[data-stage="standby"] .oc-slate,
+.oc-stage[data-stage="action"] .oc-slate,
+.oc-stage[data-stage="cut"] .oc-slate {
+  display: block;
+}
+.oc-stage[data-stage="action"] .oc-slate span,
+.oc-stage[data-stage="cut"] .oc-slate span {
+  transform: rotate(0deg);
+}
+/* people who only watch the actor: the face is the show, the countdown stays small */
+.oc-watch {
+  margin: 0;
+  font-size: clamp(1.6rem, 8vw, 2.8rem);
+  font-weight: 900;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.oc-stage.is-watcher .oc-stage-text {
+  font-size: clamp(1.4rem, 7vw, 2.2rem);
+}
+.oc-stage.is-watcher[data-stage="count"] .oc-stage-text {
+  font-size: clamp(2.4rem, 14vw, 4rem);
+}
+.oc-stage.is-watcher .oc-ring {
+  width: 120px;
+  height: 120px;
+}
+.oc-stage.is-watcher .oc-slate {
+  display: none;
+}
+
+/* ---- the private cover over the shared monitor ------------------------------------------------------------------- */
+.oc-cover {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: max(18px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+  background: var(--blue-soft);
+  overflow-y: auto;
+}
+.oc-cover h1 {
+  margin: 0;
+  font-size: clamp(1.5rem, 6.5vw, 2.2rem);
+}
+@media (max-width: 600px) {
+  .oc-card {
+    padding: 17px;
+  }
+  .oc-card h1 {
+    font-size: clamp(1.6rem, 8vw, 2.4rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .oc-slate span {
+    transform: none !important;
+  }
+}

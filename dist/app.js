@@ -22,6 +22,9 @@ import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThem
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText } from "./participant-rule.js";
 import { consumeMinorityAuthIntent, clearMinorityAuthIntent } from "./minority-auth-intent.js";
 import { consumeQuestionWolfAuthIntent, saveQuestionWolfAuthIntent } from "./question-wolf-auth-intent.js";
+import { consumeOchiAuthIntent, saveOchiAuthIntent } from "./ochi-auth-intent.js";
+import { consumeOneCutAuthIntent, saveOneCutAuthIntent } from "./one-cut-auth-intent.js";
+import { consumeMissionAuthIntent, saveMissionAuthIntent } from "./mission-mingle-auth-intent.js";
 import { gameCardImage } from "./game-card-images.js";
 import { groupGames } from "./data/game-registry.js";
 import { gameParticipantGate } from "./game-participant-gate.js";
@@ -90,11 +93,17 @@ const venueOnboardingQuery = new URLSearchParams(location.search).get('venueOnbo
 const libraryQuery = new URLSearchParams(location.search).get('library') === '1';
 const minorityAuthQuery = new URLSearchParams(location.search).get('minorityAuth') === '1';
 const questionWolfAuthQuery = new URLSearchParams(location.search).get('questionWolfAuth') === '1';
+const ochiAuthQuery = new URLSearchParams(location.search).get('ochiAuth') === '1';
+const oneCutAuthQuery = new URLSearchParams(location.search).get('oneCutAuth') === '1';
+const missionAuthQuery = new URLSearchParams(location.search).get('missionAuth') === '1';
 const socialGameReturnQuery = new URLSearchParams(location.search).get('socialGameReturn') === '1';
 if (libraryQuery) { saveLibraryReturnIntent(); state.account.libraryReturn = true; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (venueOnboardingQuery) { clearLibraryReturnIntent(); saveVenueOnboardingIntent(); state.account.venueOnboarding = true; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 else { state.account.venueOnboarding = loadVenueOnboardingIntent(); if (!state.account.venueOnboarding && loadLibraryReturnIntent()) state.account.libraryReturn = true; }
 if (minorityAuthQuery) { state.account.open = true; state.account.status = 'ログイン後にルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
+if (ochiAuthQuery) { state.account.open = true; state.account.status = 'ログイン後にオチから話してのルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
+if (oneCutAuthQuery) { state.account.open = true; state.account.status = 'ログイン後にワンカットのルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
+if (missionAuthQuery) { state.account.open = true; state.account.status = 'ログイン後にミッション・ミングルのルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (questionWolfAuthQuery) { state.account.open = true; state.account.status = 'ログイン後に質問ウルフのルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (socialGameReturnQuery) {
   const returned = consumeSocialGameIntent();
@@ -742,7 +751,7 @@ function frame(content, eyebrow = "Mingle.Cards", withHeader = true) { const sol
     if (!gate.valid) return '';
     return `<button type="button" class="text-button" data-action="game-launch" data-game-id="${esc(id)}">${esc(game.title)}</button>`;
   };
-  const venueGames = state.venue ? `<section aria-labelledby="venue-games-heading"><p class="eyebrow" id="venue-games-heading">ゲーム</p><div class="inline-actions">${venueGameButton('match')}${venueGameButton('choice')}${venueGameButton('minority-topic')}${venueGameButton('question-wolf')}</div></section>` : '';
+  const venueGames = state.venue ? `<section aria-labelledby="venue-games-heading"><p class="eyebrow" id="venue-games-heading">ゲーム</p><div class="inline-actions">${venueGameButton('match')}${venueGameButton('choice')}${venueGameButton('minority-topic')}${venueGameButton('question-wolf')}${venueGameButton('ochi-kara')}${venueGameButton('one-cut')}${venueGameButton('mission-mingle')}</div></section>` : '';
   return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? (venueSet?.adultOnly && !displayAllowed ? "R18を含むテーマ" : title) : (blocked || (shared.adultOnly && !displayAllowed) ? "共有セット" : (shared.name || "共有セット")))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${!blocked && Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}${blocked ? "" : `<p class="account-hint">${landingHint}</p>`}${blockedPanel}${blocked ? "" : `<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${sharedDisplaySettings}${venueAgeTap}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${sharedSubmitDisabled() ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button>${state.venue ? venueGames : ''}</form>`}${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
 
 function participantsView() {
@@ -1535,6 +1544,12 @@ async function loadAccount() {
   if (!current()) return;
   state.account.authReady = true;
   if (!transientFailure && !state.account.user) { clearR18Visible(state.account, r18Storage()); state.account.r18DisplayHydrated = false; }
+      const ochiIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeOchiAuthIntent();
+      if (ochiIntent) { if (!saveOchiAuthIntent(ochiIntent)) { state.account.status = 'オチから話しての復帰情報を保存できませんでした。'; } else { state.account.open = false; location.replace(`/ochi-room.html?create=1${ochiIntent.venueToken ? `&venue=${encodeURIComponent(ochiIntent.venueToken)}` : ''}`); return; } }
+      const oneCutIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeOneCutAuthIntent();
+      if (oneCutIntent) { if (!saveOneCutAuthIntent(oneCutIntent)) { state.account.status = 'ワンカットの復帰情報を保存できませんでした。'; } else { state.account.open = false; location.replace(`/one-cut.html?create=1${oneCutIntent.venueToken ? `&venue=${encodeURIComponent(oneCutIntent.venueToken)}` : ''}`); return; } }
+      const missionIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeMissionAuthIntent();
+      if (missionIntent) { if (!saveMissionAuthIntent(missionIntent)) { state.account.status = 'ミッション・ミングルの復帰情報を保存できませんでした。'; } else { state.account.open = false; location.replace(`/mission-mingle.html?create=1${missionIntent.venueToken ? `&venue=${encodeURIComponent(missionIntent.venueToken)}` : ''}`); return; } }
   if (intentFailed) state.account.status = "年齢の確認を保存できませんでした。アカウント設定からもう一度お試しください。";
   if (state.account.user && !state.venue && state.shared?.ageConfirmationRequired === true) refreshSharedAfterAccountChange();
   if (resumeAfterLogin) resumeSaved(resumeAfterLogin);

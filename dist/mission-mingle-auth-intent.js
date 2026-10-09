@@ -1,5 +1,5 @@
 import { clearOtherGameAuthIntents } from "./game-auth-intent-keys.js";
-const KEY = "mingle.cards.question-wolf-auth-return.v1";
+const KEY = "mingle.cards.mission-auth-return.v1";
 const TTL = 30 * 60 * 1000;
 function safeStorage() {
   try {
@@ -12,7 +12,7 @@ const tokenOk = (value) =>
   value === undefined ||
   value === "" ||
   (typeof value === "string" && /^[A-Za-z0-9_-]{32}$/.test(value));
-export function saveQuestionWolfAuthIntent(
+export function saveMissionAuthIntent(
   { venueToken = "", name = "" } = {},
   storage = safeStorage(),
   now = Date.now,
@@ -27,7 +27,7 @@ export function saveQuestionWolfAuthIntent(
     return false;
   const createdAt = now();
   if (!Number.isFinite(createdAt)) return false;
-  clearOtherGameAuthIntents("questionWolf", storage);
+  clearOtherGameAuthIntents("mission", storage);
   try {
     storage.setItem(
       KEY,
@@ -44,7 +44,7 @@ export function saveQuestionWolfAuthIntent(
     return false;
   }
 }
-export function consumeQuestionWolfAuthIntent(
+export function consumeMissionAuthIntent(
   storage = safeStorage(),
   now = Date.now,
 ) {
@@ -70,9 +70,9 @@ export function consumeQuestionWolfAuthIntent(
     return null;
   }
 }
-export function clearQuestionWolfAuthIntent(storage = safeStorage()) {
+export function clearMissionAuthIntent(storage = safeStorage()) {
   try {
     storage?.removeItem(KEY);
   } catch {}
 }
-export const questionWolfAuthIntentKey = KEY;
+export const missionAuthIntentKey = KEY;
