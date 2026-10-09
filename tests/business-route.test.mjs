@@ -36,6 +36,26 @@ test('catchall default export exists and routing errors are stable', async () =>
   const deleteWrong = response(); await handler(request('GET', `/api/business/organizations/${org}`, {}), deleteWrong); assert.equal(deleteWrong.status, 405);
 });
 
+test('nested routes dispatch to the matching service with the organization id', async () => {
+  const calls = [];
+  const service = {
+    metadata: async (req) => { calls.push(['workspace', req.params.orgId]); return { organizationId: req.params.orgId }; },
+    activities: async (req) => { calls.push(['activities', req.params.orgId]); return { organizationId: req.params.orgId, activities: [] }; },
+  };
+  const market = { list: async (req) => { calls.push(['card-market', req.params.orgId]); return { organizationId: req.params.orgId, sets: [] }; } };
+  const handler = createBusinessHandler({ service, market, rate: noopRate });
+  for (const path of [
+    `/api/business/organizations/${org}/workspace`,
+    `/api/business/organizations/${org}/activities`,
+    `/api/business/organizations/${org}/card-market`,
+  ]) {
+    const result = response();
+    await handler(request('GET', path), result);
+    assert.equal(result.status, 200, path);
+  }
+  assert.deepEqual(calls, [['workspace', org], ['activities', org], ['card-market', org]]);
+});
+
 test('JSON and BOM quoted CSV imports succeed through real handler and service', async () => {
   const handler = makeHandler(); const json = response();
   await handler(request('POST', `/api/business/organizations/${org}/members/import`, { 'content-type': 'application/json' }, { rows: [{ email: 'a@example.test', display_name: 'A', department: '' }] }), json); assert.equal(json.status, 201);

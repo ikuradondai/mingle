@@ -41,6 +41,10 @@
       "continue": true
     },
     {
+      "src": "/api/business(?:/.*)?",
+      "dest": "/api/business.js"
+    },
+    {
       "src": "/",
       "has": [{ "type": "host", "value": "about.mingle.cards" }],
       "dest": "/about/index.html"

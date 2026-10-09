@@ -218,7 +218,7 @@ function render() {
     shell(
       state.busy
         ? `<section class="panel"><h1>企業スペース</h1><p class="muted">組織情報を読み込み中…</p></section>`
-        : `<section class="panel"><h1>企業スペースを読み込めません</h1><p class="notice error">${esc(state.error || "組織情報を確認できませんでした。")}</p><button type="button" data-retry>再試行</button></section>`,
+        : `<section class="panel"><h1>企業スペースを読み込めません</h1><p class="muted">時間をおいて、もう一度お試しください。</p><button type="button" data-retry>再試行</button></section>`,
     );
     app.querySelector("[data-retry]")?.addEventListener("click", loadWorkspace);
     return;
