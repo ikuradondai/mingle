@@ -1089,6 +1089,9 @@ function themeExplorerText(deck, categoryLabels = {}) {
   const soloCategory = soloCategories.find((category) => category.id === deck.category)?.label || deck.category || '';
   return `${deck.title || ''} ${deck.subtitle || ''} ${categories} ${soloCategory}`.toLocaleLowerCase('ja-JP');
 }
+function startsThemeOnSelect(deck, { solo = false, mixed = false, set = false } = {}) {
+  return !set && !mixed && Boolean(deck) && !deck.adultOnly && !canOfferR18(deck);
+}
 function themeExplorerCard(deck, { solo = false, mixed = false, selectedMySet = null, shelfId = 'main' } = {}) {
   const set = deck.__mySet || null;
   const mySetSelected = Boolean(selectedMySet || state.selectedMySetId);
@@ -1108,10 +1111,13 @@ function themeExplorerCard(deck, { solo = false, mixed = false, selectedMySet = 
   const labelKind = showRecommendationNode ? recommendationLabel(deck.id) : '';
   const label = labelKind === 'yesterday_top' ? '昨日の人気No.1' : labelKind === 'rising' ? '人気上昇中！' : '';
   const labelTitle = labelKind === 'yesterday_top' ? '昨日のテーマ開始数で1位' : labelKind === 'rising' ? '昨日のテーマ開始数が一昨日より増加' : '';
+  const startsOnSelect = startsThemeOnSelect(deck, { solo, mixed, set: Boolean(set) });
+  const cardSelected = startsOnSelect ? false : selected;
   const imageMarkup = image ? `<span class="theme-explorer-image-wrap"><img class="theme-explorer-image" src="${esc(image)}" alt="" loading="lazy" width="320" height="213" />${showRecommendationNode ? `<span class="theme-explorer-label" data-theme-recommendation-label="${esc(deck.id)}" title="${esc(labelTitle)}">${label}</span>` : ''}</span>` : '';
   const bookmark = `<button type="button" class="theme-explorer-bookmark ${bookmarked ? 'is-active' : ''}" data-action="theme-bookmark" data-bookmark-id="${esc(bookmarkId)}" aria-pressed="${bookmarked}" aria-label="${bookmarked ? '保存を外す' : 'テーマを保存'}：${esc(title)}" title="${bookmarked ? '保存を外す' : 'テーマを保存'}：${esc(title)}">${actionIcon('bookmark')}</button>`;
   const experiencedToggle = `<button type="button" class="theme-explorer-experienced ${experienced ? 'is-active' : ''}" data-action="theme-experienced" data-experienced-id="${esc(bookmarkId)}" aria-pressed="${experienced}" aria-label="${experienced ? '体験済みを外す' : '体験済みにする'}：${esc(title)}">${experienced ? '✓ 体験済み' : '体験済みにする'}</button>`;
-  return `<div class="theme-explorer-card-wrap">${bookmark}<button type="button" class="theme-explorer-card ${selected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}" data-action="${action}" data-theme-card data-theme-id="${esc(deck.id)}" ${set ? `data-set-id="${esc(set.id)}"` : ''} data-theme-key="${esc(shelfId)}:${esc(deck.id)}" aria-pressed="${selected}" aria-disabled="${locked}" ${locked ? 'disabled' : ''}>${imageMarkup}<span class="theme-explorer-card-body">${control}<strong>${esc(title)}</strong><small>${esc(subtitle)}</small><span class="theme-explorer-meta">${locked ? '🔒 登録で解放' : `${count}枚`}</span></span></button>${experiencedToggle}</div>`;
+  const settings = startsOnSelect && !solo && !locked ? `<button type="button" class="theme-explorer-card-settings" data-action="theme-card-settings" data-theme-id="${esc(deck.id)}" data-theme-key="${esc(shelfId)}:${esc(deck.id)}" aria-label="${esc(title)}の詳細設定" title="詳細設定">${actionIcon('settings')}</button>` : '';
+  return `<div class="theme-explorer-card-wrap">${bookmark}${settings}<button type="button" class="theme-explorer-card ${cardSelected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}" data-action="${action}" data-theme-card data-theme-id="${esc(deck.id)}" ${set ? `data-set-id="${esc(set.id)}"` : ''} data-theme-key="${esc(shelfId)}:${esc(deck.id)}" ${startsOnSelect ? '' : `aria-pressed="${selected}"`} aria-disabled="${locked}" ${locked ? 'disabled' : ''}>${imageMarkup}<span class="theme-explorer-card-body">${control}<strong>${esc(title)}</strong><small>${esc(subtitle)}</small><span class="theme-explorer-meta">${locked ? '🔒 登録で解放' : `${count}枚${startsOnSelect ? ' ・ はじめる' : ''}`}</span></span></button>${experiencedToggle}</div>`;
 }
 function themeExplorerShelf(id, title, decksForShelf, options = {}) {
   const cards = decksForShelf.map((deck) => themeExplorerCard(deck, { ...options, shelfId: id })).join('');
@@ -2033,6 +2039,40 @@ function launchSocialGame(game) {
   }
   location.assign(game.href);
 }
+function startSelectedGroupDeck(deckId = state.selectedDeckId) {
+  state.continuePending = null;
+  state.shareMenuOpen = false;
+  state.shareStatus = "";
+  state.shareFallbackText = "";
+  const deck = decks.find((item) => item.id === deckId);
+  const adultConfirmed = state.adultConfirmed;
+  const namesValid = Boolean(state.venue) || (state.participants.length >= 2 && state.participants.length <= 8 && state.participants.every((name) => typeof name === "string" && name.trim()));
+  if (!namesValid) { state.error = "参加者の名前を入力してください。"; render(); return; }
+  const unseen = state.themeMode === "mixed" ? !state.selectedDeckIds.every((id) => canSeeDeck(decks.find((item) => item.id === id))) : !canSeeDeck(deck);
+  if (unseen) { state.error = "このテーマは利用できません。"; render(); return; }
+  if (state.themeMode === "mixed" ? !state.selectedDeckIds.every((id) => canUseDeck(decks.find((item) => item.id === id))) : !canUseDeck(deck)) {
+    state.error = "このテーマは無料登録後に使えます。ログイン / 新規登録してください。";
+    state.account.open = true; state.account.error = ""; state.account.status = state.error; state.focusSelector = "[data-account-email]"; render(); return;
+  }
+  const includeR18 = Boolean(state.themeMode !== "mixed" && canOfferR18(deck) && adultConfirmed);
+  const activeRule = state.themeMode === 'mixed' && state.selectedDeckIds.some((id) => participantRuleForDeck(id) === 'pair') ? 'pair' : participantRuleForDeck(deck);
+  if (activeRule === 'pair' && state.participants.length !== 2) { state.error = "2人専用です。参加者を変更してください。"; render(); return; }
+  if (includeR18 && !isRegisteredUser()) { state.error = "R18を含めるには無料登録が必要です。"; render(); return; }
+  try {
+    state.session = state.themeMode === "mixed"
+      ? createMixedSession({ participants: state.participants, decks: state.selectedDeckIds.map((id) => decks.find((item) => item.id === id)), includeChallenges: state.includeChallenges, participantRule: state.selectedDeckIds.some((id) => participantRuleForDeck(id) === 'pair') ? 'pair' : 'group' })
+      : createSession({ participants: state.participants, deck, participantRule: activeRule, adultConfirmed, includeR18, includeChallenges: state.includeChallenges });
+    state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null;
+    trackThemeStart(state.session.deckId);
+    recordThemeExplorerStart({ ownerId: state.account.user?.id, mode: "group", themeIds: state.themeMode === "mixed" ? state.selectedDeckIds : [state.session.deckId] });
+    saveCurrentSession(state.session); state.screen = "play"; state.error = ""; render();
+  } catch (error) { state.error = error.message; render(); }
+}
+function startSelectedSoloDeck() {
+  if (state.selectedMySetId) { const set = playableSavedSets(state.account.sets, state.account.customCards).find((item) => item.id === state.selectedMySetId && ['solo', 'both'].includes(item.audience)); if (!set) { state.error = "このマイセットは一人用では利用できません。"; render(); return; } try { playSavedSet(set); } catch (error) { state.error = error.message; render(); } return; }
+  const deck = soloDecks.find((item) => item.id === state.selectedDeckId) || soloDecks[0];
+  try { state.session = createSoloSession({ deck, participant: state.participants[0] || "自分" }); state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null; state.soloMemoOpen = false; state.soloNoteDraft = ""; state.soloNoteStatus = ""; state.soloNoteError = ""; state.soloSummaryDraft = ""; trackThemeStart(state.session.deckId); recordThemeExplorerStart({ ownerId: state.account.user?.id, mode: "solo", themeIds: [state.session.deckId] }); saveCurrentSession(state.session); state.screen = "play"; state.error = ""; render(); } catch (error) { state.error = error.message; render(); }
+}
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
   if (action === "audio-toggle") { event.stopPropagation(); state.focusAction = "audio-toggle"; toggleCardAudio(); render(); return; }
@@ -2056,6 +2096,16 @@ async function handleAction(event) {
   }
   if (state.busy && action !== "continue" && action !== "home") return;
   state.focusAction = action;
+  if (action === "theme-card-settings") {
+    const id = event.currentTarget.dataset.themeId;
+    const deck = decks.find((item) => item.id === id);
+    if (!deck || state.themeMode === "mixed" || !canSeeDeck(deck) || !canUseDeck(deck) || !startsThemeOnSelect(deck, { solo: state.themeMode === "solo", mixed: state.themeMode === "mixed" })) return;
+    state.selectedDeckId = id; state.selectedDeckIds = [id]; state.selectedMySetId = null;
+    state.participantTab = participantRuleForDeck(deck) === 'pair' ? 'pair' : 'group';
+    state.adultConfirmed = false; state.themeOptionsOpen = true; state.error = "";
+    state.focusSelector = `[data-theme-key="${event.currentTarget.dataset.themeKey}"]`;
+    render(); return;
+  }
   if (action === "theme-select") {
     const id = event.currentTarget.dataset.themeId;
     const selectedDeck = state.themeMode === "solo" ? soloDecks.find((item) => item.id === id) : decks.find((item) => item.id === id);
@@ -2073,7 +2123,13 @@ async function handleAction(event) {
         state.selectedDeckId = state.selectedDeckIds[0] || id;
       } else { state.selectedDeckId = id; state.selectedDeckIds = [id]; state.selectedMySetId = null; state.participantTab = participantRuleForDeck(deck) === 'pair' ? 'pair' : 'group'; }
     }
-    state.adultConfirmed = false; state.themeOptionsOpen = state.themeMode !== "mixed" && Boolean(selectedDeck?.adultOnly); state.error = ""; state.focusSelector = `[data-theme-key="${event.currentTarget.dataset.themeKey}"]`; render(); return;
+    state.adultConfirmed = false; state.themeOptionsOpen = state.themeMode !== "mixed" && Boolean(selectedDeck?.adultOnly); state.error = "";
+    if (startsThemeOnSelect(selectedDeck, { solo: state.themeMode === "solo", mixed: state.themeMode === "mixed" })) {
+      if (state.themeMode === "solo") startSelectedSoloDeck();
+      else startSelectedGroupDeck(id);
+      return;
+    }
+    state.focusSelector = `[data-theme-key="${event.currentTarget.dataset.themeKey}"]`; render(); return;
   }
   if (action === "reveal") { playFlipSound(); const previous = ensureSession(); state.session = revealCard(previous); persist(previous); render(); return; }
   if (action === "home") {
@@ -2503,38 +2559,8 @@ async function handleAction(event) {
     render();
     return;
   }
-  if (action === "choose-deck") {
-    state.continuePending = null;
-    state.shareMenuOpen = false;
-    state.shareStatus = "";
-    state.shareFallbackText = "";
-    const deck = decks.find((item) => item.id === event.currentTarget.dataset.deck); const adultConfirmed = state.adultConfirmed; const unseen = state.themeMode === "mixed" ? !state.selectedDeckIds.every((id) => canSeeDeck(decks.find((item) => item.id === id))) : !canSeeDeck(deck); if (unseen) { state.error = "このテーマは利用できません。"; render(); return; } if (state.themeMode === "mixed" ? !state.selectedDeckIds.every((id) => canUseDeck(decks.find((item) => item.id === id))) : !canUseDeck(deck)) { state.error = "このテーマは無料登録後に使えます。ログイン / 新規登録してください。"; state.account.open = true; state.account.error = ""; state.account.status = state.error; state.focusSelector = "[data-account-email]"; render(); return; } const includeR18 = Boolean(state.themeMode !== "mixed" && canOfferR18(deck) && adultConfirmed);
-    const activeRule = state.themeMode === 'mixed' && state.selectedDeckIds.some((id) => participantRuleForDeck(id) === 'pair') ? 'pair' : participantRuleForDeck(deck);
-    if (activeRule === 'pair' && state.participants.length !== 2) { state.error = "2人専用です。参加者を変更してください。"; render(); return; }
-    if (includeR18 && !isRegisteredUser()) { state.error = "R18を含めるには無料登録が必要です。"; render(); return; }
-    try {
-      state.session =
-        state.themeMode === "mixed"
-          ? createMixedSession({ participants: state.participants, decks: state.selectedDeckIds.map((id) => decks.find((item) => item.id === id)), includeChallenges: state.includeChallenges,
-              participantRule: state.selectedDeckIds.some((id) => participantRuleForDeck(id) === 'pair') ? 'pair' : 'group',
-            })
-          : createSession({
-              participants: state.participants,
-              deck,
-              participantRule: activeRule,
-              adultConfirmed,
-              includeR18,
-              includeChallenges: state.includeChallenges,
-            }); state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null; trackThemeStart(state.session.deckId); recordThemeExplorerStart({ ownerId: state.account.user?.id, mode: "group", themeIds: state.themeMode === "mixed" ? state.selectedDeckIds : [state.session.deckId] });
-      saveCurrentSession(state.session);
-      state.screen = "play";
-      state.error = ""; render(); } catch (error) { state.error = error.message; render(); } return; }
-  if (action === "solo-start") {
-    if (state.selectedMySetId) { const set = playableSavedSets(state.account.sets, state.account.customCards).find((item) => item.id === state.selectedMySetId && ['solo', 'both'].includes(item.audience)); if (!set) { state.error = "このマイセットは一人用では利用できません。"; render(); return; } try { playSavedSet(set); } catch (error) { state.error = error.message; render(); } return; }
-    const deck = soloDecks.find((item) => item.id === state.selectedDeckId) || soloDecks[0];
-     try { state.session = createSoloSession({ deck, participant: state.participants[0] || "自分" }); state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null; state.soloMemoOpen = false; state.soloNoteDraft = ""; state.soloNoteStatus = ""; state.soloNoteError = ""; state.soloSummaryDraft = ""; trackThemeStart(state.session.deckId); recordThemeExplorerStart({ ownerId: state.account.user?.id, mode: "solo", themeIds: [state.session.deckId] }); saveCurrentSession(state.session); state.screen = "play"; state.error = ""; render(); } catch (error) { state.error = error.message; render(); }
-    return;
-  }
+  if (action === "choose-deck") { startSelectedGroupDeck(event.currentTarget.dataset.deck); return; }
+  if (action === "solo-start") { startSelectedSoloDeck(); return; }
   if (action === "solo-history-open") { state.soloHistoryOpen = true; state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryHasMore = false; if (state.account.user) loadSoloHistory(false); else { state.account.returnAfterAuth = true; state.account.open = state.account.enabled; state.account.status = "ログイン後に保存したメモを読み込みます。"; render(); } return; }
   if (action === "solo-history-close") { state.soloHistoryOpen = false; state.soloHistoryEditing = null; render(); return; }
   if (action === "solo-history-more") { loadSoloHistory(true); return; }
