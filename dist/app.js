@@ -1437,7 +1437,8 @@ function roundThemeLikeView(session) {
   const buttons = themes.map(({ id, label }) => {
     const liked = hasThemeLike(id); const status = state.themeLikeStatus[id] || ""; const pending = state.themeLikePending.has(id);
     const success = status === "thanks" || liked;
-    return `<div class="theme-like-item"><button type="button" class="theme-like-button${success ? " is-liked" : ""}" data-action="theme-like" data-theme-id="${esc(id)}" aria-pressed="${success}" ${success || pending ? "disabled" : ""}>${actionIcon("heart")}<span>${esc(label)}にいいね</span></button>${success ? '<span class="theme-like-thanks" role="status">ありがとう！</span>' : status === "pending" ? '<span class="theme-like-thanks" role="status">送信中…</span>' : status === "error" ? '<span class="theme-like-error" role="alert">送信できませんでした。もう一度お試しください。</span>' : ""}</div>`;
+    const likeLabel = `テーマ「${esc(label)}」にいいね！`;
+    return `<div class="theme-like-item"><button type="button" class="theme-like-button${success ? " is-liked" : ""}" data-action="theme-like" data-theme-id="${esc(id)}" aria-label="${likeLabel}" aria-pressed="${success}" ${success || pending ? "disabled" : ""}>${actionIcon("heart")}<span>${likeLabel}</span></button>${success ? '<span class="theme-like-thanks" role="status">ありがとう！</span>' : status === "pending" ? '<span class="theme-like-thanks" role="status">送信中…</span>' : status === "error" ? '<span class="theme-like-error" role="alert">送信できませんでした。もう一度お試しください。</span>' : ""}</div>`;
   }).join("");
   return `<section class="theme-likes" aria-label="テーマへのいいね"><div class="theme-like-list">${buttons}</div></section>`;
 }
