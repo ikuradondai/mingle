@@ -3,6 +3,7 @@ import { soloDecks, soloCategories } from "./data/solo-decks.js";
 import { trackPage, trackThemeStart, trackSessionProgress, hasThemeLike, submitThemeLike } from "./analytics.js";
 import { loadSession, saveSession, clearSession } from "./session-storage.js";
 import { canContinue } from "./access-policy.js";
+import { roundCompletionInfo } from "./round-completion.js";
 import { ROUND_SIZE, isTogetherCard, createSession, createMixedSession, createSavedSession, createSharedSession, createSoloSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer, previousAnswer, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS, summarizeLikes, completedRoundFavoriteCards } from "./engine.js";
 import { themeGroups, groupLabels } from "./data/theme-groups.js";
 import { buildFeedbackPayload, feedbackKey, submitFeedback } from "./feedback.js";
@@ -48,7 +49,7 @@ const state = {
   session: null,
   continuePending: null,
   pendingCustomResume: null,
-  error: "", busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, themeLikePending: new Set(), themeLikeStatus: Object.create(null), lastAdvanceAt: 0, focusAction: null, focusSelector: null, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null, soloNoteDraft: "", soloNoteStatus: "", soloNoteError: "", soloSummaryDraft: "", soloSummaryStatus: "", soloDraftOwner: null, soloDraftRevision: 0, soloMemoOpen: false, soloMemoKey: "", soloHistoryOpen: false, soloHistory: [], soloHistoryCursor: null, soloHistoryHasMore: false, soloHistoryLoading: false, soloHistoryError: "", soloHistoryEditing: null, soloNoteDrafts: Object.create(null), soloNoteStatuses: Object.create(null), soloNoteErrors: Object.create(null), soloSummaryDrafts: Object.create(null), soloSummaryStatuses: Object.create(null), soloSummaryErrors: Object.create(null),
+  error: "", busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, themeLikePending: new Set(), roundCompletionPlayed: new Set(), roundApplause: new Set(), roundApplauseBurst: new Set(), themeLikeStatus: Object.create(null), lastAdvanceAt: 0, focusAction: null, focusSelector: null, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null, soloNoteDraft: "", soloNoteStatus: "", soloNoteError: "", soloSummaryDraft: "", soloSummaryStatus: "", soloDraftOwner: null, soloDraftRevision: 0, soloMemoOpen: false, soloMemoKey: "", soloHistoryOpen: false, soloHistory: [], soloHistoryCursor: null, soloHistoryHasMore: false, soloHistoryLoading: false, soloHistoryError: "", soloHistoryEditing: null, soloNoteDrafts: Object.create(null), soloNoteStatuses: Object.create(null), soloNoteErrors: Object.create(null), soloSummaryDrafts: Object.create(null), soloSummaryStatuses: Object.create(null), soloSummaryErrors: Object.create(null),
   selectedDeckIds: ["friends"],
   themeMode: "single", participantTab: "group",
   filter: "all", adultConfirmed: false, includeChallenges: false, resume: null, themeExplorerView: "cards", themeExplorerQuery: "", themeExplorerShelf: "all", themeExplorerTagFilter: "all", themeOptionsOpen: false, account: { enabled: accountConfig.enabled, authReady: false, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false,
@@ -1431,6 +1432,49 @@ function roundLikeThemes(session) {
   const catalog = new Map([...decks, ...soloDecks].map((deck) => [String(deck.id), deck]));
   return [...new Set(ids.map(String))].map((id) => ({ id, label: catalog.get(id)?.title || id })).filter((item) => catalog.has(item.id));
 }
+function completionThemeLabel(session) {
+  if (sessionHasR18(session) && !r18DisplayVisible()) return 'R18を含むテーマ';
+  if (session?.setName) return session.setName;
+  const catalog = [...decks, ...soloDecks];
+  if (session?.mixed) {
+    const labels = session.deckIds.map((id) => catalog.find((deck) => deck.id === id)?.title).filter(Boolean);
+    return labels.join('・') || 'テーマミックス';
+  }
+  const deck = catalog.find((item) => item.id === session?.deckId);
+  return deck?.title || '会話カード';
+}
+function completionThemeHidden(session) {
+  return Boolean(session && sessionHasR18(session) && !r18DisplayVisible());
+}
+function roundCompletionView(session, { solo = false, favoriteBusy = false } = {}) {
+  if (!session || session.sharedGuest || session.venueSession) return '';
+  const info = roundCompletionInfo(session);
+  if (!info.completed) return '';
+  const key = info.key;
+  const storageKey = `mingle.round-completion.played:${key}`;
+  let stored = false; try { stored = sessionStorage.getItem(storageKey) === '1'; } catch {}
+  const entering = !state.roundCompletionPlayed.has(key) && !stored;
+  if (entering) { state.roundCompletionPlayed.add(key); try { sessionStorage.setItem(storageKey, '1'); } catch {} }
+  const applauseStorageKey = `mingle.round-completion.applause:${key}`;
+  let applauseStored = false; try { applauseStored = sessionStorage.getItem(applauseStorageKey) === '1'; } catch {}
+  if (applauseStored) state.roundApplause.add(key);
+  const applauded = state.roundApplause.has(key) || applauseStored;
+  const cardDesign = cardDesignForSession(session);
+  const hiddenTheme = completionThemeHidden(session);
+  const completionImage = !hiddenTheme && cardDesign?.front ? `<img class="completion-card-art" src="${esc(cardDesign.front)}" alt="" aria-hidden="true" />` : '';
+  const pieceCenter = (info.completed - 1) / 2;
+  const pieces = Array.from({ length: info.completed }, (_, index) => `<i class="completion-card-piece" style="--piece-index:${index};--piece-center:${pieceCenter}" aria-hidden="true"></i>`).join('');
+  const title = info.final ? '<span>最後の1枚まで、</span><span>おつかれさまでした。</span>' : solo ? '<span>自分のための、</span><span>ひと区切り。</span>' : '<span>このひと区切りに、</span><span>拍手。</span>';
+  const count = solo ? `今回${info.completed}枚・ここまで${info.cursor}枚` : `${session.participants.length}人でめぐった、今回${info.completed}枚${info.final ? `・ここまで${info.cursor}枚` : ''}`;
+  const cardCount = info.final ? `全${info.total}枚` : `今回${info.completed}枚`;
+  const prompt = solo ? '今、持ち帰りたい気づきはありますか？' : '心に残ったことを、ひとことにすると？';
+  const next = info.final ? '' : `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? 'disabled' : ''}>${state.busy ? '確認中…' : `${actionIcon('right')}もう${info.nextCount}枚、${solo ? '向き合う' : '話そう'}`}</button>`;
+  const burst = state.roundApplauseBurst.delete(key);
+  const motionClass = [entering ? 'is-entering' : '', info.final ? 'is-final' : '', burst ? 'is-applauded' : ''].filter(Boolean).join(' ');
+  const share = solo ? '' : `<div class="completion-secondary-actions"><button class="secondary-button social-share-button" data-action="social-share" aria-label="SNSでシェア" title="シェア" ${state.busy || favoriteBusy ? 'disabled' : ''}>${actionIcon('share')}シェア</button></div>`;
+  const applause = `<button type="button" class="completion-applause ${applauded ? 'is-applauded' : ''}" data-action="round-applause" data-round-key="${esc(key)}" ${applauded ? 'disabled' : ''}>この時間に拍手</button>${applauded ? '<p class="completion-thanks" role="status">おつかれさまでした</p>' : ''}`;
+  return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><div class="completion-card-stack" aria-hidden="true">${pieces}<div class="completion-card">${completionImage}<strong>今日のミングル</strong><span>${cardCount}</span></div></div><h1 tabindex="-1" data-focus>${title}</h1><p class="completion-count">${count} · ${esc(completionThemeLabel(session))}</p><p class="completion-prompt">${prompt}<small>声に出しても、心の中でも。今は言葉にしなくても大丈夫。</small></p>${applause}<div class="completion-actions">${next}<button class="secondary-button" data-action="finish" ${state.busy || favoriteBusy ? 'disabled' : ''}>今日はここまで</button>${info.final ? `<button class="secondary-button" data-action="decks" ${state.busy || favoriteBusy ? 'disabled' : ''}>次のテーマを選ぶ</button>` : ''}</div>${share}<div class="completion-papers" aria-hidden="true">${Array.from({ length: 8 }, (_, index) => `<i style="--paper-index:${index}"></i>`).join('')}</div></section>`;
+}
 function roundThemeLikeView(session) {
   const themes = roundLikeThemes(session);
   if (!themes.length) return "";
@@ -1504,7 +1548,11 @@ function roundView() {
   const endingLink = isActiveVenueSession() && state.venue?.venue.endingUrl ? `<a class="venue-ending-link" href="${esc(state.venue.venue.endingUrl)}" target="_blank" rel="noopener noreferrer">店舗の公式SNS/サイトを見る</a>` : "";
   const feedbackForm = submitted ? '<p class="feedback-success" role="status">フィードバック送信済み。ありがとう！</p>' : `<details class="round-feedback-details" data-round-feedback ${state.roundFeedbackExpanded ? "open" : ""}><summary>α版アンケート <span>ご意見をお聞かせください</span></summary><div class="feedback-box" aria-labelledby="feedback-title"><h2 id="feedback-title" class="feedback-survey-title">α版アンケート</h2><p id="feedback-survey-description" class="feedback-survey-description">今回のミングルについて意見をきかせてください。どうすればもっと楽しめますか？</p><div class="feedback-ratings" role="group" aria-label="評価"><button type="button" class="feedback-rating ${feedback.rating === "positive" ? "is-selected" : ""}" data-action="feedback-rating" data-rating="positive" aria-pressed="${feedback.rating === "positive"}" ${state.feedbackBusy ? "disabled" : ""}>いいね！</button><button type="button" class="feedback-rating ${feedback.rating === "needs_improvement" ? "is-selected" : ""}" data-action="feedback-rating" data-rating="needs_improvement" aria-pressed="${feedback.rating === "needs_improvement"}" ${state.feedbackBusy ? "disabled" : ""}>改善余地大きい！</button></div><label class="feedback-label" for="feedback-text">ひとこと（任意）</label><textarea id="feedback-text" data-feedback-text maxlength="1000" rows="3" placeholder="気づいたことがあれば" ${state.feedbackBusy ? "disabled" : ""}>${esc(feedback.text)}</textarea><p class="form-error" role="alert">${esc(feedback.error)}</p><button type="button" class="secondary-button feedback-submit" data-action="feedback-submit" ${state.feedbackBusy || (!feedback.rating && !feedback.text.trim()) ? "disabled" : ""}>${state.feedbackBusy ? "送信中…" : "送信する"}</button></div></details>`;
   const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(state.session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
-  return frame(`<div class="round-break">${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1>${roundThemeLikeView(session)}<div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : `${actionIcon("right")}つづける`}</button>` : ""}<button class="secondary-button" data-action="finish" aria-label="プレイを終わる" title="終わる" ${favoriteBusy ? "disabled" : ""}>${actionIcon("stop")}終わる</button><button class="secondary-button social-share-button" data-action="social-share" aria-label="SNSでシェア" title="シェア" ${favoriteBusy ? "disabled" : ""}>${actionIcon("share")}シェア</button></div>${likeTotalsView(session)}${roundFavoriteView(session)}${feedbackForm}${endingLink}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更" ${favoriteBusy ? "disabled" : ""}>${actionIcon("grid")}テーマ</button></div>${state.shareDialogOpen ? roundShareDialogView() : ""}${accountOverlay}`);
+  const completion = roundCompletionView(session, { favoriteBusy });
+  const legacyIntro = completion ? '' : `${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1>`;
+  const completionAd = completion ? renderAd("round") : "";
+  const legacyActions = `<div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : `${actionIcon("right")}つづける`}</button>` : ""}<button class="secondary-button" data-action="finish" aria-label="プレイを終わる" title="終わる" ${favoriteBusy ? "disabled" : ""}>${actionIcon("stop")}終わる</button><button class="secondary-button social-share-button" data-action="social-share" aria-label="SNSでシェア" title="シェア" ${favoriteBusy ? "disabled" : ""}>${actionIcon("share")}シェア</button></div>`;
+  return frame(`<div class="round-break">${legacyIntro}${completion || roundThemeLikeView(session)}${completion ? roundThemeLikeView(session) : legacyActions}${likeTotalsView(session)}${roundFavoriteView(session)}${feedbackForm}${completionAd}${endingLink}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更" ${favoriteBusy ? "disabled" : ""}>${actionIcon("grid")}テーマ</button></div>${state.shareDialogOpen ? roundShareDialogView() : ""}${accountOverlay}`);
 }
 
 function finishView() { return roundView(); }
@@ -1899,7 +1947,10 @@ function soloRoundView(session) {
   const seenCards = session.questions.slice(start, Math.min(session.cursor, totalCards)).filter((card) => seen.has(card.id));
   const seenMarkup = seenCards.length ? `<details class="solo-seen-questions"><summary>このラウンドで見た質問（${seenCards.length}）</summary><ul>${seenCards.map((card) => `<li>${esc(card.text)}</li>`).join("")}</ul></details>` : "";
   const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(state.session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
-  return frame(`<div class="round-break solo-round-break"><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>${isFinal ? "振り返りを終えました" : "ここまでの振り返り"}</h1>${roundThemeLikeView(session)}<p class="solo-round-prompt">少し整理できたことは？ 次にやることを一つ決めるなら？</p><div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy ? "disabled" : ""}>${state.busy ? "確認中…" : `${actionIcon("right")}つづける`}</button>` : ""}<button class="secondary-button" data-action="finish" aria-label="プレイを終わる" title="終わる">${actionIcon("stop")}終わる</button></div>${seenMarkup}${isFinal ? soloSupportView({ general: true, youth: true }) : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更">▦ テーマ</button></div>${accountOverlay}`);
+  const completion = roundCompletionView(session, { solo: true });
+  const legacyActions = `<div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy ? "disabled" : ""}>${state.busy ? "確認中…" : `${actionIcon("right")}つづける`}</button>` : ""}<button class="secondary-button" data-action="finish" aria-label="プレイを終わる" title="終わる">${actionIcon("stop")}終わる</button></div>`;
+  const legacyIntro = completion ? '' : `<span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>${isFinal ? "振り返りを終えました" : "ここまでの振り返り"}</h1>`;
+  return frame(`<div class="round-break solo-round-break">${legacyIntro}${completion || roundThemeLikeView(session)}${completion ? roundThemeLikeView(session) : legacyActions}${seenMarkup}${isFinal ? soloSupportView({ general: true, youth: true }) : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更">▦ テーマ</button></div>${accountOverlay}`);
 }
 function updateAdultButton() { updateGroupLink(); if (state.themeMode === "mixed") return;
   const button = root.querySelector(".selected-start"); const selected = decks.find((deck) => deck.id === state.selectedDeckId); const selectedMySet = playableSavedSets(state.account.sets, state.account.customCards).find((set) => set.id === state.selectedMySetId); const requiresAdultConsent = selectedMySet ? selectedMySet.hasR18 === true : selected?.adultOnly === true; if (button && requiresAdultConsent) button.disabled = !state.adultConfirmed || state.busy; }
@@ -2660,6 +2711,13 @@ async function handleAction(event) {
   if (action === "next-answer") { try { advanceGuarded(nextAnswer); } catch (error) { state.error = error.message; render(); } return; }
   if (action === "previous-answer") { const previous = ensureSession(); state.session = previousAnswer(previous); persist(previous); render(); return; }
   if (action === "pass") { try { advanceGuarded(passAnswer); } catch (error) { state.error = error.message; render(); } return; }
+  if (action === "round-applause") {
+    const key = String(event.currentTarget.dataset.roundKey || "");
+    if (key && !state.roundApplause.has(key)) {
+      state.roundApplause.add(key); state.roundApplauseBurst.add(key); try { sessionStorage.setItem(`mingle.round-completion.applause:${key}`, '1'); } catch {} render();
+    }
+    return;
+  }
   if (action === "theme-like") {
     const themeId = String(event.currentTarget.dataset.themeId || "");
     if (!themeId || state.themeLikePending.has(themeId) || hasThemeLike(themeId)) return;
