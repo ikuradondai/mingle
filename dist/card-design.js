@@ -18,7 +18,7 @@ const DECK_FAMILIES = {
   founders: 'work', team: 'work', 'new-colleagues': 'work', 'promotion-rivals': 'work',
   'sports-teammates': 'sports',
   'hero-and-demon-king': 'roleplay', 'assassin-and-target': 'roleplay', 'arch-enemies': 'roleplay', 'detective-and-phantom-thief': 'roleplay',
-  'self-love-now': 'self', 'self-crush': 'self', 'self-breakup-decided': 'self', 'self-breakup-lingering': 'self', 'self-strengths': 'self', 'self-work': 'self', 'self-school': 'self', 'self-club': 'self', 'self-friends': 'self', 'self-values': 'self', 'self-checkin': 'self',
+  'self-love-now': 'self', 'self-crush': 'self', 'self-breakup-decided': 'self', 'self-breakup-lingering': 'self', 'self-strengths': 'self', 'self-work': 'self', 'self-school': 'self', 'self-club': 'self', 'self-friends': 'self', 'self-values': 'self', 'self-checkin': 'self', 'self-path': 'self', 'self-people-tired': 'self', 'self-confidence': 'self', 'self-decision': 'self', 'self-future': 'self',
   intimacy: 'adult', 'first-intimacy': 'adult', 'intimacy-refresh': 'adult', 'intimacy-distance': 'adult',
 };
 const VARIANT_PALETTES = { welcome: ['#ef6a55','#1769e8','#e9b62f','#4da99a'], romance: ['#e9b62f','#ef6a55','#b65d87','#1769e8'], friends: ['#5eb59d','#1769e8','#ef6a55','#e9b62f'], family: ['#e9a35d','#5eb59d','#ef6a55','#8471c6'], work: ['#326d74','#1769e8','#e9b62f','#5eb59d'], sports: ['#1769e8','#ef6a55','#e9b62f','#326d74'], roleplay: ['#6d5ab8','#1769e8','#ef6a55','#e9b62f'], self: ['#8471c6','#1769e8','#5eb59d','#e9b62f'], adult: ['#7d3457','#a94f64','#9b6a3a','#5a315d'] };
@@ -31,7 +31,7 @@ const DECK_VARIANTS = {
   'parent-50plus': 0, 'parent-under12': 1, 'family-reunion': 2, siblings: 3, 'in-laws': 0, 'grandparents-and-grandchildren': 1,
   founders: 0, team: 1, 'new-colleagues': 2, 'promotion-rivals': 3, 'sports-teammates': 0,
   'hero-and-demon-king': 0, 'assassin-and-target': 1, 'arch-enemies': 2, 'detective-and-phantom-thief': 3,
-  'self-love-now': 0, 'self-crush': 1, 'self-breakup-decided': 2, 'self-breakup-lingering': 3, 'self-strengths': 0, 'self-work': 1, 'self-school': 2, 'self-club': 3, 'self-friends': 0, 'self-values': 1, 'self-checkin': 2,
+  'self-love-now': 0, 'self-crush': 1, 'self-breakup-decided': 2, 'self-breakup-lingering': 3, 'self-strengths': 0, 'self-work': 1, 'self-school': 2, 'self-club': 3, 'self-friends': 0, 'self-values': 1, 'self-checkin': 2, 'self-path': 1, 'self-people-tired': 3, 'self-confidence': 0, 'self-decision': 3, 'self-future': 1,
   intimacy: 0, 'first-intimacy': 1, 'intimacy-refresh': 2, 'intimacy-distance': 3,
 };
 function variantAccent(deckId, family) { return VARIANT_PALETTES[family][DECK_VARIANTS[deckId] ?? 0]; }
@@ -59,6 +59,11 @@ export function soloMotifForDeck(deckId) {
     'self-friends': '<circle cx="9" cy="9" r="3"/><circle cx="16" cy="10" r="2.5"/><path d="M3.5 19c.6-3 2.6-5 5.5-5s4.9 2 5.5 5M14.5 19c.3-2 1.4-3.5 3-3.5 1.4 0 2.6 1.2 3 3.5"/>',
     'self-values': '<path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
     'self-checkin': '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
+    'self-path': '<path d="M12 21V8"/><path d="M12 8 5 4M12 8l7-4"/><path d="M3.5 4.5 5 4l.5 1.5M20.5 4.5 19 4l-.5 1.5"/>',
+    'self-people-tired': '<circle cx="12" cy="7" r="3"/><path d="M6 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><rect x="16" y="2.5" width="5" height="3" rx=".6"/>',
+    'self-confidence': '<path d="M12 21v-8"/><path d="M12 13c0-4-3-6-7-6 0 4 3 6 7 6Z"/><path d="M12 15c0-3.5 2.5-5.5 7-5.5 0 3.5-2.5 5.5-7 5.5Z"/>',
+    'self-decision': '<path d="M12 20v-7"/><path d="M12 13 6 7M12 13l6-6"/><path d="M6 11V7h4M14 7h4v4"/>',
+    'self-future': '<path d="M3 18h18"/><path d="M6.5 18a5.5 5.5 0 0 1 11 0"/><path d="M12 6v3M5 9l1.6 1.6M19 9l-1.6 1.6"/>',
   };
   const path = motifs[deckId];
   return path ? `<svg class="solo-card-motif" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${path}</svg>` : '';

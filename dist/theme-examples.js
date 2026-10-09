@@ -13,10 +13,12 @@ export const THEME_EXAMPLE_QUESTION_IDS = Object.freeze({
   'same-oshi-fans': 'same-oshi-fans-01', roommates: 'roommates-01', 'grandparents-and-grandchildren': 'grandparents-and-grandchildren-01',
   neighbors: 'neighbors-02', 'travel-companions': 'travel-companions-02', 'late-night-diner': 'late-night-diner-01',
   'group-mixer': 'group-mixer-04', 'engaged-couple': 'engaged-couple-01', classmates: 'classmates-01',
-  'self-love-now': 'self-love-now-01', 'self-crush': 'self-crush-01', 'self-breakup-decided': 'self-breakup-decided-01',
-  'self-breakup-lingering': 'self-breakup-lingering-01', 'self-strengths': 'self-strengths-01', 'self-work': 'self-work-01',
-  'self-school': 'self-school-01', 'self-club': 'self-club-01', 'self-friends': 'self-friends-01',
-  'self-values': 'self-values-01', 'self-checkin': 'self-checkin-01',
+  'self-love-now': 'self-love-now-09', 'self-crush': 'self-crush-02', 'self-breakup-decided': 'self-breakup-decided-07',
+  'self-breakup-lingering': 'self-breakup-lingering-09', 'self-strengths': 'self-strengths-02', 'self-work': 'self-work-03',
+  'self-school': 'self-school-04', 'self-club': 'self-club-02', 'self-path': 'self-path-09',
+  'self-friends': 'self-friends-11', 'self-people-tired': 'self-people-tired-11', 'self-values': 'self-values-03',
+  'self-checkin': 'self-checkin-01', 'self-confidence': 'self-confidence-07', 'self-decision': 'self-decision-07',
+  'self-future': 'self-future-07',
 });
 
 const CONDITION_LABELS = Object.freeze({

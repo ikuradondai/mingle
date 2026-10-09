@@ -49,6 +49,11 @@ export const THEME_EXPLORER_IMAGES = {
   'in-laws': '/assets/theme-explorer/in-laws-v3.webp',
   'self-breakup-lingering': '/assets/theme-explorer/self-breakup-lingering-v3.webp',
   'self-breakup-decided': '/assets/theme-explorer/self-breakup-decided-v3.webp',
+  'self-path': '/assets/theme-explorer/self-path-v3.webp',
+  'self-people-tired': '/assets/theme-explorer/self-people-tired-v3.webp',
+  'self-confidence': '/assets/theme-explorer/self-confidence-v3.webp',
+  'self-decision': '/assets/theme-explorer/self-decision-v3.webp',
+  'self-future': '/assets/theme-explorer/self-future-v3.webp',
   'parent-under12': '/assets/theme-explorer/parent-under12-v3.webp',
 };
 
