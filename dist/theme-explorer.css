@@ -3,10 +3,11 @@
   max-width: 1120px;
   width: 100%;
   margin: 0 auto;
-  padding: 0 16px 116px;
+  padding: 0 16px 24px;
   box-sizing: border-box;
 }
 .theme-explorer-screen .intro { padding: 0 0 8px; }
+.theme-explorer-screen:has(.theme-explorer-selected-bar) { padding-bottom: 116px; }
 .theme-explorer-screen .intro h1 { font-size: clamp(30px, 3vw, 36px); margin: 0; }
 .theme-explorer-toolbar { display: flex; align-items: center; gap: 12px; margin: 8px 0 14px; }
 .theme-explorer-toolbar-row { display: flex; align-items: center; gap: 12px; margin: 8px 0 14px; }
@@ -131,7 +132,8 @@
 .theme-explorer-screen .guest-theme-note { margin: 0 0 10px; }
 .theme-explorer-card .action-icon, .theme-explorer-shelf-controls .action-icon, .theme-explorer-view .action-icon { width: 19px; height: 19px; }
 @media (max-width: 680px) {
-  .theme-explorer-screen { padding-inline: 0; padding-bottom: 108px; }
+  .theme-explorer-screen { padding-inline: 0; padding-bottom: 24px; }
+  .theme-explorer-screen:has(.theme-explorer-selected-bar) { padding-bottom: 108px; }
   .theme-explorer-toolbar-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 8px 0 12px; }
   .theme-explorer-toolbar-row .theme-explorer-toolbar { display: contents; }
   .theme-explorer-toolbar-row .theme-explorer-search { grid-column: 1; }

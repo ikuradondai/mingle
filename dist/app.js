@@ -1164,6 +1164,9 @@ function themeExplorerSelectedBar({ solo = false, selected, selectedMySet = null
   const namesValid = solo || (state.participants.length >= 2 && state.participants.length <= 8 && state.participants.every((name) => typeof name === 'string' && name.trim()));
   const participantMismatch = !solo && participantRule === 'pair' && state.participants.length !== 2;
   const disabled = blocked || canStart !== true || !namesValid || participantMismatch;
+  const autoStart = Boolean(selected && !selectedMySet && startsThemeOnSelect(selected, { solo, mixed }));
+  const hideBar = autoStart && !optionsOpen && (solo || (namesValid && !participantMismatch));
+  if (hideBar) return '';
   const reason = participantMismatch ? `2人専用です（現在${state.participants.length}人）` : !namesValid ? '参加者の名前を入力してください' : state.error;
   const changeParticipants = participantMismatch || !namesValid ? `<button type="button" class="secondary-button participant-edit-link" data-action="edit-participants">参加者を変更</button>` : '';
   return `<div class="theme-explorer-selected-bar">${reason ? `<span class="theme-explorer-selection-error" role="alert">${esc(reason)}</span>` : ''}<span>選択中: <strong>${esc(label)}</strong></span><div class="theme-explorer-selected-actions">${changeParticipants}${showSettings ? `<button type="button" class="icon-button theme-options-toggle" data-action="theme-options-toggle" aria-expanded="${optionsOpen}" aria-label="詳細設定" title="詳細設定">${actionIcon('settings')}</button>` : ''}<button class="primary-button selected-start" type="button" data-action="${selectedMySet ? 'choose-myset-start' : (solo ? 'solo-start' : 'choose-deck')}" ${selectedMySet ? `data-set-id="${esc(selectedMySet.id)}"` : selected ? `data-deck="${esc(selected.id)}"` : ''} ${disabled ? 'disabled' : ''}>${actionIcon('play')}はじめる</button></div></div>`;
@@ -1215,7 +1218,8 @@ function soloDecksView() {
     : `${themeExplorerShelf('solo-recommended', 'おすすめ', recommended, { solo: true, selectedMySet })}${soloQuizShelf}${historyEntries.length ? themeExplorerShelf('solo-history', '最近遊んだテーマ', historyEntries, { solo: true, selectedMySet }) : ''}${mySetEntries.length ? themeExplorerShelf('solo-mysets', 'マイセット', mySetEntries, { solo: true, selectedMySet }) : ''}${soloCategoryShelves}`;
   const soloConsent = selectedMySet?.hasR18 ? `<label class="consent selected-consent"><input type="checkbox" data-adult="my-set" ${state.adultConfirmed ? 'checked' : ''} ${!isRegisteredUser() ? 'disabled' : ''}/><span><strong>参加者全員が18歳以上で、R18の話題に同意しています</strong><small>このマイセットにはR18の質問が含まれています。</small></span></label>` : '';
   const soloOptionsOpen = state.themeOptionsOpen;
-  const soloControls = `<div class="theme-options ${soloOptionsOpen ? 'is-expanded' : ''}"><div class="theme-options-details"><div class="theme-options-head"><strong>詳細設定</strong><button type="button" class="icon-button" data-action="theme-options-toggle" aria-label="詳細設定を閉じる" title="閉じる">×</button></div>${soloConsent}</div>${themeExplorerSelectedBar({ solo: true, selected, selectedMySet, showSettings: Boolean(soloConsent), optionsOpen: soloOptionsOpen, canStart: true })}</div>`;
+  const hideSoloControls = !soloOptionsOpen && !selectedMySet && selected && startsThemeOnSelect(selected, { solo: true });
+  const soloControls = hideSoloControls ? '' : `<div class="theme-options ${soloOptionsOpen ? 'is-expanded' : ''}"><div class="theme-options-details"><div class="theme-options-head"><strong>詳細設定</strong><button type="button" class="icon-button" data-action="theme-options-toggle" aria-label="詳細設定を閉じる" title="閉じる">×</button></div>${soloConsent}</div>${themeExplorerSelectedBar({ solo: true, selected, selectedMySet, showSettings: Boolean(soloConsent), optionsOpen: soloOptionsOpen, canStart: true })}</div>`;
   return frame(`<div class="theme-screen solo-theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>ひとりで</h1></div>${themeExplorerToolbar({ solo: true, filters })}${soloBrowse}<p class="form-error" role="alert">${esc(state.error)}</p>${soloControls}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'ひとりで', true);
 }
 function decksView() {
@@ -1295,7 +1299,8 @@ function decksView() {
   const participantHint = !participantCountValid ? '<p class="form-error" role="alert">2人専用です。参加者を変更してください。</p>' : '';
   const optionBody = `${selectedMySet ? mySetConsent : (!mixed && consent ? `<label class="consent selected-consent"><input type="checkbox" data-adult="${esc(selected.id)}" ${state.adultConfirmed ? 'checked' : ''} ${!isRegisteredUser() ? 'disabled' : ''}/><span><strong>${esc(consentCopy)}</strong><small>全員が18歳以上で、話題に同意できるときに。</small></span></label>` : '')}${challengeConsent}${participantHint}<p class="form-error" role="alert">${esc(state.error)}</p>${isRegisteredUser() && !mixed && participantCountValid ? `<a class="secondary-button group-room-link" href="${groupRoomHref(groupRoomArgs(selected, selectedMySet))}">みんなのスマホで遊ぶ</a>` : ''}`;
   const participantNamesValid = state.participants.length >= 2 && state.participants.length <= 8 && state.participants.every((name) => typeof name === 'string' && name.trim());
-  const controls = `<div class="theme-options ${optionsOpen ? 'is-expanded' : ''}"><div class="theme-options-details"><div class="theme-options-head"><strong>詳細設定</strong><button type="button" class="icon-button" data-action="theme-options-toggle" aria-label="詳細設定を閉じる" title="閉じる">×</button></div>${optionBody}</div>${themeExplorerSelectedBar({ selected, selectedMySet, mixed, showSettings: true, optionsOpen, canStart: canStart && participantNamesValid, participantRule: selectedRule })}</div>`;
+  const hideControls = !optionsOpen && !selectedMySet && !mixed && participantNamesValid && participantCountValid;
+  const controls = hideControls ? '' : `<div class="theme-options ${optionsOpen ? 'is-expanded' : ''}"><div class="theme-options-details"><div class="theme-options-head"><strong>詳細設定</strong><button type="button" class="icon-button" data-action="theme-options-toggle" aria-label="詳細設定を閉じる" title="詳細設定を閉じる">×</button></div>${optionBody}</div>${themeExplorerSelectedBar({ selected, selectedMySet, mixed, showSettings: true, optionsOpen, canStart: canStart && participantNamesValid, participantRule: selectedRule })}</div>`;
   const listPool = mixed ? regular : [...regular, ...adult];
   const adultShelf = !mixed && categoryId === 'all' && adult.length ? themeExplorerShelf('group-category-adult', 'R18のテーマ', adult, { mixed }) : '';
   const visibleMySetEntries = query.length || state.themeExplorerView === 'list'
@@ -2123,7 +2128,7 @@ async function handleAction(event) {
         state.selectedDeckId = state.selectedDeckIds[0] || id;
       } else { state.selectedDeckId = id; state.selectedDeckIds = [id]; state.selectedMySetId = null; state.participantTab = participantRuleForDeck(deck) === 'pair' ? 'pair' : 'group'; }
     }
-    state.adultConfirmed = false; state.themeOptionsOpen = state.themeMode !== "mixed" && Boolean(selectedDeck?.adultOnly); state.error = "";
+    state.adultConfirmed = false; state.themeOptionsOpen = state.themeMode !== "mixed" && Boolean(selectedDeck?.adultOnly || (selectedDeck && canOfferR18(selectedDeck))); state.error = "";
     if (startsThemeOnSelect(selectedDeck, { solo: state.themeMode === "solo", mixed: state.themeMode === "mixed" })) {
       if (state.themeMode === "solo") startSelectedSoloDeck();
       else startSelectedGroupDeck(id);
