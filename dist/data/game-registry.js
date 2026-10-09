@@ -3,6 +3,15 @@
 // never attempts to create a card session for a game.
 export const groupGames = [
   {
+    id: 'quiz',
+    title: '一般クイズ',
+    subtitle: '問題と解説をみんなで楽しむクイズ',
+    meta: '1〜8人 · 4段階 · 1セット6問',
+    href: '/quiz.html',
+    minParticipants: 1,
+    maxParticipants: 8,
+  },
+  {
     id: 'minority-topic',
     title: 'ひとりだけ違うお題',
     subtitle: 'ヒントを出し合い、少数派を見つけるゲーム',

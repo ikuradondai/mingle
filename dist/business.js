@@ -12,6 +12,11 @@ const FEATURES = [
   ["audio", "効果音"],
   ["theme_tags", "テーマタグ"],
 ];
+const CONTENT_FLAGS = [
+  ["businessActivities", "法人アクティビティ"],
+  ["customQuiz", "会社を知るクイズ"],
+  ["generalQuiz", "一般クイズ"],
+];
 const state = {
   user: null,
   orgs: [],
@@ -146,7 +151,8 @@ function overview() {
     w.role === "owner"
       ? `<details><summary>組織設定</summary><p class="muted">組織名を入力すると組織とメンバー登録を削除します。個人アカウントは削除されません。</p><form class="stack" data-delete-org><label>組織名<input name="name" required></label><button class="danger" type="submit">組織を削除</button></form></details>`
       : "";
-  return `<section class="panel"><h1>${esc(w.organization?.name || "企業スペース")}</h1><p class="muted">権限: ${roleLabel(w.role)}</p><div class="grid"><div class="panel half"><h2>利用テーマ</h2><strong>${Array.isArray(w.themes) ? w.themes.length : "—"}</strong><p class="muted">組織で選んだテーマ</p></div><div class="panel half"><h2>有効な機能</h2><strong>${Object.values(w.featureFlags || {}).filter(Boolean).length} / ${FEATURES.length}</strong><p class="muted">組織ポリシーに従って表示されます</p></div></div><div class="actions"><a href="/business-play.html?orgId=${encodeURIComponent(state.orgId)}" class="primary" style="display:inline-block;padding:.65rem .9rem;text-decoration:none;color:#fff;background:#17233b">プレイを開始</a></div>${deletion}</section>`;
+  const hasActivityHub = w.contentFlags?.businessActivities !== false || w.contentFlags?.customQuiz !== false || w.contentFlags?.generalQuiz !== false;
+  return `<section class="panel"><h1>${esc(w.organization?.name || "企業スペース")}</h1><p class="muted">権限: ${roleLabel(w.role)}</p><div class="grid"><div class="panel half"><h2>利用テーマ</h2><strong>${Array.isArray(w.themes) ? w.themes.length : "—"}</strong><p class="muted">組織で選んだテーマ</p></div><div class="panel half"><h2>有効な機能</h2><strong>${Object.values(w.featureFlags || {}).filter(Boolean).length} / ${FEATURES.length}</strong><p class="muted">組織ポリシーに従って表示されます</p></div></div><div class="actions"><a href="/business-play.html?orgId=${encodeURIComponent(state.orgId)}" class="primary" style="display:inline-block;padding:.65rem .9rem;text-decoration:none;color:#fff;background:#17233b">カードプレイを開始</a>${hasActivityHub ? `<a href="/business-activities.html?orgId=${encodeURIComponent(state.orgId)}" style="display:inline-block;padding:.65rem .9rem;text-decoration:none">法人アクティビティ・クイズ</a>` : ""}<a href="/business-marketplace.html?orgId=${encodeURIComponent(state.orgId)}" style="display:inline-block;padding:.65rem .9rem;text-decoration:none">法人カード</a></div>${deletion}</section>`;
 }
 function members() {
   const rows = Array.isArray(state.workspace?.members)
@@ -194,7 +200,7 @@ function themes() {
     )
     .join(
       "",
-    )}</div><h2>使える機能</h2><div class="checks">${FEATURES.map(([k, label]) => `<label class="check"><input type="checkbox" data-feature="${k}" ${flags[k] ? "checked" : ""} ${canEdit ? "" : "disabled"}> ${label}</label>`).join("")}</div>${canEdit ? '<div class="actions"><button class="primary" type="button" data-save-policy>設定を保存</button></div>' : '<p class="muted">管理者のみ設定を変更できます。</p>'}</section>`;
+    )}</div><h2>使える機能</h2><div class="checks">${FEATURES.map(([k, label]) => `<label class="check"><input type="checkbox" data-feature="${k}" ${flags[k] ? "checked" : ""} ${canEdit ? "" : "disabled"}> ${label}</label>`).join("")}</div><h2>法人コンテンツ</h2><div class="checks">${CONTENT_FLAGS.map(([k, label]) => `<label class="check"><input type="checkbox" data-content-flag="${k}" ${(w.contentFlags?.[k] !== false) ? "checked" : ""} ${canEdit ? "" : "disabled"}> ${label}</label>`).join("")}</div>${canEdit ? '<div class="actions"><button class="primary" type="button" data-save-policy>設定を保存</button></div>' : '<p class="muted">管理者のみ設定を変更できます。</p>'}</section>`;
 }
 function render() {
   if (!state.user) {
@@ -503,10 +509,13 @@ function bind() {
           app.querySelector(`[data-feature="${k}"]`).checked,
         ]),
       );
+      const contentFlags = Object.fromEntries(
+        CONTENT_FLAGS.map(([k]) => [k, app.querySelector(`[data-content-flag="${k}"]`).checked]),
+      );
       try {
         await businessRequest(
           `/organizations/${encodeURIComponent(state.orgId)}/policy`,
-          { method: "PUT", body: { allowedThemeIds: allowed, featureFlags } },
+          { method: "PUT", body: { allowedThemeIds: allowed, featureFlags, contentFlags } },
         );
         if (!mutationCurrent(ctx)) return;
         setMessage("組織ポリシーを保存しました。", "");

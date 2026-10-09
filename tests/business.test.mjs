@@ -14,3 +14,18 @@ test('missing or unverified auth and migration errors are stable',async()=>{cons
 test('CSV member limits and row validation are enforced before RPC',async()=>{const s=createBusinessService({env,fetchImpl:fakeFetch});const row={email:'a@example.test',display_name:'A',department:''};await s.importMembers(req(),Array.from({length:500},(_,i)=>({...row,email:`a${i}@example.test`})));await assert.rejects(()=>s.importMembers(req(),Array.from({length:501},(_,i)=>({...row,email:`b${i}@example.test` }))),e=>e.code==='CSV_LIMIT');await assert.rejects(()=>s.importMembers(req(),[row,row]),e=>e.code==='CSV_INVALID');});
 test('CSV department may be omitted but explicit null is invalid',async()=>{const s=createBusinessService({env,fetchImpl:fakeFetch});await s.importMembers(req(),[{email:'omit@example.test',display_name:'Omit'}]);await assert.rejects(()=>s.importMembers(req(),[{email:'null@example.test',display_name:'Null',department:null}]),e=>e.code==='CSV_INVALID');});
 test('service rate keys use user and operation scope',async()=>{const calls=[];const rate=async(key)=>{calls.push(key);return 0;};const s=createBusinessService({env,fetchImpl:fakeFetch,rateImpl:rate});await s.metadata(req());await s.start(req({mode:'group',themeIds:['team'],participantCount:2}));assert.deepEqual(calls,['business:user:read:22222222-2222-4222-8222-222222222222','business:user:mutation:22222222-2222-4222-8222-222222222222']);});
+test('business activity and quiz starts fail closed on disabled policies',async()=>{
+  const disabledFetch=async(url,options)=>{const response=await fakeFetch(url,options); if(url.includes('/rpc/org_workspace')) { const value=await response.json(); value.featureFlags.group_play=false; return new Response(JSON.stringify(value),{status:200}); } if(url.includes('/rpc/org_content_policy')) return new Response(JSON.stringify({businessActivities:true,customQuiz:false,generalQuiz:true}),{status:200}); return response;};
+  const s=createBusinessService({env,fetchImpl:disabledFetch});
+  const activityReq={...req({participantCount:2}),params:{orgId:'11111111-1111-4111-8111-111111111111',activityId:'meeting-checkin'}};
+  await assert.rejects(()=>s.activityStart(activityReq),e=>e.code==='INVALID_REQUEST');
+  const quizReq={...req(),params:{orgId:'11111111-1111-4111-8111-111111111111',quizId:'11111111-1111-4111-8111-111111111111'}};
+  await assert.rejects(()=>s.quizStart(quizReq),e=>e.code==='FEATURE_DISABLED');
+});
+test('quiz field limits count Unicode characters while payload uses UTF-8 bytes',async()=>{
+  const ownerFetch=async(url,options)=>{const response=await fakeFetch(url,options); if(url.includes('/rpc/org_workspace')) { const value=await response.json(); value.role='owner'; return new Response(JSON.stringify(value),{status:200}); } return response;};
+  const s=createBusinessService({env,fetchImpl:ownerFetch});
+  const base={description:'',status:'draft',questions:[{question:'問題',answer:'正解'}]};
+  await s.createQuiz({...req({...base,title:'あ'.repeat(100)})});
+  await assert.rejects(()=>s.createQuiz({...req({...base,title:'あ'.repeat(121)})}),e=>e.code==='INVALID_REQUEST');
+});
