@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+
+const db=new PGlite(); const owner='00000000-0000-4000-8000-000000000021'; const member='00000000-0000-4000-8000-000000000022'; const noDept='00000000-0000-4000-8000-000000000023';
+const orgSql=await readFile(new URL('../../supabase/migrations/202610140001_organizations.sql',import.meta.url),'utf8'); const marketSql=await readFile(new URL('../../supabase/migrations/202610190002_business_card_market.sql',import.meta.url),'utf8');
+await db.exec(`create schema auth; create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb default '{}'::jsonb); create role anon; create role authenticated; create role service_role; alter role service_role bypassrls; grant usage on schema public,auth to anon,authenticated,service_role; grant all on auth.users to service_role; insert into auth.users values ('${owner}','owner@test',now(),'{}'),('${member}','member@test',now(),'{}'),('${noDept}','nodept@test',now(),'{}');`); await db.exec(orgSql); await db.exec(marketSql);
+const q=async(sql,params=[])=>{await db.exec('set role service_role');try{return (await db.query(sql,params)).rows[0]}finally{await db.exec('reset role')}};
+const denied=async(role,sql)=>{await db.exec(`set role ${role}`);let e;try{await db.exec(sql)}catch(x){e=x}await db.exec('reset role');assert.equal(e?.code,'42501')};
+for(const role of ['anon','authenticated']) await denied(role,"select public.org_card_market_context('00000000-0000-4000-8000-000000000021','00000000-0000-0000-0000-000000000001')");
+const org=(await q("select (public.org_create($1,'x-market','X')).id",[owner])).id;
+await q("insert into public.organization_members(organization_id,user_id,email_normalized,display_name,status,role,department,claimed_at) values($1,$2,'member@test','M','active','member','Sales',now()),($1,$3,'nodept@test','N','active','member',null,now())",[org,member,noDept]);
+await q("insert into public.organization_card_market_entitlements(organization_id) values($1)",[org]);
+const cards=JSON.stringify([{text:'Hello'}]); const set=(await q("select public.org_card_market_save($1,$2,null,'Set','D','group','departments',array['Sales'],'published',$3::jsonb) as value",[owner,org,cards])).value;
+assert.equal((await q('select jsonb_array_length(public.org_card_market_list($1,$2,false)) as n',[member,org])).n,1);
+assert.equal((await q('select jsonb_array_length(public.org_card_market_list($1,$2,false)) as n',[noDept,org])).n,0);
+const play=(await q("select public.org_card_market_play($1,$2,$3,'group',2) as value",[member,org,set.id])).value; assert.equal(play.cards.length,1);
+await assert.rejects(()=>q("select public.org_card_market_play($1,$2,$3,'group',2)",[noDept,org,set.id]),/CARD_MARKET_NOT_FOUND/);
+const bounded=(await q("select public.org_card_market_save_v2($1,$2,null,'Pair','D','group',2,2,'all','{}','published',$3::jsonb) as value",[owner,org,cards])).value;
+await assert.rejects(()=>q("select public.org_card_market_play($1,$2,$3,'group',8)",[member,org,bounded.id]),/PARTICIPANT_COUNT_INVALID/);
+await assert.rejects(()=>q("select public.org_card_market_play($1,$2,$3,null,2)",[member,org,bounded.id]),/PARTICIPANT_COUNT_INVALID/);
+await q("update public.organization_card_market_entitlements set active_until=now()-interval '1 minute' where organization_id=$1",[org]);
+await assert.rejects(()=>q("select public.org_card_market_play($1,$2,$3,'group',2)",[member,org,set.id]),/ENTITLEMENT_REQUIRED/);
+await q("select public.org_card_market_stop($1,$2,$3)",[owner,org,set.id]);
+await assert.rejects(()=>q("update public.organization_card_market_versions set card_count=2 where set_id=$1",[set.id]),/CARD_MARKET_VERSION_IMMUTABLE/);
+console.log('business marketplace RPC permissions and isolation verified on PGlite');

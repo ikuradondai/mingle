@@ -3,11 +3,13 @@ import { soloDecks } from '../dist/data/solo-decks.js';
 import { participantCountAllowed, participantRuleForDeck } from '../dist/participant-rule.js';
 import { accountConfig } from './accounts.mjs';
 import { consumeRate, persistentStoreAvailable } from './store.mjs';
+import { businessActivities } from './data/business-activities.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SLUG = /^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/;
 const FEATURES = ['group_play', 'solo_play', 'theme_mix', 'audio', 'theme_tags'];
 const DEFAULT_FLAGS = { group_play: true, solo_play: true, theme_mix: false, audio: true, theme_tags: true };
+const DEFAULT_CONTENT_FLAGS = { businessActivities: true, customQuiz: true, generalQuiz: true };
 const STATIC = new Map([...decks, ...soloDecks].map((deck) => [deck.id, deck]));
 
 const fail = (status, code) => Object.assign(new Error(code), { status, code });
@@ -32,9 +34,12 @@ async function request(config, path, options = {}, fetchImpl = fetch) {
   const raw = JSON.stringify(data || '');
   if (/PGRST202|PGRST205|42883|function .* does not exist/i.test(raw)) throw fail(503, 'BUSINESS_MIGRATION_UNAVAILABLE');
   if (/OWNER_REQUIRED|ORG_FORBIDDEN|42501/i.test(raw)) throw fail(403, /OWNER_REQUIRED/.test(raw) ? 'OWNER_REQUIRED' : 'FORBIDDEN');
+  if (/FEATURE_DISABLED/i.test(raw)) throw fail(403, 'FEATURE_DISABLED');
   if (/ORG_CONFLICT/i.test(raw)) throw fail(409, 'ORG_CONFLICT');
   if (/ORG_LIMIT|ORG_MEMBER_LIMIT|CSV_LIMIT/i.test(raw)) throw fail(409, 'ORG_LIMIT');
-  if (/CSV_INVALID|POLICY_INVALID|ORG_INVALID|INVALID_REQUEST/i.test(raw)) throw fail(400, 'INVALID_REQUEST');
+  if (/QUIZ_LIMIT/i.test(raw)) throw fail(409, 'QUIZ_LIMIT');
+  if (/QUIZ_NOT_FOUND/i.test(raw)) throw fail(404, 'QUIZ_NOT_FOUND');
+  if (/QUIZ_INVALID|CSV_INVALID|POLICY_INVALID|ORG_INVALID|INVALID_REQUEST/i.test(raw)) throw fail(400, 'INVALID_REQUEST');
   throw fail(response.status === 401 ? 401 : 502, response.status === 401 ? 'UNAUTHENTICATED' : 'BUSINESS_UNAVAILABLE');
 }
 
@@ -67,7 +72,9 @@ export function createBusinessService({ env = process.env, fetchImpl = fetch, ra
     if (!value) throw fail(403, 'FORBIDDEN');
     const allowed = value.allowedThemeIds || value.allowed_theme_ids || [];
     const flags = value.featureFlags || value.feature_flags || DEFAULT_FLAGS;
-    const result = { organizationId: orgId, organization: value.organization || null, role: value.role, themes: allowed.map(snapshot).filter(Boolean).map((item) => ({ id: item.id, name: item.name, cardCount: item.cards.length, participantRule: item.participantRule })), featureFlags: { ...DEFAULT_FLAGS, ...flags } };
+    const content = await rpc('org_content_policy', { p_actor: user.id, p_org: orgId });
+    const contentFlags = { ...DEFAULT_CONTENT_FLAGS, ...(Array.isArray(content) ? content[0] : content) };
+    const result = { organizationId: orgId, organization: value.organization || null, role: value.role, themes: allowed.map(snapshot).filter(Boolean).map((item) => ({ id: item.id, name: item.name, cardCount: item.cards.length, participantRule: item.participantRule })), featureFlags: { ...DEFAULT_FLAGS, ...flags }, contentFlags };
     if (value.role === 'owner' || value.role === 'admin') {
       result.catalog = [...STATIC.keys()].map(snapshot).filter(Boolean).map((item) => ({ id: item.id, name: item.name, cardCount: item.cards.length, participantRule: item.participantRule }));
       result.members = value.members || [];
@@ -108,12 +115,79 @@ export function createBusinessService({ env = process.env, fetchImpl = fetch, ra
   async function policy(req) {
     const { user } = await current(req, 'mutation'); const orgId = validOrg(req.params.orgId); const input = object(req.body);
     if (!Array.isArray(input.allowedThemeIds) || !input.featureFlags || typeof input.featureFlags !== 'object' || Array.isArray(input.featureFlags)) throw fail(400, 'INVALID_REQUEST');
-    if (Object.keys(input).some((key) => !['allowedThemeIds', 'featureFlags'].includes(key)) || Object.keys(input.featureFlags).some((key) => !FEATURES.includes(key)) || FEATURES.some((key) => typeof input.featureFlags[key] !== 'boolean') || (!input.featureFlags.group_play && !input.featureFlags.solo_play)) throw fail(400, 'INVALID_REQUEST');
+    if (Object.keys(input).some((key) => !['allowedThemeIds', 'featureFlags', 'contentFlags'].includes(key)) || Object.keys(input.featureFlags).some((key) => !FEATURES.includes(key)) || FEATURES.some((key) => typeof input.featureFlags[key] !== 'boolean') || (!input.featureFlags.group_play && !input.featureFlags.solo_play)) throw fail(400, 'INVALID_REQUEST');
+    const contentFlags = input.contentFlags === undefined ? null : input.contentFlags;
+    if (contentFlags !== null && (!contentFlags || typeof contentFlags !== 'object' || Array.isArray(contentFlags) || Object.keys(contentFlags).some((key) => !['businessActivities', 'customQuiz', 'generalQuiz'].includes(key)) || ['businessActivities', 'customQuiz', 'generalQuiz'].some((key) => typeof contentFlags[key] !== 'boolean'))) throw fail(400, 'INVALID_REQUEST');
     const ids = [...new Set(input.allowedThemeIds)]; if (ids.length !== input.allowedThemeIds.length || ids.some((id) => typeof id !== 'string' || !SLUG.test(id) || id.includes('r18') || !snapshot(id))) throw fail(400, 'INVALID_REQUEST');
+    if (contentFlags) return { policy: await rpc('org_set_all_policy', { p_actor: user.id, p_org: orgId, p_themes: ids, p_flags: input.featureFlags, p_business: contentFlags.businessActivities, p_custom: contentFlags.customQuiz, p_general: contentFlags.generalQuiz }) };
     return { policy: await rpc('org_set_policy', { p_actor: user.id, p_org: orgId, p_themes: ids, p_flags: input.featureFlags }) };
   }
 
   async function metadata(req) { const { user } = await current(req, 'read'); return workspace(user, req.params.orgId); }
+
+  function activityView(activity) {
+    return { id: activity.id, title: activity.title, description: activity.description, kind: activity.kind, minParticipants: activity.minParticipants, maxParticipants: activity.maxParticipants, cardCount: activity.cards.length };
+  }
+  const activityWithCards = (activity) => ({ ...activityView(activity), cards: activity.cards.map((card) => ({ id: card.id, question: card.question, ...(card.options ? { options: card.options } : {}) })) });
+
+  async function activities(req) {
+    const { user } = await current(req, 'read');
+    const meta = await workspace(user, req.params.orgId);
+    if (!meta.contentFlags.businessActivities) throw fail(403, 'FEATURE_DISABLED');
+    return { organizationId: req.params.orgId, activities: businessActivities.map(activityView) };
+  }
+
+  async function activityStart(req) {
+    const { user } = await current(req, 'mutation');
+    const orgId = validOrg(req.params.orgId);
+    const input = object(req.body);
+    const activityId = req.params.activityId || input.activityId;
+    if (Object.keys(input).some((key) => !['activityId', 'participantCount'].includes(key)) || typeof activityId !== 'string' || (input.activityId !== undefined && input.activityId !== activityId) || !Number.isInteger(input.participantCount)) throw fail(400, 'INVALID_REQUEST');
+    const meta = await workspace(user, orgId);
+    if (!meta.contentFlags.businessActivities) throw fail(403, 'FEATURE_DISABLED');
+    const activity = businessActivities.find((item) => item.id === activityId);
+    if (!meta.featureFlags.group_play || !activity || input.participantCount < activity.minParticipants || input.participantCount > activity.maxParticipants) throw fail(400, 'INVALID_REQUEST');
+    return { organizationId: orgId, activity: activityWithCards(activity), participantCount: input.participantCount, mode: 'shared' };
+  }
+
+  async function quizzes(req) {
+    const { user } = await current(req, 'read');
+    const orgId = validOrg(req.params.orgId);
+    const meta = await workspace(user, orgId);
+    if (!meta.contentFlags.customQuiz) throw fail(403, 'FEATURE_DISABLED');
+    return { organizationId: orgId, quizzes: await rpc('org_quiz_list', { p_actor: user.id, p_org: orgId, p_include_drafts: ['owner', 'admin'].includes(meta.role) }) };
+  }
+
+  async function quizStart(req) {
+    const { user } = await current(req, 'mutation');
+    const orgId = validOrg(req.params.orgId); const quizId = validOrg(req.params.quizId);
+    const meta = await workspace(user, orgId);
+    if (!meta.contentFlags.customQuiz) throw fail(403, 'FEATURE_DISABLED');
+    const list = await rpc('org_quiz_list', { p_actor: user.id, p_org: orgId, p_include_drafts: false });
+    const quiz = (Array.isArray(list) ? list : []).find((item) => String(item.id) === quizId);
+    if (!quiz || quiz.status !== 'published') throw fail(404, 'QUIZ_NOT_FOUND');
+    return { organizationId: orgId, quiz };
+  }
+
+  function quizInput(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input) || typeof input.title !== 'string' || typeof input.description !== 'string' || !Array.isArray(input.questions) || !['draft', 'published'].includes(input.status)) throw fail(400, 'INVALID_REQUEST');
+    const chars = (value) => Array.from(value).length;
+    const payloadSize = Buffer.byteLength(JSON.stringify(input.questions) + input.title + input.description, 'utf8');
+    if (!input.title.trim() || chars(input.title) > 120 || chars(input.description) > 500 || payloadSize > 262144 || input.questions.length < 1 || input.questions.length > 100 || input.questions.some((q) => !q || typeof q !== 'object' || Array.isArray(q) || typeof q.question !== 'string' || typeof q.answer !== 'string' || !q.question.trim() || !q.answer.trim() || chars(q.question) > 1000 || chars(q.answer) > 1000 || (q.explanation !== undefined && (typeof q.explanation !== 'string' || chars(q.explanation) > 2000)) || Object.keys(q).some((key) => !['question', 'answer', 'explanation'].includes(key)))) throw fail(400, 'INVALID_REQUEST');
+    return { title: input.title.trim(), description: input.description.trim(), status: input.status, questions: input.questions.map((q) => ({ question: q.question.trim(), answer: q.answer.trim(), explanation: q.explanation?.trim() || '' })) };
+  }
+
+  async function createQuiz(req) {
+    const { user } = await current(req, 'mutation'); const orgId = validOrg(req.params.orgId); const meta = await workspace(user, orgId); if (!meta.contentFlags.customQuiz || !['owner', 'admin'].includes(meta.role)) throw fail(403, 'FORBIDDEN');
+    const input = quizInput(object(req.body));
+    return { quiz: await rpc('org_quiz_create', { p_actor: user.id, p_org: orgId, p_title: input.title, p_description: input.description, p_questions: input.questions, p_status: input.status }) };
+  }
+
+  async function updateQuiz(req) {
+    const { user } = await current(req, 'mutation'); const orgId = validOrg(req.params.orgId); const quizId = validOrg(req.params.quizId); const meta = await workspace(user, orgId); if (!meta.contentFlags.customQuiz || !['owner', 'admin'].includes(meta.role)) throw fail(403, 'FORBIDDEN');
+    const input = quizInput(object(req.body));
+    return { quiz: await rpc('org_quiz_update', { p_actor: user.id, p_org: orgId, p_quiz: quizId, p_title: input.title, p_description: input.description, p_questions: input.questions, p_status: input.status }) };
+  }
 
   async function start(req) {
     const { user } = await current(req, 'mutation'); const orgId = validOrg(req.params.orgId); const input = object(req.body);
@@ -128,5 +202,5 @@ export function createBusinessService({ env = process.env, fetchImpl = fetch, ra
 
   async function removeMember(req, memberId) { const { user } = await current(req, 'mutation'); if (!UUID.test(memberId)) throw fail(400, 'INVALID_REQUEST'); return { removed: await rpc('org_remove_member', { p_actor: user.id, p_org: validOrg(req.params.orgId), p_member: memberId }) }; }
   async function removeOrganization(req, orgId) { const { user } = await current(req, 'mutation'); return { deleted: await rpc('org_delete', { p_actor: user.id, p_org: validOrg(orgId) }) }; }
-  return { create, list, memberAction, importMembers, policy, metadata, start, removeMember, removeOrganization };
+  return { create, list, memberAction, importMembers, policy, metadata, start, activities, activityStart, quizzes, quizStart, createQuiz, updateQuiz, removeMember, removeOrganization };
 }

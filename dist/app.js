@@ -1201,10 +1201,12 @@ function soloDecksView() {
     ? mySetEntries.filter((entry) => state.themeExplorerShelf === 'all' || entry.__mySet?.category === state.themeExplorerShelf)
     : [];
   const soloFlat = themeExplorerUnique([...categoryDecks, ...visibleMySetEntries]);
+  const visibleQuiz = groupGames.filter((game) => game.id === 'quiz' && gameParticipantGate(game, state.participants.length).valid && (!query || `${game.title} ${game.subtitle} ${game.meta}`.toLocaleLowerCase('ja-JP').includes(query)));
+  const soloQuizShelf = visibleQuiz.length ? themeGameShelf(visibleQuiz) : '';
   const soloNeedsFlat = state.themeExplorerView === 'list' || query.length > 0 || state.themeExplorerShelf !== 'all' || state.themeExplorerTagFilter !== 'all';
   const soloBrowse = soloNeedsFlat
-    ? (soloFlat.length ? themeExplorerShelf('solo-filtered', 'テーマ一覧', soloFlat, { solo: true, selectedMySet }) : themeExplorerEmpty())
-    : `${themeExplorerShelf('solo-recommended', 'おすすめ', recommended, { solo: true, selectedMySet })}${historyEntries.length ? themeExplorerShelf('solo-history', '最近遊んだテーマ', historyEntries, { solo: true, selectedMySet }) : ''}${mySetEntries.length ? themeExplorerShelf('solo-mysets', 'マイセット', mySetEntries, { solo: true, selectedMySet }) : ''}${soloCategoryShelves}`;
+    ? `${soloFlat.length ? themeExplorerShelf('solo-filtered', 'テーマ一覧', soloFlat, { solo: true, selectedMySet }) : themeExplorerEmpty()}${soloQuizShelf}`
+    : `${themeExplorerShelf('solo-recommended', 'おすすめ', recommended, { solo: true, selectedMySet })}${soloQuizShelf}${historyEntries.length ? themeExplorerShelf('solo-history', '最近遊んだテーマ', historyEntries, { solo: true, selectedMySet }) : ''}${mySetEntries.length ? themeExplorerShelf('solo-mysets', 'マイセット', mySetEntries, { solo: true, selectedMySet }) : ''}${soloCategoryShelves}`;
   const soloConsent = selectedMySet?.hasR18 ? `<label class="consent selected-consent"><input type="checkbox" data-adult="my-set" ${state.adultConfirmed ? 'checked' : ''} ${!isRegisteredUser() ? 'disabled' : ''}/><span><strong>参加者全員が18歳以上で、R18の話題に同意しています</strong><small>このマイセットにはR18の質問が含まれています。</small></span></label>` : '';
   const soloOptionsOpen = state.themeOptionsOpen;
   const soloControls = `<div class="theme-options ${soloOptionsOpen ? 'is-expanded' : ''}"><div class="theme-options-details"><div class="theme-options-head"><strong>詳細設定</strong><button type="button" class="icon-button" data-action="theme-options-toggle" aria-label="詳細設定を閉じる" title="閉じる">×</button></div>${soloConsent}</div>${themeExplorerSelectedBar({ solo: true, selected, selectedMySet, showSettings: Boolean(soloConsent), optionsOpen: soloOptionsOpen, canStart: true })}</div>`;
