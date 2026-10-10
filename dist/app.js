@@ -4,6 +4,7 @@ import { trackPage, trackThemeStart, trackSessionProgress, hasThemeLike, submitT
 import { loadSession, saveSession, clearSession } from "./session-storage.js";
 import { canContinue } from "./access-policy.js";
 import { roundCompletionInfo } from "./round-completion.js";
+import { completionFeelingChoices, completionFeelingFor, completionFeelingKey } from "./round-feeling.js";
 import { ROUND_SIZE, isTogetherCard, createSession, createMixedSession, createSavedSession, createSharedSession, createSoloSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer, previousAnswer, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS, summarizeLikes, completedRoundFavoriteCards } from "./engine.js";
 import { themeGroups, groupLabels } from "./data/theme-groups.js";
 import { buildFeedbackPayload, feedbackKey, submitFeedback } from "./feedback.js";
@@ -49,7 +50,7 @@ const state = {
   session: null,
   continuePending: null,
   pendingCustomResume: null,
-  error: "", busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, themeLikePending: new Set(), roundApplause: new Set(), themeLikeStatus: Object.create(null), lastAdvanceAt: 0, focusAction: null, focusSelector: null, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null, soloNoteDraft: "", soloNoteStatus: "", soloNoteError: "", soloSummaryDraft: "", soloSummaryStatus: "", soloDraftOwner: null, soloDraftRevision: 0, soloMemoOpen: false, soloMemoKey: "", soloHistoryOpen: false, soloHistory: [], soloHistoryCursor: null, soloHistoryHasMore: false, soloHistoryLoading: false, soloHistoryError: "", soloHistoryEditing: null, soloNoteDrafts: Object.create(null), soloNoteStatuses: Object.create(null), soloNoteErrors: Object.create(null), soloSummaryDrafts: Object.create(null), soloSummaryStatuses: Object.create(null), soloSummaryErrors: Object.create(null),
+  error: "", busy: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, themeLikePending: new Set(), themeLikeStatus: Object.create(null), lastAdvanceAt: 0, focusAction: null, focusSelector: null, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null, soloNoteDraft: "", soloNoteStatus: "", soloNoteError: "", soloSummaryDraft: "", soloSummaryStatus: "", soloDraftOwner: null, soloDraftRevision: 0, soloMemoOpen: false, soloMemoKey: "", soloHistoryOpen: false, soloHistory: [], soloHistoryCursor: null, soloHistoryHasMore: false, soloHistoryLoading: false, soloHistoryError: "", soloHistoryEditing: null, soloNoteDrafts: Object.create(null), soloNoteStatuses: Object.create(null), soloNoteErrors: Object.create(null), soloSummaryDrafts: Object.create(null), soloSummaryStatuses: Object.create(null), soloSummaryErrors: Object.create(null),
   selectedDeckIds: ["friends"],
   themeMode: "single", participantTab: "group",
   filter: "all", adultConfirmed: false, includeChallenges: false, resume: null, themeExplorerView: "cards", themeExplorerQuery: "", themeExplorerShelf: "all", themeExplorerTagFilter: "all", themeOptionsOpen: false, account: { enabled: accountConfig.enabled, authReady: false, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false,
@@ -1443,26 +1444,35 @@ function completionThemeLabel(session) {
   const deck = catalog.find((item) => item.id === session?.deckId);
   return deck?.title || '会話カード';
 }
+const completionFeelingMemory = new Map();
+const completionFeelingAnimated = new Set();
+function completionFeelingStored(key, solo) {
+  const memory = completionFeelingMemory.get(key); if (completionFeelingFor(solo, memory)) { completionFeelingAnimated.add(key); return memory; }
+  try { const id = sessionStorage.getItem(`mingle.round-completion.feeling:${key}`); if (completionFeelingFor(solo, id)) { completionFeelingMemory.set(key, id); completionFeelingAnimated.add(key); return id; } } catch {}
+  return "";
+}
+function completionFeelingResult(feeling, entering = false) {
+  const title = feeling.title === "知らなかった一面に、出会えた。" ? "<span>知らなかった一面に、</span><span>出会えた。</span>" : esc(feeling.title);
+  return `<div class="completion-feeling-result${entering ? " is-entering" : ""}" data-feeling-result tabindex="-1"><img class="completion-feeling-result-image" src="${esc(feeling.image)}" alt="" aria-hidden="true" width="232" height="156"><h2>${title}</h2>${feeling.prompt ? `<p>${esc(feeling.prompt)}</p><small>声に出しても、心の中でも。</small>` : ""}<button type="button" class="completion-feeling-change" data-action="completion-feeling-change">選び直す</button></div>`;
+}
+function completionFeelingStage(session, solo, key) {
+  const choices = completionFeelingChoices(solo); const stored = completionFeelingStored(key, solo); const chosen = stored ? completionFeelingFor(solo, stored) : null;
+  const options = choices.map((item) => `<button type="button" class="completion-feeling-option" data-action="completion-feeling" data-feeling="${esc(item.id)}" aria-pressed="${stored === item.id}"><img src="${esc(item.image)}" alt="" aria-hidden="true" width="104" height="76"><span>${esc(item.label)}</span></button>`).join("");
+  return `<div class="completion-feeling-stage${chosen ? " is-selected" : ""}" data-feeling-stage data-feeling-key="${esc(key)}"><div class="completion-feeling-prompt"${chosen ? ' hidden' : ''}><strong>いまのあなたに残ったものは？</strong><div class="completion-feeling-options">${options}</div></div><div class="completion-feeling-result-wrap"${chosen ? '' : ' hidden'}>${chosen ? completionFeelingResult(chosen) : ''}</div></div>`;
+}
 function roundCompletionView(session, { solo = false, favoriteBusy = false } = {}) {
   if (!session || session.sharedGuest || session.venueSession) return '';
-  const info = roundCompletionInfo(session);
-  if (!info.completed) return '';
-  const key = info.key;
-  const applauseStorageKey = `mingle.round-completion.applause:${key}`;
-  let applauseStored = false; try { applauseStored = sessionStorage.getItem(applauseStorageKey) === '1'; } catch {}
-  if (applauseStored) state.roundApplause.add(key);
-  const applauded = state.roundApplause.has(key) || applauseStored;
-  const completionImage = `<img class="completion-illustration" src="/assets/${solo ? 'completion-solo-reflection-v3.png' : 'completion-conversation-v3.png'}" alt="" aria-hidden="true" />`;
+  const info = roundCompletionInfo(session); if (!info.completed) return '';
+  const key = completionFeelingKey(session); const completionImage = `<img class="completion-illustration" src="/assets/${solo ? 'completion-solo-reflection-v3.png' : 'completion-conversation-v3.png'}" alt="" aria-hidden="true" />`;
   const title = info.final ? '<span>最後の1枚まで、</span><span>おつかれさまでした。</span>' : '<span>ひと区切り、</span><span>おつかれさまでした。</span>';
   const count = solo ? `今回${info.completed}枚・ここまで${info.cursor}枚` : `${session.participants.length}人でめぐった、今回${info.completed}枚${info.final ? `・ここまで${info.cursor}枚` : ''}`;
   const cardCount = info.final ? `全${info.total}枚を終えました` : `${info.completed}枚を終えました`;
-  const prompt = solo ? '今、持ち帰りたい気づきは？' : '今日、心に残ったことは？';
   const next = info.final ? '' : `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? 'disabled' : ''}>${state.busy ? '確認中…' : `${actionIcon('right')}もう${info.nextCount}枚、${solo ? '向き合う' : '話そう'}`}</button>`;
-  const motionClass = [info.final ? 'is-final' : ''].filter(Boolean).join(' ');
+  const motionClass = info.final ? 'is-final' : '';
   const share = solo ? '' : `<button class="completion-link social-share-button" data-action="social-share" aria-label="SNSでシェア" title="シェア" ${state.busy || favoriteBusy ? 'disabled' : ''}>シェア</button>`;
-  const applause = `<div class="completion-applause-wrap"><button type="button" class="completion-applause ${applauded ? 'is-applauded' : ''}" data-action="round-applause" data-round-key="${esc(key)}" aria-label="この時間に拍手" title="この時間に拍手" aria-pressed="${applauded}" aria-disabled="${applauded}"><img class="completion-applause-icon" src="/assets/applause-hands-${applauded ? 'pressed-' : ''}v3.png" alt="" aria-hidden="true" width="56" height="56" /><img class="completion-applause-preload" src="/assets/applause-hands-pressed-v3.png" alt="" aria-hidden="true" width="56" height="56" /></button><p class="completion-applause-status" data-applause-status role="status" aria-live="polite">${applauded ? 'この時間に、拍手を送りました。' : '&nbsp;'}</p></div>`;
-  return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><div class="completion-intro-illustration">${completionImage}</div><p class="completion-fact">${cardCount}</p><h1 tabindex="-1" data-focus>${title}</h1><p class="completion-count">${count} · ${esc(completionThemeLabel(session))}</p><div class="completion-prompt"><strong>ふりかえり</strong><span>${prompt}</span><small>声に出しても、心の中でも。今は言葉にしなくても大丈夫。</small></div>${applause}<div class="completion-actions">${next}<div class="completion-secondary-actions"><button class="completion-link" data-action="finish" ${state.busy || favoriteBusy ? 'disabled' : ''}>今日はここまで</button>${info.final ? `<button class="completion-link" data-action="decks" ${state.busy || favoriteBusy ? 'disabled' : ''}>次のテーマを選ぶ</button>` : ''}${share}</div></div></section>`;
+  return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><div class="completion-intro-illustration">${completionImage}</div><p class="completion-fact">${cardCount}</p><h1 tabindex="-1" data-focus>${title}</h1><p class="completion-count">${count} · ${esc(completionThemeLabel(session))}</p>${completionFeelingStage(session, solo, key)}<div class="completion-actions">${next}<div class="completion-secondary-actions"><button class="completion-link" data-action="finish" ${state.busy || favoriteBusy ? 'disabled' : ''}>今日はここまで</button>${info.final ? `<button class="completion-link" data-action="decks" ${state.busy || favoriteBusy ? 'disabled' : ''}>次のテーマを選ぶ</button>` : ''}${share}</div></div></section>`;
 }
+
 function roundThemeLikeView(session) {
   const themes = roundLikeThemes(session);
   if (!themes.length) return "";
@@ -2699,20 +2709,22 @@ async function handleAction(event) {
   if (action === "next-answer") { try { advanceGuarded(nextAnswer); } catch (error) { state.error = error.message; render(); } return; }
   if (action === "previous-answer") { const previous = ensureSession(); state.session = previousAnswer(previous); persist(previous); render(); return; }
   if (action === "pass") { try { advanceGuarded(passAnswer); } catch (error) { state.error = error.message; render(); } return; }
-  if (action === "round-applause") {
-    const key = String(event.currentTarget.dataset.roundKey || "");
-    if (key && !state.roundApplause.has(key)) {
-      state.roundApplause.add(key); try { sessionStorage.setItem(`mingle.round-completion.applause:${key}`, '1'); } catch {}
-      const button = event.currentTarget;
-      button.setAttribute('aria-pressed', 'true');
-      button.setAttribute('aria-disabled', 'true');
-      button.classList.add('is-applauded');
-      const icon = button.querySelector('.completion-applause-icon');
-      if (icon) icon.src = '/assets/applause-hands-pressed-v3.png';
-      const status = button.parentElement?.querySelector('[data-applause-status]');
-      if (status) status.textContent = 'この時間に、拍手を送りました。';
-    }
+  if (action === "completion-feeling") {
+    const stage = event.currentTarget.closest('[data-feeling-stage]'); const session = state.session;
+    const id = String(event.currentTarget.dataset.feeling || ''); const solo = session?.mode === 'solo'; const feeling = completionFeelingFor(solo, id);
+    if (!stage || !session || !feeling) return;
+    const key = String(stage.dataset.feelingKey || ''); completionFeelingMemory.set(key, id); try { sessionStorage.setItem(`mingle.round-completion.feeling:${key}`, id); } catch {}
+    stage.dataset.selected = id; stage.classList.add('is-selected'); const entering = !completionFeelingAnimated.has(key); completionFeelingAnimated.add(key);
+    stage.querySelectorAll('[data-action="completion-feeling"]').forEach((button) => button.setAttribute('aria-pressed', String(button === event.currentTarget)));
+    const prompt = stage.querySelector('.completion-feeling-prompt'); const resultWrap = stage.querySelector('.completion-feeling-result-wrap');
+    if (prompt) prompt.hidden = true; if (resultWrap) { resultWrap.hidden = false; resultWrap.innerHTML = completionFeelingResult(feeling, entering); const result = resultWrap.querySelector('[data-feeling-result]'); result?.querySelector('[data-action]')?.addEventListener('click', handleAction); result?.focus({ preventScroll: true }); }
     return;
+  }
+  if (action === "completion-feeling-change") {
+    const stage = event.currentTarget.closest('[data-feeling-stage]'); if (!stage) return;
+    stage.classList.remove('is-selected'); const prompt = stage.querySelector('.completion-feeling-prompt'); const resultWrap = stage.querySelector('.completion-feeling-result-wrap');
+    if (prompt) prompt.hidden = false; if (resultWrap) { resultWrap.hidden = true; resultWrap.innerHTML = ''; }
+    stage.querySelector('[data-action="completion-feeling"]')?.focus({ preventScroll: true }); return;
   }
   if (action === "theme-like") {
     const themeId = String(event.currentTarget.dataset.themeId || "");
