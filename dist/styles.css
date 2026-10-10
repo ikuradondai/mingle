@@ -901,3 +901,9 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .round-break button.round-favorite-mark:focus-visible { outline:3px solid var(--lime); outline-offset:2px; }
 .round-break .round-favorite-mark.is-unavailable { color:var(--muted); font-size:16px; cursor:default; }
 .round-break .round-favorites-inline .secondary-button { margin-top:10px; }
+.theme-explorer-sponsor-label { display:block; color:#6b5a24; font-size:.78rem; letter-spacing:.02em; }
+.sponsor-completion-note { margin:12px auto 16px; max-width:36rem; text-align:center; color:#33445f; }
+.sponsor-completion-note small { display:block; color:#6b5a24; }
+.sponsor-completion-note p { margin:4px 0; }
+
+.sponsor-completion-note p { white-space: pre-line; overflow-wrap: anywhere; }

@@ -14,6 +14,8 @@ import dailyHandler from './api/daily.js';
 import lineWebhookHandler from './api/line/webhook.js';
 import dailyCronHandler from './api/daily/cron.js';
 import businessHandler from './api/business.js';
+import sponsorHandler from './api/sponsors.js';
+import adminSponsorHandler from './api/admin/sponsors.js';
 
 const root = normalize(fileURLToPath(new URL('./dist/', import.meta.url))).replace(/[\\/]+$/, '');
 const port = Number(process.env.PORT || 5180);
@@ -35,6 +37,7 @@ const server = createServer((request, response) => {
   const pathname = new URL(request.url || '/', 'http://localhost').pathname;
   if (pathname === '/api/admin/session') return sessionHandler(request, response);
   if (pathname === '/api/admin/stats') return statsHandler(request, response);
+  if (pathname === '/api/admin/sponsors') return adminSponsorHandler(request, response);
   if (pathname === '/api/track') return trackHandler(request, response);
   if (pathname === '/api/feedback') return feedbackHandler(request, response);
   if (pathname === '/api/account' || pathname.startsWith('/api/account/')) return accountHandler(request, response);
@@ -43,6 +46,7 @@ const server = createServer((request, response) => {
   if (pathname === '/api/group' || pathname.startsWith('/api/group/')) return groupHandler(request, response);
   if (pathname.startsWith('/api/share/')) return shareHandler(request, response);
   if (pathname === '/api/marketplace' || pathname.startsWith('/api/marketplace/')) return marketplaceHandler(request, response);
+  if (pathname === '/api/sponsors') return sponsorHandler(request, response);
   if (pathname === '/api/daily/cron') return dailyCronHandler(request, response);
   if (pathname.startsWith('/api/daily/')) return dailyHandler(request, response);
   if (pathname === '/api/line/webhook') return lineWebhookHandler(request, response);

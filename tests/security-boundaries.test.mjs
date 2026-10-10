@@ -56,6 +56,8 @@ test('owner create limiter is owner scoped and rejects the eleventh request', as
 });
 
 test('group polling allows eight members and bounds token rotation by aggregate IP rate', async () => {
+  const realNow = Date.now; Date.now = () => 1700000000000;
+  try {
   const temp = await mkdtemp(join(tmpdir(), 'group-boundary-'));
   process.env.NODE_ENV = 'test'; delete process.env.VERCEL; process.env.ANALYTICS_LOCAL_STORE = '1'; process.env.ANALYTICS_LOCAL_PATH = join(temp, 'analytics.json'); process.env.ADMIN_SESSION_SECRET = 's'.repeat(32);
   process.env.SUPABASE_URL = 'https://fake.supabase.co'; process.env.SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test'; process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-test';
@@ -77,6 +79,7 @@ test('group polling allows eight members and bounds token rotation by aggregate 
   const aggregateKey = `group-state-ip:all:${clientRateKey(aggregateReq, 'group-state-ip')}`;
   for (let i = 0; i < 5820; i += 1) await consumeRate(aggregateKey);
   assert.equal(await poll('new-token-after-aggregate'), 429);
+  } finally { Date.now = realNow; }
 });
 
 test('feedback retention migration supports bounded resume, dry-run, and atomic apply', () => {

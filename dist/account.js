@@ -35,6 +35,12 @@ export async function marketplaceRequest(path = '', options = {}) {
   if (!response.ok) { const error = new Error(data?.error || 'marketplace_request_failed'); error.status = response.status; throw error; }
   return data || {};
 }
+export async function sponsorRequest(path = '', options = {}) {
+  const response = await fetcher(`/api/sponsors${path}`, { ...options, credentials: 'same-origin', headers: { ...(options.headers || {}) } });
+  let data = null; try { data = await response.json(); } catch {}
+  if (!response.ok) { const error = new Error(data?.error || 'sponsor_request_failed'); error.status = response.status; throw error; }
+  return data || {};
+}
 async function venueRequest(path, options = {}) {
   const token = await sessionToken(); if (!token) throw authError();
   const response = await fetcher(`/api/venue${path}`, { ...options, credentials: 'same-origin', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, ...(options.headers || {}) }, body: options.body === undefined ? undefined : JSON.stringify(options.body) });
@@ -112,6 +118,8 @@ export const accountApi = {
   marketplaceImport: (payload) => marketplaceRequest('/import', { method: 'POST', body: payload }),
   marketplaceLike: (payload) => marketplaceRequest('/like', { method: 'POST', body: payload }),
   marketplaceWithdraw: (payload) => marketplaceRequest('/withdraw', { method: 'POST', body: payload }),
+  sponsors: () => sponsorRequest(''),
+  sponsorDetail: (id) => sponsorRequest(`?id=${encodeURIComponent(id)}`),
   createGroupRoom: (deckId, hostName, setId, includeR18, adultConfirmed, participantsAdultAttested) => groupRequest('/rooms', { method: 'POST', body: { ...(deckId ? { deckId } : {}), ...(setId ? { setId } : {}), hostName, includeR18: includeR18 === true, adultConfirmed: adultConfirmed === true, participantsAdultAttested: participantsAdultAttested === true } }),
   createMinorityRoom: (hostName, venueToken) => groupRequest('/rooms', { method: 'POST', body: { gameType: 'minority_topic', hostName, ...(venueToken ? { venueToken } : {}) } }),
   createQuestionWolfRoom: (hostName, venueToken) => groupRequest('/rooms', { method: 'POST', body: { gameType: 'question_wolf', hostName, ...(venueToken ? { venueToken } : {}) } }),

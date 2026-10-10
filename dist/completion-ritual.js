@@ -90,6 +90,7 @@ export function createCompletionRitualSampler(pools = CANDIDATES, options = {}) 
 function contextFor(session, solo = false) {
   if (solo || session?.mode === "solo" || session?.count === 1 || session?.participants?.length === 1) return "solo";
   if (session?.business === true || session?.businessSession === true || session?.mode === "business") return "business";
+  if (session?.sponsorSet === true && Array.isArray(session?.sponsor?.categories) && session.sponsor.categories.includes("work")) return "business";
   const ids = Array.isArray(session?.deckIds) ? session.deckIds : session?.deckId ? [session.deckId] : [];
   if (ids.some((id) => BUSINESS_IDS.has(String(id)))) return "business";
   return ids.length > 0 && ids.every((id) => ROMANCE_IDS.has(String(id))) && session?.participants?.length === 2 ? "romance" : "group";

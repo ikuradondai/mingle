@@ -82,6 +82,20 @@ export function createSavedSession({ mode = 'group', participants, participant =
   return { sessionId: createSessionId(), mode, participants: names, participantRule: normalizedRule, deckId: 'my-set', deckIds: ['my-set'], setId: typeof setId === 'string' ? setId : null, setName: typeof setName === 'string' ? setName : null, questionOrder, r18: r18 === true, design: normalizeCreatorDesign(design), customSet: true, ownerUserId: owner, customQuestions: hasCustom ? questions.filter((card) => card.sourceDeckId === 'custom').map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true })) : [], mixed: false, questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
+export function createSponsorSession({ mode = 'group', participants, participant = '自分', sponsor, cards, adultConfirmed = false, random = Math.random }) {
+  if (!sponsor || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(sponsor.id)) || sponsor.status !== 'published' || !['group', 'solo', 'both'].includes(sponsor.audience) || !Array.isArray(cards) || cards.length < ROUND_SIZE || cards.length > 40 || cards.length !== sponsor.cardCount) throw new Error('スポンサーセットが不正です');
+  const names = mode === 'solo' ? [typeof participant === 'string' && participant.trim() ? participant.trim() : '自分'] : normalizeParticipants(participants);
+  const rule = mode === 'solo' ? 'solo' : 'group';
+  if (mode === 'solo' && !['solo', 'both'].includes(sponsor.audience)) throw new Error('このスポンサーセットはひとり用ではありません');
+  if (mode !== 'solo' && !['group', 'both'].includes(sponsor.audience)) throw new Error('このスポンサーセットはみんな用ではありません');
+  const ids = new Set(); const normalized = cards.map((card) => { const id = typeof card?.id === 'string' ? card.id.trim() : ''; if (!id || ids.has(id) || typeof card.text !== 'string' || !card.text.trim() || Array.from(card.text.trim()).length > 300 || typeof card.r18 !== 'boolean') throw new Error('スポンサーセットのカードが不正です'); ids.add(id); return { id, text: card.text.trim(), r18: card.r18, sourceDeckId: `sponsor-${sponsor.id}` }; });
+  if (sponsor.isR18 !== true && normalized.some((card) => card.r18)) throw new Error('スポンサーセットの年齢設定が不正です');
+  if (normalized.some((card) => card.r18) && adultConfirmed !== true) throw new Error('成人向け確認が必要です');
+  const questions = mode === 'solo' ? normalized : shuffle(normalized, random);
+  const deckKey = `sponsor-${sponsor.id}`;
+  return { sessionId: createSessionId(), mode, questionOrder: mode === 'solo' ? 'fixed' : 'shuffle', participants: names, participantRule: rule, deckId: deckKey, deckIds: [deckKey], sponsorSet: true, sponsor: { id: sponsor.id, providerName: sponsor.providerName || '', title: sponsor.title || '', description: sponsor.description || '', categories: Array.isArray(sponsor.categories) ? [...sponsor.categories] : [], audience: sponsor.audience, endMessage: sponsor.endMessage || '', siteUrl: sponsor.siteUrl || '', ctaLabel: sponsor.ctaLabel || '', isR18: sponsor.isR18 === true, status: 'published', cardCount: cards.length }, customSet: false, ownerUserId: null, customQuestions: [], questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18: normalized.some((card) => card.r18), includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+}
+
 export function createSharedSession({ participants, cards, adultConfirmed = false, questionOrder = 'shuffle', r18 = false, design = null, participantRule = 'group', random = Math.random }) {
   const names = normalizeParticipants(participants);
   const normalizedRule = assertParticipantRule(participantRule, names.length);

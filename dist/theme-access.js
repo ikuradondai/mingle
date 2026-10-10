@@ -84,6 +84,7 @@ export function canAccessSessionContent(session, account, { activeVenue = false,
 
 export function sessionNeedsThemeAccess(session, account) {
   if (!session) return false;
+  if (session.sponsorSet === true) return sessionHasR18(session) && !(isAgeConfirmed(account) && r18Visible(account));
   if (session.mode === 'solo' && !session.customSet) {
     const deck = soloDecks.find((item) => item.id === session.deckId);
     const canonical = Boolean(deck && session.questionOrder === 'fixed' && session.questions?.length === 12 && session.questions.every((card, index) => card?.id === deck.questions[index]?.id && card.r18 !== true));

@@ -2,6 +2,7 @@ import { challenges, challengePoolFor } from './data/challenges.js';
 import { decks } from './data/decks.js';
 import { soloDecks } from './data/solo-decks.js';
 import { normalizeCreatorDesign, effectiveCreatorAdult } from './creator-metadata.js';
+import { normalizeSponsorMeta, normalizeSponsorCards } from './sponsor.js';
 
 export const SESSION_STORAGE_KEY = 'mingle.cards.session.v1';
 export const SESSION_STORAGE_VERSION = 1;
@@ -33,11 +34,20 @@ export function saveSession(session, options = {}) {
   if (!storage || !session || (session.cursor >= session.questions?.length && options.allowCompleted !== true)) { if (session?.cursor >= session?.questions?.length && options.allowCompleted !== true) discard(storage); return false; }
   try {
     const now = getNow(options.now);
+    let sponsor = null; let sponsorCards = [];
+    if (session.sponsorSet === true) {
+      sponsor = normalizeSponsorMeta({ ...(session.sponsor || {}), status: 'published', cardCount: Array.isArray(session.questions) ? session.questions.length : 0 });
+      if (!sponsor || sponsor.cardCount !== session.questions.length) return false;
+      try { sponsorCards = normalizeSponsorCards({ ...sponsor, cards: session.questions }); } catch { return false; }
+    }
     const record = {
       version: SESSION_STORAGE_VERSION, savedAt: now, expiresAt: now + SESSION_STORAGE_TTL,
       sessionId: session.sessionId, mode: session.mode === 'solo' ? 'solo' : 'group', questionOrder: session.questionOrder === 'fixed' ? 'fixed' : 'shuffle', participants: [...session.participants], deckId: session.deckId,
       deckIds: [...(session.deckIds || [session.deckId])], mixed: session.mixed === true,
       customSet: session.customSet === true,
+      sponsorSet: session.sponsorSet === true,
+      sponsor,
+      sponsorCards,
       setId: session.customSet === true && typeof session.setId === 'string' ? session.setId : null,
       setName: session.customSet === true && typeof session.setName === 'string' ? session.setName.trim().slice(0, 80) : null,
       ownerUserId: session.customSet === true && typeof session.ownerUserId === 'string' ? session.ownerUserId : null,
@@ -66,6 +76,12 @@ function hydrate(record, now, options = {}) {
   if (typeof record.sessionId !== 'string' || !/^[A-Za-z0-9-]{8,100}$/.test(record.sessionId) || (solo ? !(Array.isArray(record.participants) && record.participants.length === 1 && validSoloName(record.participants[0])) : !validNames(record.participants))) throw new Error('session');
   if ([record.mixed, record.adultConfirmed, record.includeR18, record.includeChallenges, record.revealed].some((value) => typeof value !== 'boolean')) throw new Error('flags');
   const customSet = record.customSet === true;
+  const sponsorSet = record.sponsorSet === true;
+  const sponsor = sponsorSet ? normalizeSponsorMeta(record.sponsor) : null;
+  if (sponsorSet && !sponsor) throw new Error('sponsor');
+  let validatedSponsorCards = [];
+  if (sponsorSet) { try { validatedSponsorCards = normalizeSponsorCards({ ...sponsor, cards: record.sponsorCards }); } catch { throw new Error('sponsor-card'); } }
+  if (sponsorSet && (customSet || !Array.isArray(record.sponsorCards) || record.sponsorCards.length < 6 || record.sponsorCards.length > 40 || sponsor.cardCount !== record.sponsorCards.length)) throw new Error('sponsor');
   if (solo && customSet && !validUuid(record.ownerUserId)) throw new Error('owner');
   if (solo && customSet && !validUuid(record.setId)) throw new Error('set');
   let hasCustom = Array.isArray(record.customQuestions) && record.customQuestions.length > 0;
@@ -73,23 +89,25 @@ function hydrate(record, now, options = {}) {
   const deckIds = Array.isArray(record.deckIds) ? record.deckIds : [record.deckId];
   if (deckIds.some((id) => typeof id !== 'string' || !/^[A-Za-z0-9-]+$/.test(id))) throw new Error('decks');
   if (solo && (record.mixed || deckIds.length !== 1 || record.deckId !== deckIds[0])) throw new Error('decks');
-  if (!customSet && !solo && ((record.mixed !== true && (deckIds.length !== 1 || record.deckId !== deckIds[0])) || (record.mixed === true && (deckIds.length < 2 || deckIds.length > 3 || record.deckId !== 'mix'))) ) throw new Error('decks');
+  if (!customSet && !sponsorSet && !solo && ((record.mixed !== true && (deckIds.length !== 1 || record.deckId !== deckIds[0])) || (record.mixed === true && (deckIds.length < 2 || deckIds.length > 3 || record.deckId !== 'mix'))) ) throw new Error('decks');
   if (customSet && (record.deckId !== 'my-set' || record.mixed !== false || deckIds.length !== 1 || deckIds[0] !== 'my-set')) throw new Error('decks');
+  if (sponsorSet && (record.mixed !== false || deckIds.length !== 1 || !/^sponsor-[0-9a-f-]{36}$/i.test(record.deckId) || deckIds[0] !== record.deckId || record.deckId !== `sponsor-${record.sponsor.id}`)) throw new Error('decks');
   if (new Set(deckIds).size !== deckIds.length) throw new Error('decks');
-  const sourceDecks = deckIds.map((id) => (solo && !customSet ? soloDecks : decks).find((deck) => deck.id === id));
-  if (solo && !customSet && (record.questionOrder !== 'fixed' || !sourceDecks[0] || sourceDecks[0].questions.length !== 12)) throw new Error('source');
-  if (solo && !customSet && (record.mixed !== false || record.includeR18 !== false || record.includeChallenges !== false || record.adultConfirmed !== false)) throw new Error('solo-flags');
-  if (!customSet && !solo && sourceDecks.some((deck) => !deck || !Array.isArray(deck.questions) || deck.questions.length !== 40)) throw new Error('source');
+  const sourceDecks = deckIds.map((id) => (solo && !customSet && !sponsorSet ? soloDecks : decks).find((deck) => deck.id === id));
+  if (solo && !customSet && !sponsorSet && (record.questionOrder !== 'fixed' || !sourceDecks[0] || sourceDecks[0].questions.length !== 12)) throw new Error('source');
+  if (solo && !customSet && !sponsorSet && (record.mixed !== false || record.includeR18 !== false || record.includeChallenges !== false || record.adultConfirmed !== false)) throw new Error('solo-flags');
+  if (!customSet && !sponsorSet && !solo && sourceDecks.some((deck) => !deck || !Array.isArray(deck.questions) || deck.questions.length !== 40)) throw new Error('source');
   if (!customSet && record.mixed && sourceDecks.some((deck) => deck.adultOnly)) throw new Error('mixed-adult');
   if (!customSet && record.mixed && sourceDecks.some((deck) => deck.questions.some((card) => card.r18))) throw new Error('mixed-r18');
   if (record.r18 === true && record.adultConfirmed !== true) throw new Error('consent');
+  if (sponsorSet && typeof sponsor.isR18 !== 'boolean') throw new Error('sponsor');
   if (customSet && record.r18 === true && record.includeR18 !== true) throw new Error('r18-options');
-  if (!record.mixed && !customSet && ((record.includeR18 && record.adultConfirmed !== true) || (sourceDecks[0].adultOnly && record.adultConfirmed !== true))) throw new Error('consent');
+  if (!record.mixed && !customSet && !sponsorSet && ((record.includeR18 && record.adultConfirmed !== true) || (sourceDecks[0].adultOnly && record.adultConfirmed !== true))) throw new Error('consent');
   if (record.mixed && (record.includeR18 || record.adultConfirmed)) throw new Error('mixed-options');
   const soloMin = 6;
-  const soloMax = customSet ? 40 : 12;
-  if (!Array.isArray(record.questionIds) || record.questionIds.length < (solo ? soloMin : customSet ? 6 : 40) || record.questionIds.length > (solo ? soloMax : 40) || record.questionIds.some((id) => typeof id !== 'string') || new Set(record.questionIds).size !== record.questionIds.length) throw new Error('questions');
-  if (solo && !customSet && (record.questionIds.length !== 12 || record.questionIds.some((id, index) => id !== sourceDecks[0].questions[index].id))) throw new Error('solo-order');
+  const soloMax = customSet || sponsorSet ? 40 : 12;
+  if (!Array.isArray(record.questionIds) || record.questionIds.length < (solo ? soloMin : (customSet || sponsorSet) ? 6 : 40) || record.questionIds.length > (solo ? soloMax : 40) || record.questionIds.some((id) => typeof id !== 'string') || new Set(record.questionIds).size !== record.questionIds.length) throw new Error('questions');
+  if (solo && !customSet && !sponsorSet && (record.questionIds.length !== 12 || record.questionIds.some((id, index) => id !== sourceDecks[0].questions[index].id))) throw new Error('solo-order');
   const customQuestionIds = record.questionIds.filter((id) => id.startsWith('custom:'));
   hasCustom = hasCustom || customQuestionIds.length > 0;
   if (hasCustom && (!customSet || typeof record.ownerUserId !== 'string' || !/^[0-9a-f-]{8,100}$/i.test(record.ownerUserId))) throw new Error('owner');
@@ -97,14 +115,15 @@ function hydrate(record, now, options = {}) {
   if (!hasCustom && record.customQuestions?.length) throw new Error('custom');
   const index = cardIndex();
   const customIndex = new Map((record.customQuestions || []).map((card) => [card.id, { ...card, sourceDeckId: 'custom', custom: true }]));
+  const sponsorIndex = new Map((sponsorSet ? validatedSponsorCards : []).map((card) => [card.id, { id: card.id, text: card.text, r18: card.r18, sourceDeckId: record.deckId, sponsor: true }]));
   const sources = Array.isArray(record.questionSources) ? record.questionSources : [];
   let challengePool = null;
   const questions = record.questionIds.map((id, i) => {
-    const card = index.get(id) || customIndex.get(id); if (!card) throw new Error('question');
+    const card = (sponsorSet ? sponsorIndex.get(id) : null) || index.get(id) || customIndex.get(id); if (!card) throw new Error('question');
     if (card.kind === 'challenge' && !record.includeChallenges) throw new Error('challenge');
     if (customSet && (card.kind === 'challenge' || !sources[i] || (card.custom ? sources[i] !== 'custom' : ![...decks, ...soloDecks].some((deck) => deck.id === sources[i] && (deck.questions.some((item) => item.id === id) || deck.r18Questions?.some((item) => item.id === id)))))) throw new Error('question-source');
-    if (solo && !customSet && card.kind !== 'challenge' && !sourceDecks[0].questions.some((item) => item.id === id)) throw new Error('question-source');
-    if (!customSet && !solo && !record.mixed && card.kind !== 'challenge') {
+    if (solo && !customSet && !sponsorSet && card.kind !== 'challenge' && !sourceDecks[0].questions.some((item) => item.id === id)) throw new Error('question-source');
+    if (!customSet && !sponsorSet && !solo && !record.mixed && card.kind !== 'challenge') {
       const deck = sourceDecks[0];
       const regular = deck.questions.some((item) => item.id === id);
       const optionalR18 = record.includeR18 && deck.r18Questions?.some((item) => item.id === id);
@@ -119,8 +138,9 @@ function hydrate(record, now, options = {}) {
     if (card.r18 && record.adultConfirmed !== true) throw new Error('r18');
     return { ...card, ...(sources[i] ? { sourceDeckId: sources[i] } : {}) };
   });
+  if (sponsorSet && (record.sponsorCards.length !== record.questionIds.length || new Set(record.sponsorCards.map((card) => card.id)).size !== record.questionIds.length || record.sponsorCards.some((card) => !record.questionIds.includes(card.id)) || record.questionIds.some((id) => !sponsorIndex.has(id)) || record.sponsorCards.some((card) => card.r18 === true) !== (sponsor.isR18 === true))) throw new Error('sponsor-card');
   if (customSet && effectiveCreatorAdult(record.r18 === true, questions) && (record.includeR18 !== true || record.adultConfirmed !== true)) throw new Error('r18-options');
-  if (!customSet && effectiveCreatorAdult(record.r18 === true, questions) && record.adultConfirmed !== true) throw new Error('consent');
+  if (!customSet && !sponsorSet && effectiveCreatorAdult(record.r18 === true, questions) && record.adultConfirmed !== true) throw new Error('consent');
   const hasRevealedHistory = Object.hasOwn(record, 'revealedQuestionIds');
   if (hasRevealedHistory && !Array.isArray(record.revealedQuestionIds)) throw new Error('revealed-history');
   const revealedQuestionIds = hasRevealedHistory ? [...new Set(record.revealedQuestionIds)] : [];
@@ -144,7 +164,7 @@ function hydrate(record, now, options = {}) {
   }
   const feedbackSubmitted = Array.isArray(record.feedbackSubmitted) ? [...new Set(record.feedbackSubmitted.filter((cursor) => Number.isInteger(cursor) && cursor >= 6 && cursor <= finalLength && cursor <= record.cursor))] : [];
   if (record.cursor >= finalLength && options.allowCompleted !== true) return null;
-  return { sessionId: record.sessionId, mode: solo ? 'solo' : 'group', questionOrder: record.questionOrder === 'fixed' ? 'fixed' : 'shuffle', setId: customSet && typeof record.setId === 'string' ? record.setId : null, setName: customSet && typeof record.setName === 'string' ? record.setName : null, participants: [...record.participants], deckId: record.deckId, deckIds, customSet, ownerUserId: hasCustom ? record.ownerUserId : null, customQuestions: hasCustom ? record.customQuestions.map((card) => ({ ...card })) : [], mixed: record.mixed === true, r18: record.r18 === true, design, questions, cursor: record.cursor, unlockedUntil: record.unlockedUntil, roundStart: Number.isInteger(record.roundStart) ? record.roundStart : Math.max(0, record.unlockedUntil - 6), roundCount: Number.isInteger(record.roundCount) ? record.roundCount : record.cursor % 6, roundNumber: Number.isInteger(record.roundNumber) ? record.roundNumber : Math.floor(record.cursor / 6) + 1, adultConfirmed: record.adultConfirmed === true, includeR18: record.includeR18 === true, includeChallenges: record.includeChallenges === true, revealed: record.revealed === true, answerIndex: record.answerIndex, likes: solo ? {} : { ...likes }, feedbackSubmitted: solo ? [] : feedbackSubmitted, revealedQuestionIds };
+  return { sessionId: record.sessionId, mode: solo ? 'solo' : 'group', questionOrder: record.questionOrder === 'fixed' ? 'fixed' : 'shuffle', setId: customSet && typeof record.setId === 'string' ? record.setId : null, setName: customSet && typeof record.setName === 'string' ? record.setName : null, participants: [...record.participants], deckId: record.deckId, deckIds, customSet, sponsorSet, sponsor: sponsorSet ? { ...sponsor } : null, ownerUserId: hasCustom ? record.ownerUserId : null, customQuestions: hasCustom ? record.customQuestions.map((card) => ({ ...card })) : [], mixed: record.mixed === true, r18: record.r18 === true, design, questions, cursor: record.cursor, unlockedUntil: record.unlockedUntil, roundStart: Number.isInteger(record.roundStart) ? record.roundStart : Math.max(0, record.unlockedUntil - 6), roundCount: Number.isInteger(record.roundCount) ? record.roundCount : record.cursor % 6, roundNumber: Number.isInteger(record.roundNumber) ? record.roundNumber : Math.floor(record.cursor / 6) + 1, adultConfirmed: record.adultConfirmed === true, includeR18: record.includeR18 === true, includeChallenges: record.includeChallenges === true, revealed: record.revealed === true, answerIndex: record.answerIndex, likes: solo ? {} : { ...likes }, feedbackSubmitted: solo ? [] : feedbackSubmitted, revealedQuestionIds };
 }
 
 export function loadSession(options = {}) {

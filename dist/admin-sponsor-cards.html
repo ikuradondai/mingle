@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#fffaf3" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Mingle.Cards | スポンサーカード</title>
+    <link rel="stylesheet" href="/admin-sponsor-cards.css" />
+    <style>
+      .field input:not([type="checkbox"]):not([type="radio"]), .field textarea, .field select { width:100%; min-height:46px; padding:10px 12px; }
+      .field input[type="checkbox"], .field input[type="radio"] { width:18px; height:18px; min-height:0; padding:0; flex:0 0 18px; }
+      .category-list label, .audience-list label, .check-field { white-space:normal; line-height:1.45; }
+      fieldset.field { border:0; padding:0; margin:0 0 18px; min-width:0; }
+      .preview-end-section { margin-top:24px; padding-top:18px; border-top:1px solid #e5ded4; }
+      .preview-end-section h3 { margin:0 0 10px; font-size:16px; }
+      .preview-end-section .preview-end { margin-top:0; padding-top:0; border-top:0; }
+    </style>
+  </head>
+  <body>
+    <main id="sponsor-app" class="sponsor-shell" aria-live="polite"></main>
+    <script type="module" src="/admin-sponsor-cards.js"></script>
+  </body>
+</html>

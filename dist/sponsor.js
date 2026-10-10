@@ -1,0 +1,14 @@
+const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const AUDIENCES = new Set(['group', 'solo', 'both']);
+function text(value, max = 240) { return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
+export function normalizeSponsorMeta(value) {
+  if (!value || !ID.test(String(value.id || '')) || value.status !== 'published') return null;
+  const categories = Array.isArray(value.categories) ? [...new Set(value.categories.filter((item) => typeof item === 'string').map((item) => item.trim()).filter((item) => ['self','relationship','friends','family','work','sports','first-meeting','roleplay','adult','game','love','school'].includes(item)))].slice(0, 12) : [];
+  if (!categories.length || !text(value.providerName, 80) || !text(value.title, 120) || !AUDIENCES.has(value.audience) || !Number.isInteger(value.cardCount) || value.cardCount < 6 || value.cardCount > 40 || typeof value.isR18 !== 'boolean') return null;
+  let siteUrl = ''; if (value.siteUrl) { try { const url = new URL(String(value.siteUrl)); if (url.protocol !== 'https:' || url.username || url.password) return null; siteUrl = url.href; } catch { return null; } }
+  return { id: String(value.id), providerName: text(value.providerName, 80), title: text(value.title, 120), description: text(value.description, 500), categories, audience: value.audience, cardCount: value.cardCount, status: 'published', endMessage: text(value.endMessage, 500), siteUrl, ctaLabel: text(value.ctaLabel, 40), updatedAt: text(value.updatedAt, 80), isR18: value.isR18 === true };
+}
+export function sponsorAudienceAllowed(item, mode) { return item && (item.audience === 'both' || item.audience === mode); }
+export function sponsorCategoryMatches(item, category) { return item && (category === 'all' || item.categories.includes(category)); }
+export function shuffleSponsors(items, random = Math.random) { const result = [...items]; for (let i = result.length - 1; i > 0; i -= 1) { const j = Math.max(0, Math.min(i, Math.floor(random() * (i + 1)))); [result[i], result[j]] = [result[j], result[i]]; } return result; }
+export function normalizeSponsorCards(value) { const cards = Array.isArray(value?.cards) ? value.cards : []; if (cards.length < 6 || cards.length > 40) throw new Error('スポンサーセットのカード数が不正です'); const ids = new Set(); const source = `sponsor-${String(value.id || '')}`; return cards.map((card) => { const id = typeof card?.id === 'string' ? card.id.trim() : ''; if (!ID.test(id) || ids.has(id) || typeof card.text !== 'string' || !card.text.trim() || Array.from(card.text.trim()).length > 300 || (card.sourceDeckId && card.sourceDeckId !== source)) throw new Error('スポンサーセットのカードが不正です'); ids.add(id); const r18 = card.r18 === true || value.isR18 === true; return { id, text: card.text.trim(), r18, sourceDeckId: source }; }); }
