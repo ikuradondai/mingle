@@ -5,6 +5,7 @@ import { loadSession, saveSession, clearSession } from "./session-storage.js";
 import { canContinue } from "./access-policy.js";
 import { roundCompletionInfo } from "./round-completion.js";
 import { completionFeelingChoices, completionFeelingFor, completionFeelingKey } from "./round-feeling.js";
+import { completionRitualFor, completionRitualKey, nextCompletionRitual } from "./completion-ritual.js";
 import { ROUND_SIZE, isTogetherCard, createSession, createMixedSession, createSavedSession, createSharedSession, createSoloSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer, previousAnswer, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS, summarizeLikes } from "./engine.js";
 import { themeGroups, groupLabels } from "./data/theme-groups.js";
 import { buildFeedbackPayload, feedbackKey, submitFeedback } from "./feedback.js";
@@ -1453,6 +1454,14 @@ function completionThemeLabel(session) {
   const deck = catalog.find((item) => item.id === session?.deckId);
   return deck?.title || '会話カード';
 }
+const completionRitualTimers = new Map();
+function completionRitualTimerState(key) { return completionRitualTimers.get(key) || { running: false, finished: false, remaining: 30, soundOn: true }; }
+function cancelCompletionRitualTimer(key) { const timer = completionRitualTimers.get(key); if (timer?.interval) clearInterval(timer.interval); if (timer?.audio && timer.audio.state !== "closed") timer.audio.close().catch(() => {}); completionRitualTimers.delete(key); }
+window.addEventListener("pagehide", () => { for (const key of completionRitualTimers.keys()) cancelCompletionRitualTimer(key); });
+function updateCompletionRitualTimerDom(key) { const stage = document.querySelector(`[data-completion-ritual][data-ritual-key="${CSS.escape(key)}"]`); const timer = completionRitualTimers.get(key); if (!stage || !timer) { if (!stage) cancelCompletionRitualTimer(key); return; } const button = stage.querySelector('[data-action="completion-ritual-timer"]'); const status = stage.querySelector('[data-ritual-timer-status]'); if (button) { button.textContent = `${timer.running ? "■" : timer.finished ? "↻" : "▶"} ${timer.remaining}秒`; button.setAttribute("aria-label", timer.running ? "30秒を停止" : "30秒を開始"); } if (status) status.textContent = timer.finished ? "ありがとう。" : ""; }
+ function closeCompletionRitualAudio(timer, audio = timer?.audio) { if (!audio) return; if (timer.audio === audio) timer.audio = null; if (audio.state !== "closed") audio.close().catch(() => {}); }
+ function playCompletionRitualEndSound(timer) { const audio = timer.audio; if (!audio) return; if (timer.soundOn === false) { closeCompletionRitualAudio(timer, audio); return; } try { const oscillator = audio.createOscillator(); const gain = audio.createGain(); gain.gain.value = 0.03; oscillator.frequency.value = 660; oscillator.connect(gain).connect(audio.destination); oscillator.addEventListener("ended", () => { oscillator.disconnect(); gain.disconnect(); closeCompletionRitualAudio(timer, audio); }, { once: true }); oscillator.start(); oscillator.stop(audio.currentTime + 0.08); } catch { closeCompletionRitualAudio(timer, audio); } }
+function tickCompletionRitualTimer(key) { const stage = document.querySelector(`[data-completion-ritual][data-ritual-key="${CSS.escape(key)}"]`); const timer = completionRitualTimers.get(key); if (!stage || !timer) { if (!stage) cancelCompletionRitualTimer(key); return; } const left = Math.max(0, Math.ceil((timer.deadline - Date.now()) / 1000)); if (left !== timer.remaining) timer.remaining = left; if (left === 0) { clearInterval(timer.interval); timer.interval = null; timer.running = false; timer.finished = true; playCompletionRitualEndSound(timer); } updateCompletionRitualTimerDom(key); }
 const completionFeelingMemory = new Map();
 const completionFeelingAnimated = new Set();
 function completionFeelingStored(key, solo) {
@@ -1469,16 +1478,24 @@ function completionFeelingStage(session, solo, key) {
   const options = choices.map((item) => `<button type="button" class="completion-feeling-option" data-action="completion-feeling" data-feeling="${esc(item.id)}" aria-pressed="${stored === item.id}"><img src="${esc(item.image)}" alt="" aria-hidden="true" width="104" height="76"><span>${esc(item.label)}</span></button>`).join("");
   return `<div class="completion-feeling-stage${chosen ? " is-selected" : ""}" data-feeling-stage data-feeling-key="${esc(key)}"><div class="completion-feeling-prompt"${chosen ? ' hidden' : ''}><strong>いまのあなたに残ったものは？</strong><div class="completion-feeling-options">${options}</div></div><div class="completion-feeling-result-wrap"${chosen ? '' : ' hidden'}>${chosen ? completionFeelingResult(chosen) : ''}</div></div>`;
 }
+function completionRitualTitle(ritual) { const parts = Array.isArray(ritual.titleParts) && ritual.titleParts.length ? ritual.titleParts : [ritual.title]; return parts.map((part) => `<span>${esc(part)}</span>`).join("<wbr>"); }
+function completionRitualView(session, solo = false) {
+  const ritual = completionRitualFor(session, { solo });
+  const image = ritual.image ? `<img class="completion-ritual-image" src="${esc(ritual.image)}" alt="${esc(ritual.alt)}" width="240" height="170" />` : ""; const imageClass = ritual.image ? "" : " is-text-only";
+  const timerState = ritual.timed ? completionRitualTimerState(ritual.key) : null;
+  const timer = ritual.timed ? `<div class="completion-ritual-timer"><button type="button" class="completion-link" data-action="completion-ritual-timer" aria-label="${timerState.running ? "30秒を停止" : "30秒を開始"}">${timerState.running ? "■" : timerState.finished ? "↻" : "▶"} ${timerState.remaining}秒</button><button type="button" class="completion-link" data-action="completion-ritual-sound" aria-pressed="${timerState.soundOn !== false}" aria-label="${timerState.soundOn !== false ? "終了時に小さな音 オン" : "終了時の音 オフ"}">${timerState.soundOn !== false ? "🔔" : "🔕"}</button><span>終了時に小さな音</span><span data-ritual-timer-status role="status">${timerState.finished ? "ありがとう。" : ""}</span></div>` : "";
+  return `<section class="completion-ritual${imageClass}" data-completion-ritual data-ritual-context="${esc(ritual.context)}" data-ritual-key="${esc(ritual.key)}">${image}<div class="completion-ritual-copy"><h2>${completionRitualTitle(ritual)}</h2><p>${esc(ritual.message)}</p>${ritual.note ? `<small>${esc(ritual.note)}</small>` : ""}<button type="button" class="completion-link" data-action="completion-ritual-reroll">別のしめ方</button>${timer}</div></section>`;
+}
 function roundCompletionView(session, { solo = false, favoriteBusy = false } = {}) {
   if (!session || session.sharedGuest || session.venueSession) return '';
   const info = roundCompletionInfo(session); if (!info.completed) return '';
-  const key = completionFeelingKey(session); const completionImage = `<img class="completion-illustration" src="/assets/${solo ? 'completion-solo-reflection-v3.png' : 'completion-conversation-v3.png'}" alt="" aria-hidden="true" />`;
+  const key = completionFeelingKey(session);
     const count = solo ? `今回${info.completed}枚・ここまで${info.cursor}枚` : `${session.participants.length}人でめぐった、今回${info.completed}枚${info.final ? `・ここまで${info.cursor}枚` : ''}`;
   const cardCount = `${info.completed}枚`;
   const next = info.final ? '' : `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? 'disabled' : ''}>${state.busy ? '確認中…' : `${actionIcon('right')}もう${info.nextCount}枚、${solo ? '向き合う' : '話そう'}`}</button>`;
   const motionClass = info.final ? 'is-final' : '';
   const share = solo ? '' : `<button class="completion-link social-share-button" data-action="social-share" aria-label="SNSでシェア" title="シェア" ${state.busy || favoriteBusy ? 'disabled' : ''}>シェア</button>`;
-  return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><div class="completion-intro-illustration">${completionImage}</div><h1 class="completion-fact" tabindex="-1" data-focus>${cardCount}おつかれさまでした${info.final ? `<small>全${info.total}枚完了</small>` : ""}</h1><p class="completion-count">${count} · ${esc(completionThemeLabel(session))}</p>${roundFavoriteView(session, { inline: true })}${completionFeelingStage(session, solo, key)}<div class="completion-actions">${next}<div class="completion-secondary-actions"><button class="completion-link" data-action="finish" ${state.busy || favoriteBusy ? 'disabled' : ''}>今日はここまで</button>${info.final ? `<button class="completion-link" data-action="decks" ${state.busy || favoriteBusy ? 'disabled' : ''}>次のテーマを選ぶ</button>` : ''}${share}</div></div></section>`;
+  return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><h1 class="completion-fact" tabindex="-1" data-focus>${cardCount}おつかれさまでした${info.final ? `<small>全${info.total}枚完了</small>` : ""}</h1>${completionRitualView(session, solo)}<p class="completion-count">${count} · ${esc(completionThemeLabel(session))}</p>${roundFavoriteView(session, { inline: true })}${completionFeelingStage(session, solo, key)}<div class="completion-actions">${next}<div class="completion-secondary-actions"><button class="completion-link" data-action="finish" ${state.busy || favoriteBusy ? 'disabled' : ''}>今日はここまで</button>${info.final ? `<button class="completion-link" data-action="decks" ${state.busy || favoriteBusy ? 'disabled' : ''}>次のテーマを選ぶ</button>` : ''}${share}</div></div></section>`;
 }
 
 function roundThemeLikeView(session) {
@@ -2143,6 +2160,19 @@ function startSelectedSoloDeck() {
 }
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
+  if (action === "completion-ritual-reroll") { if (state.session) { const key = completionRitualKey(state.session); cancelCompletionRitualTimer(key); nextCompletionRitual(state.session, { solo: state.session.mode === "solo" }); render(); } return; }
+  if (action === "completion-ritual-timer") {
+    const stage = event.currentTarget.closest("[data-completion-ritual]"); const key = stage?.dataset.ritualKey; const ritual = state.session ? completionRitualFor(state.session, { solo: state.session.mode === "solo" }) : null;
+    if (!key || !ritual?.timed) return;
+    const timer = completionRitualTimers.get(key) || { running: false, finished: false, remaining: 30, soundOn: true };
+    if (timer.running) { if (timer.interval) clearInterval(timer.interval); closeCompletionRitualAudio(timer); timer.interval = null; timer.running = false; timer.finished = false; timer.remaining = 30; completionRitualTimers.set(key, timer); updateCompletionRitualTimerDom(key); return; }
+    timer.running = true; timer.finished = false; timer.remaining = 30; timer.deadline = Date.now() + 30000;
+    if (timer.audio?.state === "closed") timer.audio = null;
+    if (typeof AudioContext !== "undefined") { try { if (!timer.audio) timer.audio = new AudioContext(); if (timer.audio.state === "suspended") timer.audio.resume().catch(() => {}); } catch {} }
+    timer.interval = setInterval(() => tickCompletionRitualTimer(key), 250); completionRitualTimers.set(key, timer); tickCompletionRitualTimer(key); return;
+  }
+  if (action === "completion-ritual-sound") { const key = event.currentTarget.closest("[data-completion-ritual]")?.dataset.ritualKey; if (!key) return; const timer = completionRitualTimers.get(key) || { running: false, finished: false, remaining: 30, soundOn: true }; timer.soundOn = timer.soundOn === false; completionRitualTimers.set(key, timer); event.currentTarget.setAttribute("aria-pressed", String(timer.soundOn)); event.currentTarget.setAttribute("aria-label", timer.soundOn ? "終了時に小さな音 オン" : "終了時の音 オフ"); event.currentTarget.textContent = timer.soundOn ? "🔔" : "🔕"; return; }
+  if (["decks", "home", "logout"].includes(action) && state.session) cancelCompletionRitualTimer(completionRitualKey(state.session));
   if (action === "audio-toggle") { event.stopPropagation(); state.focusAction = "audio-toggle"; toggleCardAudio(); render(); return; }
   if (action === "theme-bookmark") { event.stopPropagation(); const id = event.currentTarget.dataset.bookmarkId; toggleThemeExplorerBookmark(id, state.account.user?.id); state.focusSelector = `[data-action="theme-bookmark"][data-bookmark-id="${CSS.escape(id)}"]`; render(); return; }
   if (action === "theme-experienced") { event.stopPropagation(); const id = event.currentTarget.dataset.experiencedId; toggleThemeExplorerExperienced(id, state.account.user?.id); state.focusSelector = `[data-action="theme-experienced"][data-experienced-id="${CSS.escape(id)}"]`; render(); return; }
@@ -2777,6 +2807,7 @@ async function handleAction(event) {
     return;
   }
   if (action === "continue") {
+    if (state.session) cancelCompletionRitualTimer(completionRitualKey(state.session));
     if (isActiveVenueSession(state.session)) { await continueCurrentRound(); return; }
     if (!state.account.authReady || !state.account.user) {
       if (!state.account.authReady) { state.error = "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; }
@@ -2789,7 +2820,7 @@ async function handleAction(event) {
     await continueCurrentRound();
     return;
   }
-  if (action === "finish") { state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
+  if (action === "finish") { if (state.session) cancelCompletionRitualTimer(completionRitualKey(state.session)); state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
     state.resume = loadResumeForCurrentUser();
     restoreGroupHomeState();
     state.screen = "participants";

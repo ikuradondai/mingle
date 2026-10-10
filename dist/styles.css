@@ -873,6 +873,19 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 @media (prefers-reduced-motion: reduce) { .round-break .completion-feeling-result.is-entering .completion-feeling-result-image { animation:none; clip-path:none; } }
 @keyframes completion-feeling-open { from { opacity:.35; clip-path:circle(0% at 50% 60%); transform:translateY(8px) scale(.86); } to { opacity:1; clip-path:circle(75% at 50% 50%); transform:none; } }
 @media (max-width:480px) { .round-break .completion-intro-illustration { height:94px; min-height:94px; }.round-break .completion-illustration { height:86px; }.round-break .completion-secondary-actions { gap:10px; }.round-break .completion-feeling-option { font-size:14px; } }
+.round-break .completion-ritual { display:grid; grid-template-columns:minmax(120px,240px) minmax(0,1fr); align-items:center; gap:14px; height:280px; box-sizing:border-box; margin:8px auto 10px; max-width:660px; text-align:left; }
+.round-break .completion-ritual-image { display:block; width:100%; height:170px; object-fit:contain; }
+.round-break .completion-ritual.is-text-only { grid-template-columns:1fr; }
+.round-break .completion-ritual-copy { min-width:0; }
+.round-break .completion-ritual-copy { height:100%; min-width:0; display:flex; flex-direction:column; justify-content:center; align-items:flex-start; }
+.round-break .completion-ritual-copy h2 { margin:0; color:var(--blue); font-size:clamp(21px,4vw,30px); line-height:1.25; }
+.round-break .completion-ritual-copy h2 span { display:inline-block; white-space:nowrap; }
+.round-break .completion-ritual-copy p { margin:6px 0; font-size:15px; }
+.round-break .completion-ritual-copy small { display:block; color:var(--muted); margin:4px 0; }
+.round-break .completion-ritual-copy .completion-link { display:block; min-height:36px; padding:4px 0; border:0; background:transparent; color:var(--blue); text-decoration:underline; cursor:pointer; }
+.round-break .completion-ritual-timer { display:flex; flex-wrap:wrap; gap:7px; align-items:center; min-height:44px; font-size:12px; color:var(--muted); }
+.round-break .completion-ritual-timer .completion-link { display:inline-block; min-height:36px; }
+@media (max-width:480px) { .round-break .completion-ritual { grid-template-columns:100px minmax(0,1fr); height:320px; gap:10px; }.round-break .completion-ritual-image { height:145px; }.round-break .completion-ritual-copy h2 { font-size:22px; } }
 
 .round-break .completion-fact small { display:block; margin-top:3px; color:var(--muted); font-size:12px; font-weight:600; }
 .round-break .completion-seen-heading { margin:18px 0 6px; color:var(--blue); font-size:15px; font-weight:900; text-align:left; }
