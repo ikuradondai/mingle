@@ -6,7 +6,7 @@ test('group and solo choices are allowlisted and prototype keys are rejected', (
   assert.equal(completionFeelingChoices(false).length, 4);
   assert.equal(completionFeelingChoices(true).length, 4);
   assert.equal(completionFeelingFor(false, 'newPerspective')?.label, '新しい一面');
-  assert.equal(completionFeelingFor(true, 'felt')?.label, '気持ちが見えた');
+  assert.equal(completionFeelingFor(true, 'felt')?.label, '気づきがあった');
   assert.equal(completionFeelingFor(false, '__proto__'), null);
   assert.equal(completionFeelingFor(false, 'toString'), null);
   assert.equal(completionFeelingFor(false, 'felt'), null);

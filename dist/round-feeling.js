@@ -7,9 +7,9 @@ const GROUP_FEELINGS = Object.freeze({
   neutral: { label: "まだ言葉にならない", title: "今は、問いを持ち帰ろう。", prompt: "", image: "/assets/completion-feel-neutral-v4.png" }
 });
 const SOLO_FEELINGS = Object.freeze({
-  felt: { label: "気持ちが見えた", title: "少し、自分の気持ちが見えた。", prompt: "どんな気持ちに気づいた？", image: "/assets/completion-solo-feeling-v4.png" },
+  felt: { label: "気づきがあった", title: "ひとつ、気づきがあった。", prompt: "どんなことに気づいた？", image: "/assets/completion-solo-feeling-v4.png" },
   organized: { label: "少し整理できた", title: "少しずつ、整理できた。", prompt: "どんなことが、少しはっきりした？", image: "/assets/completion-solo-organized-v4.png" },
-  question: { label: "問いが残った", title: "問いを、次の時間へ。", prompt: "今、どんな問いが残っている？", image: "/assets/completion-solo-reflection-v3.png" },
+  question: { label: "もう少し考えたい", title: "もう少し、考えていたい。", prompt: "どんなことを、もう少し考えたい？", image: "/assets/completion-solo-path-v5.png" },
   neutral: { label: "まだ言葉にならない", title: "今は、問いを持ち帰ろう。", prompt: "", image: "/assets/completion-feel-neutral-v4.png" }
 });
 export function completionFeelingChoices(solo = false) { return Object.entries(solo ? SOLO_FEELINGS : GROUP_FEELINGS).map(([id, value]) => ({ id, ...value })); }
