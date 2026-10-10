@@ -1461,8 +1461,8 @@ function completionFeelingStored(key, solo) {
   return "";
 }
 function completionFeelingResult(feeling, entering = false) {
-  const title = feeling.title === "知らなかった一面に、出会えた。" ? "<span>知らなかった一面に、</span><span>出会えた。</span>" : esc(feeling.title);
-  return `<div class="completion-feeling-result${entering ? " is-entering" : ""}" data-feeling-result tabindex="-1"><img class="completion-feeling-result-image" src="${esc(feeling.image)}" alt="" aria-hidden="true" width="232" height="156"><h2>${title}</h2>${feeling.prompt ? `<p>${esc(feeling.prompt)}</p><small>声に出しても、心の中でも。</small>` : ""}<button type="button" class="completion-feeling-change" data-action="completion-feeling-change">選び直す</button></div>`;
+  const title = Array.isArray(feeling.titleParts) ? feeling.titleParts.map((part) => `<span>${esc(part)}</span>`).join("") : esc(feeling.title);
+  return `<div class="completion-feeling-result${entering ? " is-entering" : ""}" data-feeling-result tabindex="-1"><img class="completion-feeling-result-image" src="${esc(feeling.image)}" alt="" aria-hidden="true" width="232" height="156"><h2>${title}</h2><p>${esc(feeling.message)}</p><button type="button" class="completion-feeling-change" data-action="completion-feeling-change">選び直す</button></div>`;
 }
 function completionFeelingStage(session, solo, key) {
   const choices = completionFeelingChoices(solo); const stored = completionFeelingStored(key, solo); const chosen = stored ? completionFeelingFor(solo, stored) : null;
