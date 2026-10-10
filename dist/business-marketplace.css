@@ -3,3 +3,36 @@
 .bm-play>label{display:flex;align-items:center;gap:8px;font-weight:700}.bm-play>label input[data-count]{width:5rem;min-height:42px;text-align:center}
 .bm-official-grid a{display:inline-block}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+
+/* Corporate marketplace: a catalog first, management controls second. */
+.business-market-page .bm-shell{max-width:1280px;padding:24px 32px 56px}
+.business-market-page .bm-top{min-height:48px;margin-bottom:0;padding:0 0 16px;border-bottom:1px solid var(--line);font-size:.92rem}
+.business-market-page .bm-shell>h1{margin:34px 0 6px;font-size:clamp(2rem,4vw,3.2rem);letter-spacing:-.055em}
+.business-market-page .bm-shell>h2{margin:34px 0 10px;font-size:1.35rem;letter-spacing:-.03em}
+.business-market-page .bm-tabs{border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:26px 0 30px;gap:0}
+.business-market-page .bm-tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;padding:12px 16px;color:var(--muted)}
+.business-market-page .bm-tabs button.primary{border-bottom-color:var(--blue);background:transparent;color:var(--navy);font-weight:800}
+.business-market-page .bm-tabs button[data-new]{margin-left:auto;color:#fff;background:var(--navy);border-bottom-color:var(--navy)}
+.business-market-page .bm-official{border-left:0;border-top:1px solid var(--line);padding:22px 0 0}
+.business-market-page .bm-official-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border-top:1px solid var(--line);border-left:1px solid var(--line);margin-top:16px}
+.business-market-page .bm-official-grid>div{display:flex;flex-direction:column;align-items:flex-start;min-height:170px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:18px;background:transparent}
+.business-market-page .bm-official-grid>div:hover{background:var(--blue-soft)}
+.business-market-page .bm-official-grid .bm-meta{margin:8px 0 auto}
+.business-market-page .bm-official-grid a{padding:0;border:0;background:transparent;color:var(--blue);font-weight:700}
+.business-market-page .bm-official-grid button{margin-top:10px}
+.business-market-page .bm-list{grid-template-columns:repeat(3,minmax(0,1fr));gap:0;border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.business-market-page .bm-card{display:flex;flex-direction:column;min-height:210px;margin:0;border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:22px;background:transparent}
+.business-market-page .bm-card:hover{background:#fff}
+.business-market-page .bm-card .bm-meta{margin-top:auto}
+.business-market-page .bm-actions{margin-top:14px}
+.business-market-page .bm-actions button{border-radius:4px}
+.business-market-page .bm-form{max-width:900px;padding-top:10px}
+.business-market-page .bm-form input,.business-market-page .bm-form textarea,.business-market-page .bm-form select{border-radius:3px}
+@media(max-width:1000px){.business-market-page .bm-official-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.business-market-page .bm-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.business-market-page .bm-shell{padding:18px 16px 40px}.business-market-page .bm-top{flex-wrap:wrap}.business-market-page .bm-tabs{overflow-x:auto}.business-market-page .bm-tabs button{white-space:nowrap}.business-market-page .bm-tabs button[data-new]{margin-left:0}.business-market-page .bm-official-grid,.business-market-page .bm-list{grid-template-columns:1fr}.business-market-page .bm-card{min-height:0;padding:18px}.business-market-page .bm-official-grid>div{min-height:0;padding:18px}}
+
+/* Shared corporate navigation hierarchy. */
+.workspace-name{color:var(--muted);font-size:.85rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:18ch}.topbar>a:not(.brand),.bm-top>a:not(:first-child){color:var(--blue);font-size:.85rem;text-decoration:none;white-space:nowrap}.topbar>a[aria-current="page"],.bm-top>a[aria-current="page"]{color:var(--navy);font-weight:800;border-bottom:2px solid var(--blue);padding-bottom:4px}@media(max-width:620px){.workspace-name{order:3;width:100%;max-width:none}.topbar>a:not(.brand),.bm-top>a:not(:first-child){font-size:.8rem}.bm-top{gap:10px}}
+.bm-brand{display:block;flex:0 0 auto}.bm-brand img{display:block;width:112px;height:auto;max-width:100%}
+
+.business-market-page [data-focus]:focus{outline:0}.business-market-page .bm-shell>h1{font-size:clamp(2rem,4vw,2.8rem)}.business-market-page .bm-section-head{display:flex;align-items:end;justify-content:space-between;gap:20px;margin-top:30px}.business-market-page .bm-section-head h2{margin:0}.business-market-page .bm-section-head .bm-subtle{margin:3px 0 0}.business-market-page .bm-owned+.bm-official{margin-top:30px}

@@ -122,13 +122,13 @@ function loginView() {
   return `<div class="modal"><section class="modal-card"><h2>企業スペースにログイン</h2><p class="muted">登録済みのメールアドレスへ確認コードを送ります。</p><form class="stack" data-login><label>メールアドレス<input type="email" name="email" autocomplete="email" required value="${esc(state.otpEmail)}"></label>${state.otpSent ? '<label>確認コード<input name="token" inputmode="numeric" autocomplete="one-time-code" required></label>' : ""}<div class="actions"><button class="primary" type="submit">${state.otpSent ? "確認してログイン" : "確認コードを送る"}</button><button type="button" data-login-cancel>戻る</button></div><p class="muted">${esc(state.error || state.notice)}</p></form></section></div>`;
 }
 function shell(body) {
-  app.innerHTML = `<div class="shell"><header class="topbar"><a class="brand" href="https://mingle.cards/">Mingle.Cards</a><span>企業スペース</span><span class="spacer"></span><span class="muted">${esc(state.user?.email || "")}</span><button data-logout type="button">ログアウト</button></header>${state.notice ? `<div class="notice">${esc(state.notice)}</div>` : ""}${state.error ? `<div class="notice error" role="alert">${esc(state.error)}</div>` : ""}${body}</div>`;
+  app.innerHTML = `<div class="shell"><header class="topbar"><a class="brand" href="/" aria-label="Mingle.Cards ホーム"><img class="brand-logo" src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" /></a><span class="muted">企業スペース</span><span class="spacer"></span><span class="user-email">${esc(state.user?.email || "")}</span><button data-logout type="button">ログアウト</button></header>${state.notice ? `<div class="notice">${esc(state.notice)}</div>` : ""}${state.error ? `<div class="notice error" role="alert">${esc(state.error)}</div>` : ""}${body}</div>`;
   bind();
   bindDangerous();
 }
 function createView() {
   shell(
-    `<section class="panel"><h1>企業スペースを作成</h1><p class="muted">組織を作成すると、メンバーと利用テーマを管理できます。</p><form class="stack" data-create-org><label>組織名<input name="name" maxlength="120" required></label><label>組織ID（URL用）<input name="slug" pattern="[a-z0-9-]+" maxlength="64" placeholder="example-company" required></label><button class="primary" type="submit">組織を作成</button></form></section>`,
+    `<section class="panel"><p class="eyebrow">企業スペース</p><h1>最初の組織を作成</h1><p class="section-intro">組織を作成すると、メンバー登録、利用テーマ、法人向けコンテンツを一つのスペースで管理できます。</p><form class="stack" data-create-org><label>組織名<input name="name" maxlength="120" required placeholder="株式会社サンプル"></label><label>組織ID（URL用）<input name="slug" pattern="[a-z0-9-]+" maxlength="64" placeholder="example-company" required><span class="hint">半角英小文字・数字・ハイフンのみ。後から変更できません。</span></label><div class="actions"><button class="primary" type="submit">組織を作成</button></div></form></section>`,
   );
 }
 function orgIdOf(o) {
@@ -136,23 +136,28 @@ function orgIdOf(o) {
 }
 function nav() {
   const admin = ["owner", "admin"].includes(state.workspace?.role);
-  return `<nav class="toolbar" aria-label="企業スペース"><select data-org><option value="">組織を選択</option>${state.orgs
+  const member = state.workspace?.role === "member";
+  return `<div class="workspace-header"><div><p class="eyebrow">企業スペース</p><h1>${esc(state.workspace?.organization?.name || "組織を選択")}</h1><p class="workspace-meta">${member ? "メンバーとして利用中" : `${roleLabel(state.workspace?.role)}として管理中`}</p></div><div class="workspace-switcher"><label for="business-org">組織</label><select id="business-org" data-org><option value="">組織を選択</option>${state.orgs
     .map((o) => {
       const id = orgIdOf(o);
       return `<option value="${esc(id)}" ${id === state.orgId ? "selected" : ""}>${esc(o.name || id)}（${roleLabel(o.role)}）</option>`;
     })
     .join(
       "",
-    )}</select>${state.workspace ? ["overview", ...(admin ? ["members", "themes"] : [])].map((t) => `<button type="button" data-tab="${t}" class="${state.tab === t ? "primary" : ""}">${{ overview: "概要", members: "メンバー", themes: "テーマ・機能" }[t]}</button>`).join("") : ""}<button type="button" data-new-org>＋組織を作成</button></nav>`;
+    )}</select></div></div><nav class="workspace-nav" aria-label="企業スペース"><button type="button" data-tab="overview" class="${state.tab === "overview" ? "primary" : ""}">概要</button><a class="nav-link" href="/business-activities.html?orgId=${encodeURIComponent(state.orgId)}">アクティビティ</a><a class="nav-link" href="/business-marketplace.html?orgId=${encodeURIComponent(state.orgId)}">法人カード</a>${admin ? ["members", "themes"].map((t) => `<button type="button" data-tab="${t}" class="${state.tab === t ? "primary" : ""}">${{ members: "メンバー", themes: "テーマ・機能" }[t]}</button>`).join("") : ""}<span class="spacer"></span><button type="button" class="new-org" data-new-org>＋組織を作成</button></nav>`;
 }
 function overview() {
   const w = state.workspace || {};
+  const member = w.role === "member";
+  const admin = ["owner", "admin"].includes(w.role);
   const deletion =
     w.role === "owner"
       ? `<details><summary>組織設定</summary><p class="muted">組織名を入力すると組織とメンバー登録を削除します。個人アカウントは削除されません。</p><form class="stack" data-delete-org><label>組織名<input name="name" required></label><button class="danger" type="submit">組織を削除</button></form></details>`
       : "";
   const hasActivityHub = w.contentFlags?.businessActivities !== false || w.contentFlags?.customQuiz !== false || w.contentFlags?.generalQuiz !== false;
-  return `<section class="panel"><h1>${esc(w.organization?.name || "企業スペース")}</h1><p class="muted">権限: ${roleLabel(w.role)}</p><div class="grid"><div class="panel half"><h2>利用テーマ</h2><strong>${Array.isArray(w.themes) ? w.themes.length : "—"}</strong><p class="muted">組織で選んだテーマ</p></div><div class="panel half"><h2>有効な機能</h2><strong>${Object.values(w.featureFlags || {}).filter(Boolean).length} / ${FEATURES.length}</strong><p class="muted">組織ポリシーに従って表示されます</p></div></div><div class="actions"><a href="/business-play.html?orgId=${encodeURIComponent(state.orgId)}" class="primary" style="display:inline-block;padding:.65rem .9rem;text-decoration:none;color:#fff;background:#17233b">カードプレイを開始</a>${hasActivityHub ? `<a href="/business-activities.html?orgId=${encodeURIComponent(state.orgId)}" style="display:inline-block;padding:.65rem .9rem;text-decoration:none">法人アクティビティ・クイズ</a>` : ""}<a href="/business-marketplace.html?orgId=${encodeURIComponent(state.orgId)}" style="display:inline-block;padding:.65rem .9rem;text-decoration:none">法人カード</a></div>${deletion}</section>`;
+  const memberCount = Array.isArray(w.members) ? w.members.length : "—";
+  const featureCount = Object.values(w.featureFlags || {}).filter(Boolean).length;
+  return `<section class="panel"><div class="overview-grid"><div><p class="eyebrow">概要</p><h2>${member ? "今日の利用メニュー" : "今日の企業スペース"}</h2><p class="section-intro">${member ? "会社で利用できるカードとアクティビティから、今日の会話を始められます。回答や履歴は保存しません。" : "メンバーを登録し、利用するテーマと機能を整えたら、カードプレイを始められます。"}</p>${member ? "" : `<div class="metric-list"><div class="metric"><strong>${memberCount}</strong><span>登録メンバー</span></div><div class="metric"><strong>${Array.isArray(w.themes) ? w.themes.length : "—"}</strong><span>利用テーマ</span></div><div class="metric"><strong>${featureCount}/${FEATURES.length}</strong><span>有効な基本機能</span></div><div class="metric"><strong>${hasActivityHub ? "利用可" : "停止中"}</strong><span>法人コンテンツ</span></div></div>`}</div><aside class="next-actions"><h2>${member ? "利用を始める" : "次にすること"}</h2><p class="muted">${member ? "気になるメニューを選んでください。" : "管理画面から順番に設定できます。"}</p><a class="action-link primary" href="/business-play.html?orgId=${encodeURIComponent(state.orgId)}">カードプレイを開始 <span aria-hidden="true">→</span></a>${hasActivityHub ? `<a class="action-link" href="/business-activities.html?orgId=${encodeURIComponent(state.orgId)}">アクティビティ・クイズ <span aria-hidden="true">→</span></a>` : ""}<a class="action-link" href="/business-marketplace.html?orgId=${encodeURIComponent(state.orgId)}">法人カード <span aria-hidden="true">→</span></a>${admin ? `<a class="action-link" href="#members" data-go-tab="members">メンバーを登録 <span aria-hidden="true">→</span></a>` : ""}</aside></div>${deletion}</section>`;
 }
 function members() {
   const rows = Array.isArray(state.workspace?.members)
@@ -160,7 +165,7 @@ function members() {
     : [];
   const canManage = ["owner", "admin"].includes(state.workspace?.role);
   const isOwner = state.workspace?.role === "owner";
-  return `<section class="panel"><h2>メンバー</h2><p class="muted">社員のメール・表示名・部署をCSVで登録できます。社員は登録したメールでログインすると参加できます。招待メールは自動送信されません。</p><div class="drop"><label>CSVを選択<input type="file" accept=".csv,text/csv" data-csv></label><div class="actions"><button type="button" data-template>CSVテンプレートをダウンロード</button>${state.csv ? `<button class="primary" type="button" data-import ${state.csvErrors.length ? "disabled" : ""}>検証済み${state.csv.rows.length}件を登録</button>` : ""}</div></div>${
+  return `<section class="panel"><p class="eyebrow">メンバー管理</p><h2>社員を登録・管理</h2><p class="section-intro">社員のメール・表示名・部署をCSVで登録できます。招待メールは自動送信されず、登録したメールで本人がログインして参加します。</p><div class="drop"><label>CSVを選択<input type="file" accept=".csv,text/csv" data-csv></label><div><p class="hint">UTF-8 / 最大500行</p><div class="actions"><button type="button" data-template>CSVテンプレートをダウンロード</button>${state.csv ? `<button class="primary" type="button" data-import ${state.csvErrors.length ? "disabled" : ""}>検証済み${state.csv.rows.length}件を登録</button>` : ""}</div></div></div>${
     state.csv
       ? `<p class="hint">${state.csvErrors.length ? `エラー ${state.csvErrors.length}件（修正して再選択してください）` : `登録可能 ${state.csv.rows.length}件`}</p>${
           state.csvErrors.length
@@ -193,14 +198,14 @@ function themes() {
         (theme) => !theme.r18 && !String(theme.id).includes("r18"),
       )
     : [];
-  return `<section class="panel"><h2>提供テーマ</h2><p class="muted">R18テーマは企業スペースでは選択できません。</p><div class="theme-grid">${catalog
+  return `<section class="panel"><p class="eyebrow">ポリシー管理</p><h2>テーマと機能</h2><p class="section-intro">企業スペースで利用できるテーマと機能を管理します。R18テーマは企業スペースでは選択できません。</p><div class="theme-section"><h3>提供テーマ</h3><div class="theme-grid">${catalog
     .map(
       (d) =>
         `<label class="theme-option"><input type="checkbox" data-theme value="${esc(d.id)}" ${allowed.has(d.id) ? "checked" : ""} ${canEdit ? "" : "disabled"}><span>${esc(d.name || d.title || d.id)}<small>${d.cardCount || 0}枚</small></span></label>`,
     )
     .join(
       "",
-    )}</div><h2>使える機能</h2><div class="checks">${FEATURES.map(([k, label]) => `<label class="check"><input type="checkbox" data-feature="${k}" ${flags[k] ? "checked" : ""} ${canEdit ? "" : "disabled"}> ${label}</label>`).join("")}</div><h2>法人コンテンツ</h2><div class="checks">${CONTENT_FLAGS.map(([k, label]) => `<label class="check"><input type="checkbox" data-content-flag="${k}" ${(w.contentFlags?.[k] !== false) ? "checked" : ""} ${canEdit ? "" : "disabled"}> ${label}</label>`).join("")}</div>${canEdit ? '<div class="actions"><button class="primary" type="button" data-save-policy>設定を保存</button></div>' : '<p class="muted">管理者のみ設定を変更できます。</p>'}</section>`;
+    )}</div></div><div class="theme-section"><h3>使える機能</h3><div class="checks">${FEATURES.map(([k, label]) => `<label class="check"><input type="checkbox" data-feature="${k}" ${flags[k] ? "checked" : ""} ${canEdit ? "" : "disabled"}> ${label}</label>`).join("")}</div><h3>法人コンテンツ</h3><div class="checks">${CONTENT_FLAGS.map(([k, label]) => `<label class="check"><input type="checkbox" data-content-flag="${k}" ${(w.contentFlags?.[k] !== false) ? "checked" : ""} ${canEdit ? "" : "disabled"}> ${label}</label>`).join("")}</div>${canEdit ? '<div class="actions"><button class="primary" type="button" data-save-policy>設定を保存</button></div>' : '<p class="muted">管理者のみ設定を変更できます。</p>'}</div></section>`;
 }
 function render() {
   if (!state.user) {
@@ -411,6 +416,14 @@ function bind() {
   app.querySelectorAll("[data-tab]").forEach((b) =>
     b.addEventListener("click", () => {
       state.tab = b.dataset.tab;
+      setMessage("", "");
+      render();
+    }),
+  );
+  app.querySelectorAll("[data-go-tab]").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.preventDefault();
+      state.tab = b.dataset.goTab;
       setMessage("", "");
       render();
     }),
