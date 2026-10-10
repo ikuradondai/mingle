@@ -866,8 +866,8 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .round-break .completion-feeling-result { display:grid; justify-items:center; align-content:start; gap:6px; min-height:350px; }
 .round-break .completion-feeling-result-image { display:block; width:232px; height:156px; object-fit:contain; }
 .round-break .completion-feeling-result.is-entering .completion-feeling-result-image { animation:completion-feeling-open 1.7s ease both; }
-.round-break .completion-feeling-result h2 { min-height:2.3em; margin:0; font-size:clamp(21px,5.8vw,25px); line-height:1.2; text-wrap:balance; }
-.round-break .completion-feeling-result p { min-height:2.8em; margin:0; color:var(--muted); font-size:14px; line-height:1.4; font-weight:700; }
+.round-break .completion-feeling-result h2 { min-height:2.3em; margin:0; font-size:clamp(24px,6.5vw,28px); line-height:1.2; text-wrap:balance; }
+.round-break .completion-feeling-result p { min-height:1.6em; margin:0; color:var(--muted); font-size:15px; font-weight:700; }
 .round-break .completion-feeling-change { min-height:44px; margin-top:2px; padding:8px 4px; border:0; background:transparent; color:var(--blue); font:inherit; font-size:12px; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
 @media (prefers-reduced-motion: reduce) { .round-break .completion-feeling-result.is-entering .completion-feeling-result-image { animation:none; clip-path:none; } }
 @keyframes completion-feeling-open { from { opacity:.35; clip-path:circle(0% at 50% 60%); transform:translateY(8px) scale(.86); } to { opacity:1; clip-path:circle(75% at 50% 50%); transform:none; } }
