@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { createSponsorHandlers, createSponsorService } from '../server-side/sponsors.mjs';
 
 const env = { SUPABASE_URL: 'https://sponsor.test.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_test', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };
@@ -62,4 +63,40 @@ test('public route returns published metadata and status changes remain service-
   const handlers = createSponsorHandlers({ service: { async list({ id }) { return state.status === 'published' ? (id ? [state] : [state]) : []; }, async update() { state = { ...state, status: 'draft' }; return state; }, async create() { return state; } } });
   let x = reply(); await handlers.publicList({ method: 'GET', url: '/api/sponsors', headers: {} }, x.res); assert.equal(x.result.status, 200); assert.equal(x.result.body.sets[0].status, 'published');
   state = { ...state, status: 'draft' }; x = reply(); await handlers.publicList({ method: 'GET', url: '/api/sponsors', headers: {} }, x.res); assert.equal(x.result.status, 200); assert.deepEqual(x.result.body.sets, []);
+});
+
+test('asset upload validates raster bytes and returns stable public asset URL', async () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+  let upload;
+  const service = createSponsorService({ env, fetchImpl: async (url, options = {}) => { if (url.includes('/storage/v1/object/')) { upload = { url, options }; return response(null, 200); } return response([]); } });
+  const result = await service.uploadAsset({ kind: 'thumbnail', imageData: `data:image/png;base64,${png.toString('base64')}` });
+  assert.equal(result.kind, 'thumbnail'); assert.equal(result.width, 1); assert.equal(result.height, 1); assert.match(result.path, /^sponsor-assets\/[0-9a-f-]{36}\.png$/); assert.match(result.url, /\/storage\/v1\/object\/public\/sponsor-assets\//); assert.ok(Buffer.isBuffer(upload.options.body));
+  await assert.rejects(() => service.uploadAsset({ kind: 'thumbnail', imageData: 'data:image/png;base64,AAAA' }), (error) => error.code === 'UNSUPPORTED_IMAGE');
+  await assert.rejects(() => service.uploadAsset({ kind: 'thumbnail', imageData: `data:image/svg+xml;base64,${Buffer.from('<svg/>').toString('base64')}` }), (error) => error.code === 'INVALID_IMAGE');
+});
+
+test('set metadata preserves design and optional asset paths', async () => {
+  let sent; let infoUrl;
+  const service = createSponsorService({ env, fetchImpl: async (url, options) => { if (options.method === 'HEAD') { infoUrl = url; return response(null, 200); } sent = JSON.parse(options.body); return response([{ id: '11111111-1111-4111-8111-111111111111', provider_name: 'P', title: 'T', description: '', categories: ['friends'], audience: 'group', cards, card_count: 6, status: 'draft', end_message: '', site_url: null, cta_label: '', is_r18: false, design: sent.design, thumbnail_path: sent.thumbnail_path, card_front_path: sent.card_front_path, card_back_path: sent.card_back_path, updated_at: '' }]); } });
+  const result = await service.create({ providerName: 'P', title: 'T', categories: ['friends'], audience: 'group', cards, status: 'draft', design: { version: 1, kind: 'preset', presetId: 'friends' }, thumbnailPath: 'sponsor-assets/11111111-1111-4111-8111-111111111111.webp', cardFrontPath: null, cardBackPath: null });
+  assert.deepEqual(sent.design, { version: 1, kind: 'preset', presetId: 'friends' }); assert.match(sent.thumbnail_path, /^sponsor-assets\//); assert.equal(result.design.presetId, 'friends'); assert.equal(result.thumbnailUrl, 'https://sponsor.test.supabase.co/storage/v1/object/public/sponsor-assets/11111111-1111-4111-8111-111111111111.webp'); assert.match(infoUrl, /\/storage\/v1\/object\/info\/sponsor-assets\//);
+  await assert.rejects(() => service.create({ providerName: 'P', title: 'T', categories: ['friends'], audience: 'group', cards, status: 'draft', thumbnailPath: 'https://evil.example/image.png' }), (error) => error.code === 'INVALID_ASSET_PATH');
+  const missing = createSponsorService({ env, fetchImpl: async (_url, options) => options.method === 'HEAD' ? response(null, 404) : response([]) });
+  await assert.rejects(() => missing.create({ providerName: 'P', title: 'T', categories: ['friends'], audience: 'group', cards, status: 'draft', thumbnailPath: 'sponsor-assets/11111111-1111-4111-8111-111111111111.webp' }), (error) => error.code === 'ASSET_NOT_FOUND');
+});
+
+test('real PNG and WebP fixtures pass upload validation', async () => {
+  const calls = []; const service = createSponsorService({ env, fetchImpl: async (url) => { calls.push(url); return response(null, 200); } });
+  const png = await readFile(new URL('../dist/assets/completion-feel-neutral-v4.png', import.meta.url));
+  const webp = await readFile(new URL('../dist/assets/card-families/friends-front.webp', import.meta.url));
+  const pngResult = await service.uploadAsset({ kind: 'thumbnail', imageData: `data:image/png;base64,${png.toString('base64')}` });
+  const webpResult = await service.uploadAsset({ kind: 'cardFront', imageData: `data:image/webp;base64,${webp.toString('base64')}` });
+  assert.ok(pngResult.width > 0 && pngResult.height > 0); assert.ok(webpResult.width > 0 && webpResult.height > 0); assert.equal(calls.length, 2);
+});
+
+test('real JPEG fixture passes upload validation', async () => {
+  const jpeg = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9k=';
+  const service = createSponsorService({ env, fetchImpl: async () => response(null, 200) });
+  const result = await service.uploadAsset({ kind: 'cardBack', imageData: `data:image/jpeg;base64,${jpeg}` });
+  assert.equal(result.width, 1); assert.equal(result.height, 1); assert.match(result.path, /\.jpg$/);
 });

@@ -22,3 +22,13 @@ test('API-shaped cards without r18 flow through normalizer, engine and storage',
   const rawCards = cards.map(({ id: cardId, text }) => ({ id: cardId, text }));
   const sponsor = normalizeSponsorMeta(rawMeta); const normalized = normalizeSponsorCards({ ...rawMeta, cards: rawCards }); const value = createSponsorSession({ sponsor, cards: normalized, participants: ['A', 'B'] }); const storage = storageWith(); assert.equal(saveSession(value, { storage, now: 1000 }), true); assert.equal(loadSession({ storage, now: 1001 }).questions.length, 6);
 });
+
+test('sponsor asset metadata accepts only validated bucket paths and creator presets', () => {
+  const path = 'sponsor-assets/33333333-3333-4333-8333-333333333333.webp';
+  const value = normalizeSponsorMeta({ id, status: 'published', providerName: '提供元', title: '画像', description: '', categories: ['friends'], audience: 'group', cardCount: 6, isR18: false, design: { version: 1, kind: 'preset', presetId: 'friends' }, thumbnailPath: path, thumbnailUrl: `https://storage.example/storage/v1/object/public/${path}` });
+  assert.equal(value.design.presetId, 'friends'); assert.equal(value.thumbnailPath, path); assert.match(value.thumbnailUrl, /storage\/v1\/object\/public/);
+  const unsafe = normalizeSponsorMeta({ id, status: 'published', providerName: '提供元', title: '画像', description: '', categories: ['friends'], audience: 'group', cardCount: 6, isR18: false, thumbnailPath: 'https://evil.example/a.png', thumbnailUrl: 'https://evil.example/a.png' });
+  assert.equal(unsafe.thumbnailPath, null); assert.equal(unsafe.thumbnailUrl, null);
+  const queryUrl = normalizeSponsorMeta({ id, status: 'published', providerName: '提供元', title: '画像', description: '', categories: ['friends'], audience: 'group', cardCount: 6, isR18: false, thumbnailPath: path, thumbnailUrl: `https://storage.example/storage/v1/object/public/${path}?x=%22` });
+  assert.equal(queryUrl.thumbnailUrl, null);
+});

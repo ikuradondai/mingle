@@ -69,6 +69,17 @@ export function soloMotifForDeck(deckId) {
   return path ? `<svg class="solo-card-motif" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${path}</svg>` : '';
 }
 export function cardDesignForSession(session) {
+  if (session?.sponsorSet) {
+    const sponsor = session.sponsor || {};
+    const creator = normalizeCreatorDesign(sponsor.design);
+    const preset = creator ? CREATOR_PRESETS[creator.presetId] : null;
+    const category = Array.isArray(sponsor.categories) ? sponsor.categories.find((value) => Object.hasOwn(FAMILY_ASSETS, value)) : null;
+    const family = preset?.family || category || 'welcome';
+    const source = String(session.sponsor?.id || '');
+    const variant = [...source].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 4;
+    const fallback = preset || FAMILY_ASSETS[family];
+    return { ...fallback, family, variant, accent: VARIANT_PALETTES[family][variant] || FAMILY_ASSETS[family].accent, corners: cornerAssets(family), front: sponsor.cardFrontUrl || fallback.front, back: sponsor.cardBackUrl || fallback.back, thumbnail: sponsor.thumbnailUrl || sponsor.cardFrontUrl || fallback.front, sponsorCustomFront: Boolean(sponsor.cardFrontUrl), sponsorCustomBack: Boolean(sponsor.cardBackUrl) };
+  }
   const creator = normalizeCreatorDesign(session?.design);
   if (creator) {
     const preset = CREATOR_PRESETS[creator.presetId];

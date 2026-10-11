@@ -1,12 +1,17 @@
+import { normalizeCreatorDesign } from './creator-metadata.js';
+
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const AUDIENCES = new Set(['group', 'solo', 'both']);
 function text(value, max = 240) { return typeof value === 'string' ? value.trim().slice(0, max) : ''; }
+function assetPath(value) { return value == null || value === '' ? null : (typeof value === 'string' && /^sponsor-assets\/[0-9a-f-]{36}\.(?:png|jpg|webp)$/iu.test(value) ? value : null); }
+function assetUrl(value, path) { if (!path || typeof value !== 'string' || !value) return null; try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash && url.pathname === `/storage/v1/object/public/${path}` ? url.href : null; } catch { return null; } }
 export function normalizeSponsorMeta(value) {
   if (!value || !ID.test(String(value.id || '')) || value.status !== 'published') return null;
   const categories = Array.isArray(value.categories) ? [...new Set(value.categories.filter((item) => typeof item === 'string').map((item) => item.trim()).filter((item) => ['self','relationship','friends','family','work','sports','first-meeting','roleplay','adult','game','love','school'].includes(item)))].slice(0, 12) : [];
   if (!categories.length || !text(value.providerName, 80) || !text(value.title, 120) || !AUDIENCES.has(value.audience) || !Number.isInteger(value.cardCount) || value.cardCount < 6 || value.cardCount > 40 || typeof value.isR18 !== 'boolean') return null;
   let siteUrl = ''; if (value.siteUrl) { try { const url = new URL(String(value.siteUrl)); if (url.protocol !== 'https:' || url.username || url.password) return null; siteUrl = url.href; } catch { return null; } }
-  return { id: String(value.id), providerName: text(value.providerName, 80), title: text(value.title, 120), description: text(value.description, 500), categories, audience: value.audience, cardCount: value.cardCount, status: 'published', endMessage: text(value.endMessage, 500), siteUrl, ctaLabel: text(value.ctaLabel, 40), updatedAt: text(value.updatedAt, 80), isR18: value.isR18 === true };
+  const design = normalizeCreatorDesign(value.design); const thumbnailPath = assetPath(value.thumbnailPath); const cardFrontPath = assetPath(value.cardFrontPath); const cardBackPath = assetPath(value.cardBackPath);
+  return { id: String(value.id), providerName: text(value.providerName, 80), title: text(value.title, 120), description: text(value.description, 500), categories, audience: value.audience, cardCount: value.cardCount, status: 'published', endMessage: text(value.endMessage, 500), siteUrl, ctaLabel: text(value.ctaLabel, 40), updatedAt: text(value.updatedAt, 80), isR18: value.isR18 === true, design, thumbnailPath, cardFrontPath, cardBackPath, thumbnailUrl: assetUrl(value.thumbnailUrl, thumbnailPath), cardFrontUrl: assetUrl(value.cardFrontUrl, cardFrontPath), cardBackUrl: assetUrl(value.cardBackUrl, cardBackPath) };
 }
 export function sponsorAudienceAllowed(item, mode) { return item && (item.audience === 'both' || item.audience === mode); }
 export function sponsorCategoryMatches(item, category) { return item && (category === 'all' || item.categories.includes(category)); }

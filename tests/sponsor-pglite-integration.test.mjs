@@ -12,7 +12,8 @@ function response(value, status = 200) { return { ok: status >= 200 && status < 
 test('service CRUD contract works against the sponsor migration in PGlite', async () => {
   const db = new PGlite();
   const migration = await readFile(new URL('../supabase/migrations/202610110002_sponsors.sql', import.meta.url), 'utf8');
-  await db.exec("create role anon; create role authenticated; create role service_role; alter role service_role bypassrls; grant usage on schema public to anon,authenticated,service_role;"); await db.exec(migration);
+  const assetsMigration = await readFile(new URL('../supabase/migrations/202610110003_sponsor_assets.sql', import.meta.url), 'utf8');
+  await db.exec("create role anon; create role authenticated; create role service_role; alter role service_role bypassrls; grant usage on schema public to anon,authenticated,service_role; create schema storage; create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]); create table storage.objects(bucket_id text,name text);"); await db.exec(migration); await db.exec(assetsMigration);
   const query = async (sql, params = []) => { await db.exec('set role service_role'); try { return await db.query(sql, params); } finally { await db.exec('reset role'); } };
   const fetchImpl = async (url, options = {}) => {
     const parsed = new URL(url); const payload = options.body ? JSON.parse(options.body) : null; const id = parsed.searchParams.get('id')?.replace(/^eq\./, '');

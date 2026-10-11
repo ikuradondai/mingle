@@ -907,3 +907,15 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .sponsor-completion-note p { margin:4px 0; }
 
 .sponsor-completion-note p { white-space: pre-line; overflow-wrap: anywhere; }
+
+/* Sponsor-uploaded faces use the supplied art without the preset rail overlays. */
+.shared-question-card.sponsor-custom-front.is-revealed { background-image: var(--card-art-front); background-position: center; background-size: cover; background-repeat: no-repeat; }
+.shared-question-card.sponsor-custom-front.is-revealed .shared-art-rail,
+.shared-question-card.sponsor-custom-front.is-revealed .shared-bubbles,
+.shared-question-card.sponsor-custom-front.is-revealed .shared-card-motif { display: none; }
+.shared-question-card.sponsor-custom-front.is-revealed .shared-card-copy { width: min(78%, 620px); margin-inline: auto; padding: 42px 24px 54px; border-radius: 12px; background: rgba(255,250,243,.9); box-sizing: border-box; }
+.shared-question-card.sponsor-custom-back.is-face-down { background-image: var(--card-art-back); background-position: center; background-size: cover; background-repeat: no-repeat; }
+.shared-question-card.sponsor-custom-back.is-face-down .shared-art-rail,
+.shared-question-card.sponsor-custom-back.is-face-down .shared-bubbles,
+.shared-question-card.sponsor-custom-back.is-face-down .shared-card-motif,
+.shared-question-card.sponsor-custom-back.is-face-down .shared-card-copy { display: none; }
