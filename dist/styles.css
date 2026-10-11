@@ -919,3 +919,26 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .shared-question-card.sponsor-custom-back.is-face-down .shared-bubbles,
 .shared-question-card.sponsor-custom-back.is-face-down .shared-card-motif,
 .shared-question-card.sponsor-custom-back.is-face-down .shared-card-copy { display: none; }
+
+/* Every reverse side uses its matching back artwork edge to edge. */
+.shared-question-card.is-face-down {
+  background-image: var(--card-art-back);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+.shared-question-card.is-face-down .shared-art-rail,
+.shared-question-card.is-face-down .shared-bubbles,
+.shared-question-card.is-face-down .shared-card-motif,
+.shared-question-card.is-face-down .shared-card-copy { display: none; }
+.shared-question-card.is-face-down:not(.sponsor-custom-back) {
+  overflow: hidden;
+}
+.shared-question-card.is-face-down:not(.sponsor-custom-back)::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: -5%;
+  background: var(--card-art-back) center / cover no-repeat;
+  pointer-events: none;
+}
