@@ -13,7 +13,7 @@ import {
   participantCountAllowed,
   participantRuleForDeck,
 } from "./participant-rule.js";
-import { completionRitualFor, nextCompletionRitual } from "./completion-ritual.js";
+import { completionReplyContext, completionReplyKey, completionReplyCopy } from "./completion-reply.js";
 import {
   themeExplorerBookmarks,
   themeExplorerExperienced,
@@ -22,6 +22,7 @@ import {
 } from "./theme-explorer.js";
 
 const root = document.querySelector("#business-play-app");
+const completionReplyStates = new Map();
 const state = {
   orgs: [],
   orgId: "",
@@ -134,15 +135,16 @@ function setup() {
     `<section class="panel"><h1>${mode === "solo" ? "ひとりで遊ぶ" : "みんなで遊ぶ"}</h1><p class="muted">${mode === "solo" ? "自分をもっとよく知るための質問が出てくるよ。" : "呼び名を入力して、みんなで質問を読み上げてください。"}回答の入力や録音は行いません。</p><label>人数<div class="actions"><button type="button" data-count="down" ${state.busy || state.count <= (p.solo_play ? 1 : 2) ? "disabled" : ""}>−</button><strong>${state.count}人</strong><button type="button" data-count="up" ${state.busy || state.count >= (p.group_play ? 8 : 1) ? "disabled" : ""}>＋</button></div></label><h2>許可されたテーマ</h2><p class="hint">${p.theme_mix ? "テーマミックス（最大3テーマ）が使えます。" : "テーマは1つ選択できます。"}</p><div class="theme-grid">${themes || '<p class="muted">この人数で利用できるテーマがありません。</p>'}</div><h2>呼び名</h2><div class="names-grid">${names}</div>${p.audio ? `<label class="check"><input type="checkbox" data-audio ${state.audio ? "checked" : ""} ${state.busy ? "disabled" : ""}> 効果音を使う</label>` : ""}<button class="primary" type="button" data-start ${disabled ? "disabled" : ""}>開始する</button></section>`,
   );
 }
-function businessRitualTitle(ritual) { const parts = Array.isArray(ritual.titleParts) && ritual.titleParts.length ? ritual.titleParts : [ritual.title]; return parts.map((part) => `<span>${esc(part)}</span>`).join("<wbr>"); }
+function businessReplyView(session, cards) {
+  const replySession = { ...session, organizationId: session.organizationId || state.orgId, sessionId: session.sessionId || session.id || `${state.orgId}:business`, mode: state.count === 1 ? "solo" : "business", participants: state.names, count: state.count, questions: cards, cursor: state.index, roundStart: 0 };
+  const key = completionReplyKey(replySession); const context = completionReplyContext(replySession); const copy = completionReplyCopy(context); const done = completionReplyStates.get(key)?.completed === true;
+  return `<section class="completion-reply is-${context}${done ? " is-complete" : ""}" data-completion-reply data-reply-key="${esc(key)}" aria-labelledby="business-reply-title"><div class="completion-reply-stage"><div class="completion-reply-view completion-reply-prompt-view" data-reply-prompt-view aria-hidden="${done}" ${done ? "inert" : ""}><h2 id="business-reply-title">${esc(copy.title)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-prompt">${esc(copy.prompt)}</p><button type="button" class="completion-reply-action" data-business-reply-done aria-pressed="false">${esc(copy.action)}</button><button type="button" class="completion-link completion-reply-skip" data-restart>もう一度設定する</button></div><div class="completion-reply-view completion-reply-done-view" data-reply-done-view aria-hidden="${!done}" ${done ? "" : "inert"}><h2 tabindex="-1">${esc(copy.completeTitle)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-status" data-completion-reply-status role="status" aria-live="polite">${done ? esc(copy.complete) : ""}</p><div class="completion-reply-actions"><button type="button" class="primary" data-restart>もう一度設定する</button></div></div></div></section>`;
+}
 function play() {
   const cards = (state.session?.themes || []).flatMap((t) => t.cards || []);
   if (state.index >= cards.length) {
-    const ritualSession = { ...state.session, orgId: state.orgId, sessionId: state.session.sessionId || state.session.id || `${state.orgId}:business`, mode: state.count === 1 ? "solo" : "business", participants: state.names, count: state.count, questions: cards, cursor: state.index, roundStart: 0 };
-    const ritual = completionRitualFor(ritualSession);
-    const image = ritual.image ? `<img class="business-completion-ritual-image" src="${esc(ritual.image)}" alt="${esc(ritual.alt)}" width="220" height="160">` : "";
     base(
-      `<section class="panel business-completion"><h1>${state.count === 1 ? "おつかれさまでした" : "みんなで、おつかれさまでした"}</h1><p class="muted">回答の入力や録音は行いません。</p><button class="primary" data-restart type="button">もう一度設定する</button><section class="business-completion-ritual${ritual.image ? "" : " is-text-only"}">${image}<div><h2>${businessRitualTitle(ritual)}</h2><p>${esc(ritual.message)}</p><button class="text" type="button" data-business-ritual-reroll>別のしめ方</button></div></section></section>`,
+      `<section class="panel business-completion"><h1>${state.count === 1 ? "おつかれさまでした" : "みんなで、おつかれさまでした"}</h1><p class="muted">回答の入力や録音は行いません。</p>${businessReplyView(state.session, cards)}</section>`,
     );
     return;
   }
@@ -246,6 +248,7 @@ async function start() {
     );
     if (generation !== state.authGeneration) return;
     state.session = session;
+    completionReplyStates.clear();
     if (session.features) state.workspace = { ...state.workspace, featureFlags: session.features };
     if (!flags().audio) state.audio = false;
     state.index = 0;
@@ -345,17 +348,21 @@ function bind() {
     state.index = Math.max(0, state.index - 1);
     render();
   });
-  root.querySelector("[data-restart]")?.addEventListener("click", () => {
+  root.querySelectorAll("[data-restart]").forEach((button) => button.addEventListener("click", () => {
     state.session = null;
     state.index = 0;
     render();
-  });
-  root.querySelector("[data-business-ritual-reroll]")?.addEventListener("click", () => {
-    if (!state.session) return;
-    const cards = (state.session.themes || []).flatMap((theme) => theme.cards || []);
-    const ritualSession = { ...state.session, orgId: state.orgId, sessionId: state.session.sessionId || state.session.id || `${state.orgId}:business`, mode: state.count === 1 ? "solo" : "business", participants: state.names, count: state.count, questions: cards, cursor: state.index, roundStart: 0 };
-    nextCompletionRitual(ritualSession);
-    render();
+  }));
+  root.querySelector("[data-business-reply-done]")?.addEventListener("click", (event) => {
+    const section = event.currentTarget.closest("[data-completion-reply]"); const key = section?.dataset.replyKey; if (!key || completionReplyStates.get(key)?.completed) return;
+    const context = section.classList.contains("is-solo") ? "solo" : "business"; const copy = completionReplyCopy(context);
+    completionReplyStates.set(key, { completed: true }); section.classList.add("is-complete", "is-celebrating");
+    const prompt = section.querySelector("[data-reply-prompt-view]"); const doneView = section.querySelector("[data-reply-done-view]");
+    if (prompt) { prompt.setAttribute("aria-hidden", "true"); prompt.inert = true; }
+    if (doneView) { doneView.removeAttribute("inert"); doneView.setAttribute("aria-hidden", "false"); }
+    const status = section.querySelector("[data-completion-reply-status]"); if (status) status.textContent = copy.complete;
+    doneView?.querySelector("h2")?.focus?.({ preventScroll: true });
+    window.setTimeout(() => section.classList.remove("is-celebrating"), 700);
   });
   root.querySelectorAll("[data-bookmark]").forEach((b) =>
     b.addEventListener("click", () => {

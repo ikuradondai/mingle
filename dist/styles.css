@@ -886,6 +886,35 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .round-break .completion-ritual-timer { display:flex; flex-wrap:wrap; gap:7px; align-items:center; min-height:44px; font-size:12px; color:var(--muted); }
 .round-break .completion-ritual-timer .completion-link { display:inline-block; min-height:36px; }
 @media (max-width:480px) { .round-break .completion-ritual { grid-template-columns:100px minmax(0,1fr); height:320px; gap:10px; }.round-break .completion-ritual-image { height:145px; }.round-break .completion-ritual-copy h2 { font-size:22px; } }
+.round-break .completion-reply,
+.business-completion .completion-reply { box-sizing:border-box; width:min(100%,660px); margin:22px auto 0; padding:18px 0 4px; border-top:1px solid color-mix(in srgb,var(--ink) 16%,transparent); text-align:center; }
+.completion-reply h2 { margin:0 auto 8px; color:var(--blue); font-size:clamp(21px,4vw,30px); line-height:1.25; }
+.completion-reply-prompt { max-width:620px; margin:0 auto 12px; color:var(--ink); font-size:15px; line-height:1.7; }
+.completion-reply-action { display:inline-flex; align-items:center; justify-content:center; min-height:44px; margin:0; padding:8px 4px; border:0; border-radius:0; background:transparent; color:var(--blue); font:inherit; font-weight:800; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+.completion-reply-action:focus-visible { outline:3px solid var(--lime); outline-offset:3px; }
+.completion-reply-action[aria-pressed="true"] { color:var(--muted); text-decoration:none; }
+.completion-reply-status { min-height:1.5em; margin:6px 0 0; color:var(--muted); font-size:14px; font-weight:700; line-height:1.5; }
+.business-completion .completion-reply { margin-top:24px; }
+@media (max-width:480px) { .completion-reply-prompt { font-size:14px; line-height:1.6; } }
+.completion-reply-stage { display:grid; min-height:330px; }
+.completion-reply-view { grid-area:1 / 1; display:grid; justify-items:center; align-content:start; gap:8px; min-width:0; text-align:center; }
+.completion-reply-view[aria-hidden="true"] { visibility:hidden; pointer-events:none; }
+.completion-reply-view[aria-hidden="false"] { visibility:visible; }
+.completion-reply-view h2 { min-height:2.5em; display:flex; align-items:end; justify-content:center; margin:0; }
+.completion-reply-image { display:block; width:220px; height:148px; object-fit:contain; }
+.completion-reply-prompt { min-height:5.2em; }
+.completion-reply-status { min-height:3em; }
+.completion-reply-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:14px; min-height:52px; margin-top:8px; }
+.completion-reply-actions .completion-link { min-height:44px; padding:8px 4px; border:0; border-radius:0; background:transparent; color:var(--blue); font:inherit; text-decoration:underline; cursor:pointer; }
+.completion-reply-action { position:relative; }
+.completion-reply-done-view { position:relative; }
+.completion-reply.is-celebrating .completion-reply-done-view::before,
+.completion-reply.is-celebrating .completion-reply-done-view::after { content:""; position:absolute; top:112px; left:50%; width:8px; height:8px; border-radius:50%; pointer-events:none; opacity:0; }
+.completion-reply.is-celebrating .completion-reply-done-view::before { background:#d6a43a; animation:completion-reply-spark-left .65s ease-out both; }
+.completion-reply.is-celebrating .completion-reply-done-view::after { background:#3867d6; animation:completion-reply-spark-right .65s .05s ease-out both; }
+@keyframes completion-reply-spark-left { 0% { opacity:0; transform:translate(-4px,12px) scale(.5); } 30% { opacity:1; } 100% { opacity:0; transform:translate(-54px,-20px) scale(1); } }
+@keyframes completion-reply-spark-right { 0% { opacity:0; transform:translate(4px,12px) scale(.5); } 30% { opacity:1; } 100% { opacity:0; transform:translate(54px,-16px) scale(1); } }
+@media (prefers-reduced-motion: reduce) { .completion-reply.is-celebrating .completion-reply-done-view::before,.completion-reply.is-celebrating .completion-reply-done-view::after { animation:none; } }
 
 .round-break .completion-fact small { display:block; margin-top:3px; color:var(--muted); font-size:12px; font-weight:600; }
 .round-break .completion-seen-heading { margin:18px 0 6px; color:var(--blue); font-size:15px; font-weight:900; text-align:left; }
