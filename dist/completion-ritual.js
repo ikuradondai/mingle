@@ -8,27 +8,27 @@ const BUSINESS_IDS = new Set(["founders", "team", "new-colleagues", "business-me
 const CANDIDATES = Object.freeze({
   group: Object.freeze([
     { id: "highfive", title: "せーので、ハイタッチ！", titleParts: ["せーので、","ハイタッチ！"], message: "顔を上げて、一緒に話した人と。", image: "/assets/ritual-highfive.webp", alt: "ハイタッチのイラスト" },
-    { id: "air", title: "手を上げて、エアハイタッチ！", titleParts: ["手を上げて、","エアハイタッチ！"], message: "触れずに、気持ちをそろえて。", image: "", alt: "" },
+    { id: "air", title: "手を上げて、エアハイタッチ！", titleParts: ["手を上げて、","エアハイタッチ！"], message: "触れずに、気持ちをそろえて。", image: "/assets/ritual-airhighfive.webp", alt: "エアハイタッチのイラスト" },
     { id: "clap", title: "みんなで、拍手！", titleParts: ["みんなで、","拍手！"], message: "この時間を一緒につくった人へ。", image: "/assets/ritual-applause.webp", alt: "拍手のイラスト" },
     { id: "pose", title: "みんなで、小さくガッツポーズ！", titleParts: ["みんなで、","小さく","ガッツポーズ！"], message: "顔を上げて、喜びを分かち合って。", image: "/assets/ritual-solo.webp", alt: "ガッツポーズのイラスト" },
   ]),
   business: Object.freeze([
     { id: "clap", title: "この時間に、みんなで拍手！", titleParts: ["この時間に、","みんなで拍手！"], message: "一緒につくった時間へ、ぱちぱちぱち。", image: "/assets/ritual-applause.webp", alt: "拍手のイラスト" },
     { id: "oneclap", title: "せーので、一拍！", titleParts: ["せーので、","一拍！"], message: "みんなで一回、手を打とう。", image: "/assets/ritual-applause.webp", alt: "一拍のイラスト" },
-    { id: "nod", title: "顔を上げて、互いに会釈。", titleParts: ["顔を上げて、","互いに会釈。"], message: "言葉の代わりに、ゆっくり伝えて。", image: "", alt: "" },
-    { id: "thumbs", title: "お互いに、親指を立ててグッド！", titleParts: ["お互いに、","親指を立ててグッド！"], message: "触れずに、よかった気持ちを伝えて。", image: "", alt: "" },
+    { id: "nod", title: "顔を上げて、互いに会釈。", titleParts: ["顔を上げて、","互いに会釈。"], message: "言葉の代わりに、ゆっくり伝えて。", image: "/assets/ritual-nod.webp", alt: "会釈のイラスト" },
+    { id: "thumbs", title: "お互いに、親指を立ててグッド！", titleParts: ["お互いに、","親指を立ててグッド！"], message: "触れずに、よかった気持ちを伝えて。", image: "/assets/ritual-thumbs.webp", alt: "親指を立ててグッドのイラスト" },
   ]),
   solo: Object.freeze([
     { id: "fist", title: "自分に、よし！", titleParts: ["自分に、","よし！"], message: "こぶしをぎゅっと、小さくガッツポーズ。", image: "/assets/ritual-solo.webp", alt: "ガッツポーズのイラスト" },
-    { id: "selfclap", title: "自分に、拍手を3回。", titleParts: ["自分に、","拍手を3回。"], message: "今日ここまで進んだ自分へ。", image: "", alt: "" },
-    { id: "selfhug", title: "自分を、ぎゅっとひと抱き。", titleParts: ["自分を、","ぎゅっとひと抱き。"], message: "肩を包むように、そっと。", image: "", alt: "" },
-    { id: "stretch", title: "両手を上げて、ぐーっと背伸び。", titleParts: ["両手を上げて、","ぐーっと背伸び。"], message: "深呼吸して、体を伸ばそう。", image: "", alt: "" },
+    { id: "selfclap", title: "自分に、拍手を3回。", titleParts: ["自分に、","拍手を3回。"], message: "今日ここまで進んだ自分へ。", image: "/assets/ritual-selfclap.webp", alt: "自分に拍手するイラスト" },
+    { id: "selfhug", title: "自分を、ぎゅっとひと抱き。", titleParts: ["自分を、","ぎゅっとひと抱き。"], message: "肩を包むように、そっと。", image: "/assets/ritual-selfhug.webp", alt: "自分を抱きしめるイラスト" },
+    { id: "stretch", title: "両手を上げて、ぐーっと背伸び。", titleParts: ["両手を上げて、","ぐーっと背伸び。"], message: "深呼吸して、体を伸ばそう。", image: "/assets/ritual-stretch.webp", alt: "両手を上げて背伸びするイラスト" },
   ]),
   romance: Object.freeze([
     { id: "gaze30", title: "30秒、見つめ合おう。", titleParts: ["30秒、","見つめ合おう。"], message: "相手の答えで、一番心に残ったものを思い浮かべながら。", note: "ふたりでよければ。", image: "/assets/ritual-gaze.webp", alt: "見つめ合うイラスト", timed: true },
     { id: "hold30", title: "30秒、手をつなごう。", titleParts: ["30秒、","手をつなごう。"], message: "相手の答えで、一番心に残ったものを思い浮かべながら。", note: "ふたりでよければ。", image: "/assets/ritual-holdhands.webp", alt: "手をつなぐイラスト", timed: true },
     { id: "smile", title: "目を合わせて、にっこり。", titleParts: ["目を合わせて、","にっこり。"], message: "相手の答えで、一番心に残ったものを思い浮かべながら。", note: "ふたりでよければ。", image: "/assets/ritual-gaze.webp", alt: "笑顔のイラスト" },
-    { id: "nod", title: "相手を見て、ゆっくりうなずこう。", titleParts: ["相手を見て、","ゆっくりうなずこう。"], message: "相手の答えで、一番心に残ったものを思い浮かべながら。", note: "ふたりでよければ。", image: "", alt: "" },
+    { id: "nod", title: "相手を見て、ゆっくりうなずこう。", titleParts: ["相手を見て、","ゆっくりうなずこう。"], message: "相手の答えで、一番心に残ったものを思い浮かべながら。", note: "ふたりでよければ。", image: "/assets/ritual-nod.webp", alt: "会釈のイラスト" },
   ]),
 });
 

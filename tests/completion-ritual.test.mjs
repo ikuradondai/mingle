@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const storage = (seed = null) => ({ data: seed, getItem() { return this.data; }, setItem(_key, value) { this.data = String(value); } });
 const blocked = ({ read = false, write = false } = {}) => ({ getItem() { if (read) throw new Error("read blocked"); return null; }, setItem() { if (write) throw new Error("write blocked"); } });
@@ -76,4 +79,16 @@ test("public key includes organization and round boundaries", () => {
 test("public candidate pools retain four actions per context", () => {
   for (const context of ["group", "business", "solo", "romance"]) assert.equal(completionRitualCandidates(context).length, 4);
   assert.equal(nextCompletionRitual(base({ sessionId: "reroll" })).context, "group");
+});
+
+test("all public ritual candidates have an accessible image and alt text", () => {
+  const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
+  for (const context of ["group", "business", "solo", "romance"]) {
+    for (const candidate of completionRitualCandidates(context)) {
+      assert.match(candidate.image, /^\/assets\/[^/]+\.(?:png|jpe?g|webp)$/u, `${context}/${candidate.id}: image path`);
+      assert.ok(candidate.alt?.trim(), `${context}/${candidate.id}: alt text`);
+      const localPath = path.join(dist, candidate.image.slice(1).replaceAll("/", path.sep));
+      assert.ok(fs.existsSync(localPath), `${context}/${candidate.id}: missing ${localPath}`);
+    }
+  }
 });
