@@ -142,7 +142,7 @@ function play() {
     const ritual = completionRitualFor(ritualSession);
     const image = ritual.image ? `<img class="business-completion-ritual-image" src="${esc(ritual.image)}" alt="${esc(ritual.alt)}" width="220" height="160">` : "";
     base(
-      `<section class="panel business-completion"><h1>${state.count === 1 ? "おつかれさまでした" : "みんなで、おつかれさまでした"}</h1><section class="business-completion-ritual${ritual.image ? "" : " is-text-only"}">${image}<div><h2>${businessRitualTitle(ritual)}</h2><p>${esc(ritual.message)}</p><button class="text" type="button" data-business-ritual-reroll>別のしめ方</button></div></section><p class="muted">回答の入力や録音は行いません。</p><button class="primary" data-restart type="button">もう一度設定する</button></section>`,
+      `<section class="panel business-completion"><h1>${state.count === 1 ? "おつかれさまでした" : "みんなで、おつかれさまでした"}</h1><p class="muted">回答の入力や録音は行いません。</p><button class="primary" data-restart type="button">もう一度設定する</button><section class="business-completion-ritual${ritual.image ? "" : " is-text-only"}">${image}<div><h2>${businessRitualTitle(ritual)}</h2><p>${esc(ritual.message)}</p><button class="text" type="button" data-business-ritual-reroll>別のしめ方</button></div></section></section>`,
     );
     return;
   }
