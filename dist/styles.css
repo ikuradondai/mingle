@@ -897,15 +897,21 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .business-completion .completion-reply { margin-top:24px; }
 @media (max-width:480px) { .completion-reply-prompt { font-size:14px; line-height:1.6; } }
 .completion-reply-stage { display:grid; min-height:330px; }
-.completion-reply-view { grid-area:1 / 1; display:grid; justify-items:center; align-content:start; gap:8px; min-width:0; text-align:center; }
+.completion-reply-view { grid-area:1 / 1; display:flex; flex-direction:column; align-items:center; gap:8px; min-width:0; min-height:330px; text-align:center; }
 .completion-reply-view[aria-hidden="true"] { visibility:hidden; pointer-events:none; }
 .completion-reply-view[aria-hidden="false"] { visibility:visible; }
 .completion-reply-view h2 { min-height:2.5em; display:flex; align-items:end; justify-content:center; margin:0; }
 .completion-reply-image { display:block; width:220px; height:148px; object-fit:contain; }
 .completion-reply-prompt { min-height:5.2em; }
 .completion-reply-status { min-height:3em; }
-.completion-reply-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:14px; min-height:52px; margin-top:8px; }
+.completion-reply-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:14px; min-height:52px; margin-top:auto; padding-top:8px; }
 .completion-reply-actions .completion-link { min-height:44px; padding:8px 4px; border:0; border-radius:0; background:transparent; color:var(--blue); font:inherit; text-decoration:underline; cursor:pointer; }
+.completion-reply-skip { min-height:44px; padding:8px 4px; border:0; border-radius:0; background:transparent; color:var(--blue); font:inherit; font-weight:800; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+.completion-reply-skip:disabled { opacity:.55; cursor:default; }
+.completion-reply-prompt-view > .completion-reply-action { margin-top:auto; }
+.sponsor-completion-note[aria-hidden="true"] { visibility:hidden; pointer-events:none; }
+.round-break .round-favorites-compact { display:block; margin-top:14px; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.round-favorites-compact > .round-section-toggle { min-height:44px; padding:8px 4px; border:0; border-radius:0; background:transparent; color:var(--blue); font:inherit; font-weight:800; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
 .completion-reply-action { position:relative; }
 .completion-reply-done-view { position:relative; }
 .completion-reply.is-celebrating .completion-reply-done-view::before,

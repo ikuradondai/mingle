@@ -137,8 +137,9 @@ function setup() {
 }
 function businessReplyView(session, cards) {
   const replySession = { ...session, organizationId: session.organizationId || state.orgId, sessionId: session.sessionId || session.id || `${state.orgId}:business`, mode: state.count === 1 ? "solo" : "business", participants: state.names, count: state.count, questions: cards, cursor: state.index, roundStart: 0 };
-  const key = completionReplyKey(replySession); const context = completionReplyContext(replySession); const copy = completionReplyCopy(context); const done = completionReplyStates.get(key)?.completed === true;
-  return `<section class="completion-reply is-${context}${done ? " is-complete" : ""}" data-completion-reply data-reply-key="${esc(key)}" aria-labelledby="business-reply-title"><div class="completion-reply-stage"><div class="completion-reply-view completion-reply-prompt-view" data-reply-prompt-view aria-hidden="${done}" ${done ? "inert" : ""}><h2 id="business-reply-title">${esc(copy.title)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-prompt">${esc(copy.prompt)}</p><button type="button" class="completion-reply-action" data-business-reply-done aria-pressed="false">${esc(copy.action)}</button><button type="button" class="completion-link completion-reply-skip" data-restart>もう一度設定する</button></div><div class="completion-reply-view completion-reply-done-view" data-reply-done-view aria-hidden="${!done}" ${done ? "" : "inert"}><h2 tabindex="-1">${esc(copy.completeTitle)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-status" data-completion-reply-status role="status" aria-live="polite">${done ? esc(copy.complete) : ""}</p><div class="completion-reply-actions"><button type="button" class="primary" data-restart>もう一度設定する</button></div></div></div></section>`;
+  const key = completionReplyKey(replySession); const context = completionReplyContext(replySession); const copy = completionReplyCopy(context); const replyState = completionReplyStates.get(key) || {}; const done = replyState.completed === true; const skipped = replyState.skipped === true; const showAfter = done || skipped;
+  const doneTitle = skipped ? "今回はここまでで大丈夫です。" : copy.completeTitle;
+  return `<section class="completion-reply is-${context}${done ? " is-complete" : skipped ? " is-skipped" : ""}" data-completion-reply data-reply-key="${esc(key)}" aria-labelledby="business-reply-title"><div class="completion-reply-stage"><div class="completion-reply-view completion-reply-prompt-view" data-reply-prompt-view aria-hidden="${showAfter}" ${showAfter ? "inert" : ""}><h2 id="business-reply-title">${esc(copy.title)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-prompt">${esc(copy.prompt)}</p><button type="button" class="completion-reply-action" data-business-reply-done aria-pressed="false">${esc(copy.action)}</button><button type="button" class="completion-link completion-reply-skip" data-business-reply-skip>今回はスキップ</button></div><div class="completion-reply-view completion-reply-done-view" data-reply-done-view aria-hidden="${!showAfter}" ${showAfter ? "" : "inert"}><h2 tabindex="-1">${esc(doneTitle)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-status" data-completion-reply-status role="status" aria-live="polite">${done ? esc(copy.complete) : ""}</p><div class="completion-reply-actions"><button type="button" class="primary" data-restart>もう一度設定する</button></div></div></div></section>`;
 }
 function play() {
   const cards = (state.session?.themes || []).flatMap((t) => t.cards || []);
@@ -353,6 +354,17 @@ function bind() {
     state.index = 0;
     render();
   }));
+  root.querySelector("[data-business-reply-skip]")?.addEventListener("click", (event) => {
+    const section = event.currentTarget.closest("[data-completion-reply]"); const key = section?.dataset.replyKey; if (!key) return;
+    const reply = completionReplyStates.get(key) || { completed: false }; if (reply.completed || reply.skipped) return;
+    reply.skipped = true; completionReplyStates.set(key, reply); section.classList.add("is-skipped");
+    const prompt = section.querySelector("[data-reply-prompt-view]"); const doneView = section.querySelector("[data-reply-done-view]");
+    if (prompt) { prompt.setAttribute("aria-hidden", "true"); prompt.inert = true; }
+    if (doneView) { doneView.removeAttribute("inert"); doneView.setAttribute("aria-hidden", "false"); }
+    const skippedTitle = section.querySelector(".completion-reply-done-view h2"); if (skippedTitle) skippedTitle.textContent = "今回はここまでで大丈夫です。";
+    const status = section.querySelector("[data-completion-reply-status]"); if (status) status.textContent = "";
+    doneView?.querySelector("h2")?.focus?.({ preventScroll: true });
+  });
   root.querySelector("[data-business-reply-done]")?.addEventListener("click", (event) => {
     const section = event.currentTarget.closest("[data-completion-reply]"); const key = section?.dataset.replyKey; if (!key || completionReplyStates.get(key)?.completed) return;
     const context = section.classList.contains("is-solo") ? "solo" : "business"; const copy = completionReplyCopy(context);

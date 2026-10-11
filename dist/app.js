@@ -1466,7 +1466,7 @@ function roundFavoriteContext(session) {
   else state.roundFavorite.cards = cards;
   return state.roundFavorite;
 }
-function roundFavoriteView(session, { inline = false } = {}) {
+function roundFavoriteView(session, { inline = false, compact = false } = {}) {
   const context = roundFavoriteContext(session); if (!context) return "";
   const canSaveCard = (card) => !session.sponsorSet && card.kind !== "challenge" && card.sourceDeckId !== "custom" && card.custom !== true && !(card.r18 === true && !session.adultConfirmed);
   const selectable = context.cards.filter((card) => canSaveCard(card) && !state.account.favorites.has(card.id));
@@ -1483,6 +1483,7 @@ function roundFavoriteView(session, { inline = false } = {}) {
   if (inline) return `<section class="round-favorites round-favorites-inline" aria-labelledby="round-favorites-title"><h2 id="round-favorites-title">このラウンドで見た質問</h2><div class="round-favorite-list">${rows}</div>${action}<p class="form-error" role="alert">${esc(context.error || "")}</p></section>`;
   const savedCount = context.cards.filter((card) => canSaveCard(card) && state.account.favorites.has(card.id)).length;
   const list = context.expanded ? `<div class="round-favorite-list">${rows}</div>${action}` : `<p class="round-collapsed-copy">${savedCount}件保存済み</p>`;
+  if (compact) { const compactList = context.expanded ? `<div class="round-favorite-list">${rows}</div>${action}` : ""; return `<section class="round-favorites round-favorites-compact" aria-label="今回の質問"><button type="button" class="round-section-toggle" data-action="round-favorite-toggle" aria-expanded="${context.expanded}">${context.expanded ? "閉じる" : `今回の${context.cards.length}枚を見返す`}</button>${compactList}<p class="form-error" role="alert">${esc(context.error || "")}</p></section>`; }
   return `<section class="round-favorites" aria-labelledby="round-favorites-title"><div class="round-section-head"><h2 id="round-favorites-title">気に入った質問を保存</h2><span class="round-section-count">${context.cards.length}件</span></div><button type="button" class="round-section-toggle" data-action="round-favorite-toggle" aria-expanded="${context.expanded}">${context.expanded ? "閉じる" : "質問を選ぶ"}</button>${list}<p class="form-error" role="alert">${esc(context.error || "")}</p></section>`;
 }
 
@@ -1530,22 +1531,26 @@ function completionReplyView(session, solo = false, favoriteBusy = false) {
   const key = completionReplyKey(session);
   const context = completionReplyContext(session, { solo });
   const copy = completionReplyCopy(context);
-  const done = completionReplyState(key).completed;
+  const replyState = completionReplyState(key); const done = replyState.completed; const skipped = replyState.skipped === true; const showAfter = done || skipped;
   const info = roundCompletionInfo(session); const busy = state.busy || favoriteBusy;
-  const next = info.final ? `<button type="button" class="completion-link" data-action="decks" ${busy ? "disabled" : ""}>次のテーマを選ぶ</button>` : `<button type="button" class="completion-link" data-action="continue" ${busy ? "disabled" : ""}>もう${info.nextCount}枚、${solo ? "向き合う" : "話そう"}</button>`;
-  const share = solo ? "" : `<button type="button" class="completion-link social-share-button" data-action="social-share" aria-label="SNSでシェア" title="シェア" ${busy ? "disabled" : ""}>シェア</button>`;
-  const actions = `<div class="completion-reply-actions"><button type="button" class="primary-button" data-action="finish" ${busy ? "disabled" : ""}>今日はここまで</button>${next}${share}</div>`;
-  return `<section class="completion-reply is-${context}${done ? " is-complete" : ""}" data-completion-reply data-reply-key="${esc(key)}" aria-labelledby="completion-reply-title-${esc(key)}"><div class="completion-reply-stage"><div class="completion-reply-view completion-reply-prompt-view" data-reply-prompt-view aria-hidden="${done}" ${done ? "inert" : ""}><h2 id="completion-reply-title-${esc(key)}">${esc(copy.title)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-prompt">${esc(copy.prompt)}</p><button type="button" class="completion-reply-action" data-action="completion-reply-done" aria-pressed="false">${esc(copy.action)}</button><button type="button" class="completion-link completion-reply-skip" data-action="finish" ${busy ? "disabled" : ""}>今日はここまで</button></div><div class="completion-reply-view completion-reply-done-view" data-reply-done-view aria-hidden="${!done}" ${done ? "" : "inert"}><h2 tabindex="-1">${esc(copy.completeTitle)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-status" data-completion-reply-status role="status" aria-live="polite">${done ? esc(copy.complete) : ""}</p>${actions}</div></div></section>`;
+  const next = info.final ? `<button type="button" class="primary-button" data-action="decks" ${busy ? "disabled" : ""}>次のテーマを選ぶ</button>` : `<button type="button" class="primary-button" data-action="continue" ${busy ? "disabled" : ""}>もう${info.nextCount}枚、${solo ? "向き合う" : "話そう"}</button>`;
+  const actions = `<div class="completion-reply-actions">${next}<button type="button" class="completion-link completion-finish" data-action="finish" ${busy ? "disabled" : ""}>今日はここまで</button></div>`;
+  const doneTitle = skipped ? "今回はここまでで大丈夫です。" : copy.completeTitle;
+  return `<section class="completion-reply is-${context}${done ? " is-complete" : skipped ? " is-skipped" : ""}" data-completion-reply data-reply-key="${esc(key)}" aria-labelledby="completion-reply-title-${esc(key)}"><div class="completion-reply-stage"><div class="completion-reply-view completion-reply-prompt-view" data-reply-prompt-view aria-hidden="${showAfter}" ${showAfter ? "inert" : ""}><h2 id="completion-reply-title-${esc(key)}">${esc(copy.title)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-prompt">${esc(copy.prompt)}</p><button type="button" class="completion-reply-action" data-action="completion-reply-done" aria-pressed="false">${esc(copy.action)}</button><button type="button" class="completion-link completion-reply-skip" data-action="completion-reply-skip" ${busy ? "disabled" : ""}>今回はスキップ</button></div><div class="completion-reply-view completion-reply-done-view" data-reply-done-view aria-hidden="${!showAfter}" ${showAfter ? "" : "inert"}><h2 tabindex="-1">${esc(doneTitle)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-status" data-completion-reply-status role="status" aria-live="polite">${done ? esc(copy.complete) : ""}</p>${actions}</div></div></section>`;
 }
 function roundCompletionView(session, { solo = false, favoriteBusy = false } = {}) {
   if (!session || session.sharedGuest || session.venueSession) return '';
   const info = roundCompletionInfo(session); if (!info.completed) return '';
-  const key = completionFeelingKey(session);
+  const key = completionReplyKey(session);
     const count = solo ? `今回${info.completed}枚・ここまで${info.cursor}枚` : `${session.participants.length}人でめぐった、今回${info.completed}枚${info.final ? `・ここまで${info.cursor}枚` : ''}`;
   const cardCount = `${info.completed}枚`;
   const motionClass = info.final ? 'is-final' : '';
-  const sponsorEnd = session.sponsorSet && (session.sponsor?.endMessage || session.sponsor?.siteUrl) ? `<aside class="sponsor-completion-note" aria-label="スポンサー情報"><small>スポンサー提供：${esc(session.sponsor.providerName || '公式提供')}</small>${session.sponsor.endMessage ? `<p>${esc(session.sponsor.endMessage)}</p>` : ''}${session.sponsor.siteUrl ? `<a class="completion-link" href="${esc(session.sponsor.siteUrl)}" target="_blank" rel="noopener noreferrer">${esc(session.sponsor.ctaLabel || '詳しく見る')}</a>` : ''}</aside>` : '';
-  return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><h1 class="completion-fact" tabindex="-1" data-focus>${cardCount}おつかれさまでした${info.final ? `<small>全${info.total}枚完了</small>` : ""}</h1><p class="completion-count">${count} · ${esc(completionThemeLabel(session))}</p>${sponsorEnd}${roundFavoriteView(session, { inline: true })}${completionFeelingStage(session, solo, key)}</section>`;
+  return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><h1 class="completion-fact" tabindex="-1" data-focus>${cardCount}おつかれさまでした${info.final ? `<small>全${info.total}枚完了</small>` : ""}</h1><p class="completion-count">${count} · ${esc(completionThemeLabel(session))}</p></section>`;
+}
+function completionSponsorView(session) {
+  if (!session?.sponsorSet || (!session.sponsor?.endMessage && !session.sponsor?.siteUrl)) return "";
+  const visible = completionReplyState(completionReplyKey(session)).completed || completionReplyState(completionReplyKey(session)).skipped;
+  return `<aside class="sponsor-completion-note" data-completion-sponsor aria-hidden="${visible ? "false" : "true"}" aria-label="スポンサー情報"><small>スポンサー提供：${esc(session.sponsor.providerName || "公式提供")}</small>${session.sponsor.endMessage ? `<p>${esc(session.sponsor.endMessage)}</p>` : ""}${session.sponsor.siteUrl ? `<a class="completion-link" href="${esc(session.sponsor.siteUrl)}" target="_blank" rel="noopener noreferrer">${esc(session.sponsor.ctaLabel || "詳しく見る")}</a>` : ""}</aside>`;
 }
 
 function roundThemeLikeView(session) {
@@ -1626,7 +1631,8 @@ function roundView() {
   const legacyIntro = completion ? '' : `${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1>`;
   const completionAd = completion ? renderAd("round") : "";
   const legacyActions = `<div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : `${actionIcon("right")}つづける`}</button>` : ""}<button class="secondary-button" data-action="finish" aria-label="プレイを終わる" title="終わる" ${favoriteBusy ? "disabled" : ""}>${actionIcon("stop")}終わる</button><button class="secondary-button social-share-button" data-action="social-share" aria-label="SNSでシェア" title="シェア" ${favoriteBusy ? "disabled" : ""}>${actionIcon("share")}シェア</button></div>`;
-  return frame(`<div class="round-break">${legacyIntro}${completion || roundThemeLikeView(session)}${completion ? roundThemeLikeView(session) : legacyActions}${likeTotalsView(session)}${completion ? "" : roundFavoriteView(session)}${feedbackForm}${completionAd}${endingLink}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更" ${favoriteBusy ? "disabled" : ""}>${actionIcon("grid")}テーマ</button>${completion ? completionReplyView(session, false, favoriteBusy) : ""}</div>${state.shareDialogOpen ? roundShareDialogView() : ""}${accountOverlay}`);
+  const completionExtras = completion ? `${completionReplyView(session, false, favoriteBusy)}${roundFavoriteView(session, { compact: true })}${completionSponsorView(session)}${roundThemeLikeView(session)}${endingLink}<p class="form-error" role="alert">${esc(state.error)}</p>` : `${likeTotalsView(session)}${feedbackForm}${completionAd}${endingLink}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更" ${favoriteBusy ? "disabled" : ""}>${actionIcon("grid")}テーマ</button>`;
+  return frame(`<div class="round-break">${legacyIntro}${completion || roundThemeLikeView(session)}${completion ? completionExtras : `${legacyActions}${completionExtras}${roundFavoriteView(session)}`}</div>${completion ? "" : state.shareDialogOpen ? roundShareDialogView() : ""}${accountOverlay}`);
 }
 
 function finishView() { return roundView(); }
@@ -2025,7 +2031,8 @@ function soloRoundView(session) {
   const completion = roundCompletionView(session, { solo: true, favoriteBusy });
   const legacyActions = `<div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : `${actionIcon("right")}つづける`}</button>` : ""}<button class="secondary-button" data-action="finish" aria-label="プレイを終わる" title="終わる" ${state.busy || favoriteBusy ? "disabled" : ""}>${actionIcon("stop")}終わる</button></div>`;
   const legacyIntro = completion ? '' : `<span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>${isFinal ? "振り返りを終えました" : "ここまでの振り返り"}</h1>`;
-  return frame(`<div class="round-break solo-round-break">${legacyIntro}${completion || roundThemeLikeView(session)}${completion ? roundThemeLikeView(session) : legacyActions}${completion ? "" : seenMarkup}${isFinal ? soloSupportView({ general: true, youth: true }) : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更">▦ テーマ</button>${completion ? completionReplyView(session, true, favoriteBusy) : ""}</div>${accountOverlay}`);
+  const soloExtras = completion ? `${completionReplyView(session, true, favoriteBusy)}${roundFavoriteView(session, { compact: true })}${completionSponsorView(session)}${roundThemeLikeView(session)}<p class="form-error" role="alert">${esc(state.error)}</p>` : `${legacyActions}${seenMarkup}${isFinal ? soloSupportView({ general: true, youth: true }) : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更">▦ テーマ</button>`;
+  return frame(`<div class="round-break solo-round-break">${legacyIntro}${completion || roundThemeLikeView(session)}${soloExtras}</div>${accountOverlay}`);
 }
 function updateAdultButton() { updateGroupLink(); if (state.themeMode === "mixed") return;
   const button = root.querySelector(".selected-start"); const selected = decks.find((deck) => deck.id === state.selectedDeckId); const selectedMySet = playableSavedSets(state.account.sets, state.account.customCards).find((set) => set.id === state.selectedMySetId); const requiresAdultConsent = selectedMySet ? selectedMySet.hasR18 === true : selected?.adultOnly === true; if (button && requiresAdultConsent) button.disabled = !state.adultConfirmed || state.busy; }
@@ -2211,6 +2218,20 @@ function startSelectedSoloDeck() {
 }
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
+  if (action === "completion-reply-skip") {
+    const section = event.currentTarget.closest("[data-completion-reply]"); const key = section?.dataset.replyKey;
+    if (!key) return;
+    const reply = completionReplyStates.get(key) || { completed: false }; if (reply.completed || reply.skipped) return;
+    reply.skipped = true; completionReplyStates.set(key, reply); section.classList.add("is-skipped");
+    const prompt = section.querySelector("[data-reply-prompt-view]"); const doneView = section.querySelector("[data-reply-done-view]");
+    if (prompt) { prompt.setAttribute("aria-hidden", "true"); prompt.inert = true; }
+    if (doneView) { doneView.removeAttribute("inert"); doneView.setAttribute("aria-hidden", "false"); }
+    const skippedTitle = section.querySelector(".completion-reply-done-view h2"); if (skippedTitle) skippedTitle.textContent = "今回はここまでで大丈夫です。";
+    const status = section.querySelector("[data-completion-reply-status]"); if (status) status.textContent = "";
+    const sponsor = section.closest(".round-break")?.querySelector("[data-completion-sponsor]"); sponsor?.setAttribute("aria-hidden", "false");
+    doneView?.querySelector("h2")?.focus?.({ preventScroll: true });
+    return;
+  }
   if (action === "completion-reply-done") {
     const section = event.currentTarget.closest("[data-completion-reply]"); const key = section?.dataset.replyKey;
     if (!key) return;
@@ -2223,6 +2244,7 @@ async function handleAction(event) {
     if (doneView) { doneView.removeAttribute("inert"); doneView.setAttribute("aria-hidden", "false"); }
     event.currentTarget.setAttribute("aria-pressed", "true");
     const status = section.querySelector("[data-completion-reply-status]"); if (status) status.textContent = copy.complete;
+    const sponsor = section.closest(".round-break")?.querySelector("[data-completion-sponsor]"); sponsor?.setAttribute("aria-hidden", "false");
     doneView?.querySelector("h2")?.focus?.({ preventScroll: true });
     window.setTimeout(() => section.classList.remove("is-celebrating"), 700);
     return;
