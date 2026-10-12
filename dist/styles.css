@@ -109,6 +109,7 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 .home-screen .name-field { min-height:64px; border:0; background:rgba(255,255,255,.72); box-shadow:0 5px 16px rgba(20,33,61,.07); }
 .home-screen .name-field:focus-within { box-shadow:0 0 0 3px rgba(23,105,232,.14),0 8px 20px rgba(20,33,61,.09); }
 .home-screen .primary-button { min-height:54px; border-radius:18px; font-size:17px; letter-spacing:.02em; }
+.home-privacy-note { margin:10px 2px 0; color:var(--muted); font-size:13px; line-height:1.55; text-align:left; }
 .home-screen .add-person { border-color:#b7cdf6; background:rgba(255,255,255,.4); }
 .home-screen .home-footer { margin-top:16px; }
 .theme-screen { max-width:680px; }
