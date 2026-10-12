@@ -1533,13 +1533,14 @@ function completionFeelingStage(session, solo, key) {
 function completionReplyView(session, solo = false, favoriteBusy = false) {
   const key = completionReplyKey(session);
   const context = completionReplyContext(session, { solo });
-  const copy = completionReplyCopy(context);
+  const participantCount = solo ? 1 : session.participants?.length || session.count || 0;
+  const copy = completionReplyCopy(context, { participantCount });
   const replyState = completionReplyState(key); const done = replyState.completed; const skipped = replyState.skipped === true; const showAfter = done || skipped;
   const info = roundCompletionInfo(session); const busy = state.busy || favoriteBusy;
   const next = info.final ? `<button type="button" class="primary-button" data-action="decks" ${busy ? "disabled" : ""}>次のテーマを選ぶ</button>` : `<button type="button" class="primary-button" data-action="continue" ${busy ? "disabled" : ""}>もう${info.nextCount}枚、${solo ? "向き合う" : "話そう"}</button>`;
   const actions = `<div class="completion-reply-actions">${next}<button type="button" class="completion-link completion-finish" data-action="finish" ${busy ? "disabled" : ""}>今日はここまで</button></div>`;
   const doneTitle = skipped ? "今回はここまでで大丈夫です。" : copy.completeTitle;
-  return `<section class="completion-reply is-${context}${done ? " is-complete" : skipped ? " is-skipped" : ""}" data-completion-reply data-reply-key="${esc(key)}" aria-labelledby="completion-reply-title-${esc(key)}"><div class="completion-reply-stage"><div class="completion-reply-view completion-reply-prompt-view" data-reply-prompt-view aria-hidden="${showAfter}" ${showAfter ? "inert" : ""}><h2 id="completion-reply-title-${esc(key)}">${esc(copy.title)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-prompt">${esc(copy.prompt)}</p><button type="button" class="completion-reply-action" data-action="completion-reply-done" aria-pressed="false">${esc(copy.action)}</button><button type="button" class="completion-link completion-reply-skip" data-action="completion-reply-skip" ${busy ? "disabled" : ""}>今回はスキップ</button></div><div class="completion-reply-view completion-reply-done-view" data-reply-done-view aria-hidden="${!showAfter}" ${showAfter ? "" : "inert"}><h2 tabindex="-1">${esc(doneTitle)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-status" data-completion-reply-status role="status" aria-live="polite">${done ? esc(copy.complete) : ""}</p>${actions}</div></div></section>`;
+  return `<section class="completion-reply is-${context}${done ? " is-complete" : skipped ? " is-skipped" : ""}" data-completion-reply data-reply-key="${esc(key)}" data-reply-count="${participantCount}" aria-labelledby="completion-reply-title-${esc(key)}"><div class="completion-reply-stage"><div class="completion-reply-view completion-reply-prompt-view" data-reply-prompt-view aria-hidden="${showAfter}" ${showAfter ? "inert" : ""}><h2 id="completion-reply-title-${esc(key)}">${esc(copy.title)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-prompt">${esc(copy.prompt)}</p><button type="button" class="completion-reply-action" data-action="completion-reply-done" aria-pressed="false">${esc(copy.action)}</button><button type="button" class="completion-link completion-reply-skip" data-action="completion-reply-skip" ${busy ? "disabled" : ""}>今回はスキップ</button></div><div class="completion-reply-view completion-reply-done-view" data-reply-done-view aria-hidden="${!showAfter}" ${showAfter ? "" : "inert"}><h2 tabindex="-1">${esc(doneTitle)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-status" data-completion-reply-status role="status" aria-live="polite">${done ? esc(copy.complete) : ""}</p>${actions}</div></div></section>`;
 }
 function roundCompletionView(session, { solo = false, favoriteBusy = false } = {}) {
   if (!session || session.sharedGuest || session.venueSession) return '';
@@ -2240,7 +2241,8 @@ async function handleAction(event) {
     if (!key) return;
     const reply = completionReplyStates.get(key) || { completed: false }; if (reply.completed) return;
     reply.completed = true; completionReplyStates.set(key, reply);
-    const copy = completionReplyCopy(section.classList.contains("is-solo") ? "solo" : section.classList.contains("is-pair") || section.classList.contains("is-romance") ? (section.classList.contains("is-romance") ? "romance" : "pair") : section.classList.contains("is-business") ? "business" : "group");
+    const context = [...section.classList].find((name) => name.startsWith("is-") && name !== "is-complete" && name !== "is-celebrating" && name !== "is-skipped")?.slice(3) || "group";
+    const copy = completionReplyCopy(context, { participantCount: Number(section.dataset.replyCount) || 3 });
     section.classList.add("is-complete", "is-celebrating");
     const prompt = section.querySelector("[data-reply-prompt-view]"); const doneView = section.querySelector("[data-reply-done-view]");
     if (prompt) { prompt.setAttribute("aria-hidden", "true"); prompt.inert = true; }
