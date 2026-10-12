@@ -141,6 +141,9 @@ function businessReplyView(session, cards) {
   const doneTitle = skipped ? "今回はここまでで大丈夫です。" : copy.completeTitle;
   return `<section class="completion-reply is-${context}${done ? " is-complete" : skipped ? " is-skipped" : ""}" data-completion-reply data-reply-key="${esc(key)}" aria-labelledby="business-reply-title"><div class="completion-reply-stage"><div class="completion-reply-view completion-reply-prompt-view" data-reply-prompt-view aria-hidden="${showAfter}" ${showAfter ? "inert" : ""}><h2 id="business-reply-title">${esc(copy.title)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-prompt">${esc(copy.prompt)}</p><button type="button" class="completion-reply-action" data-business-reply-done aria-pressed="false">${esc(copy.action)}</button><button type="button" class="completion-link completion-reply-skip" data-business-reply-skip>今回はスキップ</button></div><div class="completion-reply-view completion-reply-done-view" data-reply-done-view aria-hidden="${!showAfter}" ${showAfter ? "" : "inert"}><h2 tabindex="-1">${esc(doneTitle)}</h2><img class="completion-reply-image" src="${esc(copy.image)}" alt="" aria-hidden="true" width="220" height="148"><p class="completion-reply-status" data-completion-reply-status role="status" aria-live="polite">${done ? esc(copy.complete) : ""}</p><div class="completion-reply-actions"><button type="button" class="primary" data-restart>もう一度設定する</button></div></div></div></section>`;
 }
+function businessCardsNextIcon() {
+  return '<svg class="action-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="11" height="14" rx="2"/><path d="M8 3h9a2 2 0 0 1 2 2v12M9 12h10m-3-3 3 3-3 3"/></svg>';
+}
 function play() {
   const cards = (state.session?.themes || []).flatMap((t) => t.cards || []);
   if (state.index >= cards.length) {
@@ -160,7 +163,7 @@ function play() {
       rule,
     });
   base(
-    `<section class="panel"><p class="muted">${esc(state.session.themes.map((t) => t.name).join(" / "))} · ${state.index + 1} / ${cards.length}</p><article class="play-card speaker-fade"><p class="muted">${esc(speaker)}の番${other ? ` · ${esc(other)}に聞いてみよう` : ""}</p><p class="question">${esc(text)}</p></article><div class="play-controls"><button type="button" data-prev ${state.index ? "" : "disabled"}>前へ</button><button class="primary" type="button" data-next>次のカード</button></div><p class="muted">回答の入力や録音は行いません。</p></section>`,
+    `<section class="panel"><p class="muted">${esc(state.session.themes.map((t) => t.name).join(" / "))} · ${state.index + 1} / ${cards.length}</p><article class="play-card speaker-fade"><p class="muted">${esc(speaker)}の番${other ? ` · ${esc(other)}に聞いてみよう` : ""}</p><p class="question">${esc(text)}</p></article><div class="play-controls"><button type="button" data-prev ${state.index ? "" : "disabled"}>前へ</button><button class="primary business-play-next-card" type="button" data-next>${businessCardsNextIcon()}<span>次のカード</span></button></div><p class="muted">回答の入力や録音は行いません。</p></section>`,
   );
 }
 function render() {

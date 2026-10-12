@@ -10,7 +10,7 @@
 #group-room-app:has(.room-play-shell) .group-card>h1{display:none}
 .room-play-shell .shared-round-progress{display:block;background:#dbe5f4;border-radius:99px;overflow:hidden}
 .room-play-shell .shared-round-progress i{display:block;height:100%;border-radius:inherit;background:var(--blue)}
-.room-actions{grid-template-columns:44px minmax(0,1fr) 44px}
+.room-actions{grid-template-columns:44px minmax(0,1fr) 44px}.room-actions .play-action-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-width:0;padding-inline:10px;white-space:nowrap}.room-actions .play-action-button .action-icon{width:19px;height:19px;margin:0}.room-actions .play-action-reveal{background:var(--blue);box-shadow:0 10px 20px rgba(23,105,232,.18)}.room-actions .play-action-next-person{background:#087f83;box-shadow:0 10px 20px rgba(8,127,131,.2)}.room-actions .play-action-button:hover:not(:disabled){filter:brightness(.94)}.room-actions .play-action-button:focus-visible{outline:3px solid var(--lime);outline-offset:3px}
 .room-finish-button,.room-pass{display:grid;place-items:center;min-width:44px;height:48px;padding:0;border:0;border-radius:14px}
 .room-finish-button{background:#eef2f7;color:var(--muted)}
 .room-pass{background:#eef2f7;color:var(--ink)}
