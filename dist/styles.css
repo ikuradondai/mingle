@@ -739,6 +739,10 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
   .home-screen .home-solo-panel{padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;text-align:center}
   .home-screen .home-illustration{grid-column:1;grid-row:6;width:min(100%,600px);height:236px;margin:0 auto;object-fit:contain;object-position:center;border-radius:24px}
  .home-screen .ad-slot{grid-column:1;grid-row:7;width:100%;margin:4px auto 8px}.home-screen .home-footer{grid-column:1;grid-row:8;width:100%;margin-top:0}
+  @media (min-width:761px){
+   .content.home-frame-content{padding-bottom:env(safe-area-inset-bottom,0px)}
+   .home-screen{padding-bottom:0}
+  }
  .home-screen:has(.resume-card) .resume-card{grid-column:1;grid-row:2;width:100%;box-sizing:border-box;margin:0}
  .home-screen:has(.resume-card) .home-mode-switch{grid-row:3}.home-screen:has(.resume-card) .home-mode-description{grid-row:4}
  .home-screen:has(.resume-card) .form-panel,.home-screen:has(.resume-card) .home-solo-panel{grid-row:5}.home-screen:has(.resume-card) .home-illustration{grid-row:6}
