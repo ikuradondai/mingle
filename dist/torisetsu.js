@@ -232,6 +232,7 @@ export function createTorisetsuState({ stored = null } = {}) {
     view: 'start', chapterId: null, step: null, side: null, layer: 0, index: 0, phase: 'init', target: -1, returnTo: null,
     data, draft: null, stash: Object.create(null), slotMap: Object.create(null), lastStep: Object.create(null),
     textOpen: { surprise: false, experiment: false, reply: false }, valuePicker: '', focusPicker: false, nameOpen: false,
+    manualSectionId: '', insightPage: 0, feedback: null, feedbackNonce: 0,
     persisted: Boolean(stored?.persisted) && has, savedAt: stored?.persisted && has ? (stored.savedAt || '') : '',
     saveDeclined: false, saveError: '', notice: stored?.notice || '',
     limitMessage: '', limitGroup: '', missingMessage: '', undo: null, leaveConfirm: false, imageStatus: '', imageBusy: false,
@@ -244,6 +245,10 @@ export function expireUndo(ts, now = Date.now()) {
 }
 
 const cfgOf = (ts) => CHAPTER_BY_ID[ts.chapterId];
+function markFeedback(ts, group, chip) {
+  ts.feedbackNonce = (ts.feedbackNonce || 0) + 1;
+  ts.feedback = { group, chip, nonce: ts.feedbackNonce };
+}
 export function sideList(data, chapterId, side) {
   if (chapterId === 'needs') return data.needs[side];
   if (chapterId === 'voice') return data.voice.episodes;
@@ -313,7 +318,18 @@ function setStep(ts, step, patch = {}) {
   if (!('layer' in patch)) ts.layer = 0;
   ts.view = 'step'; ts.step = step;
   ts.limitMessage = ''; ts.limitGroup = ''; ts.missingMessage = ''; ts.valuePicker = ''; ts.focusPicker = false;
+  ts.feedback = null;
+  if (step === 'insight') ts.insightPage = 0;
   if (ts.chapterId) ts.lastStep[ts.chapterId] = { step, side: ts.side, index: ts.index, phase: ts.phase, target: ts.target, returnTo: ts.returnTo, layer: ts.layer };
+}
+
+function manualSectionIds(ts, today = '') {
+  return composeManual(ts.data, { today }).sections.filter((section) => section.state !== 'hidden').map((section) => section.id);
+}
+
+function setManualSection(ts, id = '', today = '') {
+  const ids = manualSectionIds(ts, today);
+  ts.manualSectionId = ids.includes(id) ? id : (ids[0] || '');
 }
 
 function openSlot(ts, side, index, phase, target, returnTo, layer = 0) {
@@ -518,15 +534,21 @@ const isEntryStep = (ts) => ts.view === 'step' && (ts.step === 'layer' || ts.ste
 export function applyAction(ts, action, data = {}, ctx = {}) {
   const now = typeof ctx.now === 'function' ? ctx.now() : Date.now();
   expireUndo(ts, now);
+  // Feedback is a one-render effect; do not carry an old highlight into a
+  // later action or a rejected/no-op render.
+  ts.feedback = null;
   const cfg = ts.chapterId ? CHAPTER_BY_ID[ts.chapterId] : null;
   switch (action) {
     case 'torisetsu-back': {
-      if (ts.view === 'step') { backFromStep(ts); return { render: true, scrollTop: true }; }
+      if (ts.view === 'step') { if (ts.step === 'insight' && ts.insightPage > 0) { ts.insightPage -= 1; return { render: true, scrollTop: true }; } backFromStep(ts); return { render: true, scrollTop: true }; }
       if (ts.view === 'manual') { ts.view = 'contents'; return { render: true, scrollTop: true }; }
       return requestLeave(ts);
     }
     case 'torisetsu-begin': case 'torisetsu-contents': ts.view = 'contents'; ts.step = null; ts.leaveConfirm = false; ts.notice = ''; ts.nameOpen = false; return { render: true, scrollTop: true };
-    case 'torisetsu-manual': ts.view = 'manual'; ts.step = null; ts.leaveConfirm = false; ts.notice = ''; return { render: true, scrollTop: true };
+    case 'torisetsu-manual': ts.view = 'manual'; ts.step = null; ts.leaveConfirm = false; ts.notice = ''; setManualSection(ts, ts.manualSectionId, ctx.today); return { render: true, scrollTop: true };
+    case 'torisetsu-manual-section':
+      if (ts.view === 'manual' && typeof data.id === 'string') { setManualSection(ts, data.id, ctx.today); return { render: true, scrollTop: true, focus: `[data-manual-section="${data.id}"]` }; }
+      return { render: true };
     case 'torisetsu-chapter': openChapter(ts, data.chapter, 'smart'); return { render: true, scrollTop: true };
     case 'torisetsu-chapter-start': openChapter(ts, data.chapter, 'start'); return { render: true, scrollTop: true };
     case 'torisetsu-chapter-insight': openChapter(ts, data.chapter, 'insight'); return { render: true, scrollTop: true };
@@ -538,31 +560,34 @@ export function applyAction(ts, action, data = {}, ctx = {}) {
         const allowed = ts.chapterId === 'needs' ? NEED_IDS : VALUE_IDS;
         if (!cfg.predict || !allowed.has(data.chip)) return { render: true };
         const max = cfg.predict.max;
-        const result = toggleIn(ts.data[ts.chapterId].prediction, data.chip, max, true);
+        // Predictions are rendered as a radio group: clicking the current choice is a no-op.
+        const result = toggleIn(ts.data[ts.chapterId].prediction, data.chip, max, false);
         ts.limitMessage = result.full ? COPY.limitMessage(max) : ''; ts.limitGroup = result.full ? 'prediction' : '';
-        if (result.changed) touch(ts, ctx);
+        if (result.changed) { touch(ts, ctx); markFeedback(ts, data.group, data.chip); }
         return { render: true, focus };
       }
       if (ts.step === 'protect' && data.group === 'intents') {
         if (!INTENT_IDS.has(data.chip)) return { render: true };
         const result = toggleIn(ts.data.voice.intents, data.chip, 2, true);
         ts.limitMessage = result.full ? COPY.limitMessage(2) : ''; ts.limitGroup = result.full ? 'intents' : '';
-        if (result.changed) touch(ts, ctx);
+        if (result.changed) { touch(ts, ctx); markFeedback(ts, data.group, data.chip); }
         return { render: true, focus };
       }
       if (ts.step === 'reply' && data.group === 'reply') {
         if (!replyOptions(effectiveFocus(ts.data.voice)).some((item) => item.id === data.chip)) return { render: true };
         const voice = ts.data.voice;
-        voice.reply = voice.reply === data.chip && !voice.replyText ? '' : data.chip; voice.replyText = ''; ts.textOpen.reply = false;
-        touch(ts, ctx);
+        if (voice.reply === data.chip && !voice.replyText) return { render: true, focus };
+        voice.reply = data.chip; voice.replyText = ''; ts.textOpen.reply = false;
+        touch(ts, ctx); markFeedback(ts, data.group, data.chip);
         return { render: true, focus };
       }
       if (isEntryStep(ts) && ts.draft) {
         const group = currentGroups(ts).find((item) => item.id === data.group);
         if (!group || !group.chips.some((chip) => chip.id === data.chip) || !ts.draft[group.id]) return { render: true };
-        const result = toggleIn(ts.draft[group.id], data.chip, group.max, !group.required);
+        const result = toggleIn(ts.draft[group.id], data.chip, group.max, group.max === 1 ? false : !group.required);
         ts.limitMessage = result.full ? COPY.limitMessage(group.max) : ''; ts.limitGroup = result.full ? group.id : '';
         ts.missingMessage = '';
+        if (result.changed) markFeedback(ts, data.group, data.chip);
         return { render: true, focus };
       }
       return { render: true };
@@ -620,6 +645,14 @@ export function applyAction(ts, action, data = {}, ctx = {}) {
       return { render: true, scrollTop: true };
     }
     case 'torisetsu-find': { if (ts.step === 'lineup') setStep(ts, 'insight'); return { render: true, scrollTop: true }; }
+    case 'torisetsu-insight-page': {
+      if (ts.step !== 'insight') return { render: true };
+      const total = insightResultCount(ts);
+      const next = data.direction === 'prev' ? ts.insightPage - 1 : ts.insightPage + 1;
+      if (data.direction !== 'prev' && next > total - 1) stepAfterInsight(ts);
+      else ts.insightPage = Math.max(0, Math.min(next, Math.max(0, total - 1)));
+      return { render: true, scrollTop: true };
+    }
     case 'torisetsu-compare': { if (ts.step === 'insight') stepAfterInsight(ts); return { render: true, scrollTop: true }; }
     case 'torisetsu-gap-next': { if (ts.step === 'gap') setStep(ts, 'surprise'); return { render: true, scrollTop: true }; }
     case 'torisetsu-protect-next': {
@@ -679,9 +712,11 @@ export function applyAction(ts, action, data = {}, ctx = {}) {
       const options = data.kind === 'surprise' ? surpriseOptions(ts.chapterId, ts.data) : tryOptions(ts.chapterId, ts.data);
       if (!options.some((item) => item.key === data.key)) return { render: true };
       const d = ts.data[ts.chapterId];
+      if (d[data.kind] === data.key && !d[`${data.kind}Text`]) return { render: true, focus: `[data-pick-key="${data.key}"]` };
       d[data.kind] = d[data.kind] === data.key ? '' : data.key; d[`${data.kind}Text`] = '';
       ts.textOpen[data.kind] = false;
       touch(ts, ctx);
+      markFeedback(ts, data.kind, data.key);
       return { render: true, focus: `[data-pick-key="${data.key}"]` };
     }
     case 'torisetsu-text-open': {
@@ -711,7 +746,7 @@ export function applyAction(ts, action, data = {}, ctx = {}) {
       ts.data = emptyData(); ts.stash = Object.create(null); ts.slotMap = Object.create(null); ts.lastStep = Object.create(null); ts.draft = null;
       ts.persisted = false; ts.savedAt = ''; ts.saveDeclined = false; ts.saveError = ''; ts.leaveConfirm = false; ts.notice = ''; ts.nameOpen = false;
       ts.textOpen = { surprise: false, experiment: false, reply: false }; ts.focusPicker = false;
-      ts.view = 'start'; ts.step = null; ts.chapterId = null; ts.side = null; ts.returnTo = null; ts.layer = 0;
+      ts.view = 'start'; ts.step = null; ts.chapterId = null; ts.side = null; ts.returnTo = null; ts.layer = 0; ts.manualSectionId = ''; ts.insightPage = 0; ts.feedback = null;
       return { render: true, scrollTop: true, undoTimer: UNDO_MS };
     }
     case 'torisetsu-undo': {
@@ -904,7 +939,15 @@ function stepperMarkup(ts, esc) {
   const now = (voice ? STEP_INDEX_VOICE : STEP_INDEX)[ts.step];
   if (now == null) return '';
   const labels = voice ? STEP_LABELS_VOICE : STEP_LABELS;
-  return `<ol class="ts-steps5" aria-label="進み具合">${labels.map((label, i) => `<li class="${i === now ? 'is-now' : i < now ? 'is-past' : ''}"${i === now ? ' aria-current="step"' : ''}>${esc(label)}</li>`).join('')}</ol>`;
+  const localSteps = new Set(['episode', 'admire', 'layer']);
+  const cfg = cfgOf(ts); const items = ts.side && cfg ? sideList(ts.data, ts.chapterId, ts.side) : [];
+  let local = '';
+  if (localSteps.has(ts.step) && ts.side && cfg) {
+    if (ts.phase === 'init') local = `${Math.min(ts.index + 1, initOf(cfg, ts.side))} / ${initOf(cfg, ts.side)}`;
+    else if (ts.target >= 0) local = `編集 ${ts.target + 1} / ${items.length}`;
+    else local = `追加 ${items.length + 1}つ目`;
+  }
+  return `<div class="ts-step-progress"><ol class="ts-steps5" data-ts-phase="${esc(labels[now] || '')}" data-ts-local-progress="${esc(local)}" aria-label="進み具合">${labels.map((label, i) => `<li class="${i === now ? 'is-now' : i < now ? 'is-past' : ''}"${i === now ? ' aria-current="step"' : ''}>${esc(label)}</li>`).join('')}</ol>${local ? `<span class="ts-step-local" aria-label="${esc(local)}">${esc(local)}</span>` : ''}</div>`;
 }
 
 function progressMarkup(ts, esc) {
@@ -966,7 +1009,7 @@ function manualPaper(ts, { esc, today }, { sections = null, editable = true, cov
   const manual = composeManual(ts.data, { today });
   const shown = sections ? sections(manual) : manual.sections;
   if (!cover && !shown.length) return '';
-  const coverMarkup = cover ? `<div class="ts-cover"><div class="ts-cover-text"><small>取扱説明書</small><strong>${esc(manual.title)}</strong></div><img class="ts-cover-icon" src="./assets/manual-refresh/manual-open-book-cards-v3-neutral.png" alt="" aria-hidden="true" width="72" height="72" /></div><p class="ts-cover-meta">${esc(manual.version)}</p>${nameBlock(ts, manual, esc, editable)}` : '';
+  const coverMarkup = cover ? `<div class="ts-cover"><div class="ts-cover-text"><small>取扱説明書</small><strong>${esc(manual.title)}</strong></div><img class="ts-cover-icon" src="./assets/torisetsu-gallery/book-cover-architecture.png" alt="" aria-hidden="true" width="120" height="120" /></div><p class="ts-cover-meta">${esc(manual.version)}</p>${nameBlock(ts, manual, esc, editable)}` : '';
   const warranty = cover ? `<p class="ts-warranty">${esc(manual.warranty)}</p>` : '';
   return `<article class="ts-paper" aria-label="${esc(manual.title)}">${coverMarkup}${shown.map((section) => sectionMarkup(section, { esc, editable })).join('')}${warranty}</article>`;
 }
@@ -986,7 +1029,8 @@ function chipGroupMarkup(ts, esc, { label, hint, max, chips, selected, groupId, 
   const buttons = chips.map((chip) => {
     const on = selected.includes(chip.id);
     const attrs = radio ? `role="radio" aria-checked="${on}"` : `aria-pressed="${on}"`;
-    return `<button type="button" class="ts-chip${on ? ' is-on' : ''}${!on && full ? ' is-dim' : ''}" ${attrs} data-action="torisetsu-chip" data-group="${esc(groupId)}" data-chip="${esc(chip.id)}"><span>${esc(chip.label)}</span></button>`;
+    const feedback = ts.feedback?.group === groupId && ts.feedback?.chip === chip.id ? ' is-feedback' : '';
+    return `<button type="button" class="ts-chip${on ? ' is-on' : ''}${!on && full ? ' is-dim' : ''}${feedback}" ${attrs} data-action="torisetsu-chip" data-group="${esc(groupId)}" data-chip="${esc(chip.id)}"><span>${esc(chip.label)}</span></button>`;
   }).join('');
   return `<div class="ts-group" data-ts-group="${esc(groupId)}"><h2 class="ts-group-head" id="ts-g-${esc(groupId)}">${esc(label)}${hint ? `<small>${esc(hint)}</small>` : ''}</h2><div class="ts-chips" role="${radio ? 'radiogroup' : 'group'}" aria-labelledby="ts-g-${esc(groupId)}">${buttons}</div><p class="ts-limit" role="status" aria-live="polite">${esc(message)}</p></div>`;
 }
@@ -1003,28 +1047,32 @@ function memoField(ts, esc, label, placeholder) {
 function predictView(ts, h) {
   const { esc } = h; const cfg = cfgOf(ts); const d = ts.data[ts.chapterId];
   const choices = ts.chapterId === 'needs' ? NEED_PREDICTIONS : VALUE_PREDICTIONS;
-  return `<div class="ts-step" data-ts-key="predict">
+  return `<section class="ts-step ts-gallery" data-ts-key="predict" data-ts-scene="gallery" data-gallery-stage="arrival">
     ${stepperMarkup(ts, esc)}
-    <p class="ts-chapter-name">${esc(cfg.label)}</p>
-    <h1 class="ts-q" tabindex="-1" data-focus>${esc(cfg.predict.title)}</h1>
-    <p class="ts-lead">${esc(cfg.predict.question)}</p>
-    ${chipGroupMarkup(ts, esc, { label: cfg.predict.hint, max: cfg.predict.max, chips: choices, selected: d.prediction, groupId: 'prediction', radio: true, limitGroup: 'prediction' })}
-    ${cfg.predict.footer ? `<p class="ts-note">${esc(cfg.predict.footer)}</p>` : ''}
-    <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-next">${esc(COPY.predictNext)}</button></div>
-  </div>`;
+    <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
+      <p class="ts-chapter-name">${esc(cfg.label)}</p>
+      <h1 class="ts-q" tabindex="-1" data-focus>${esc(cfg.predict.title)}</h1>
+      <p class="ts-lead">${esc(cfg.predict.question)}</p>
+      ${chipGroupMarkup(ts, esc, { label: cfg.predict.hint, max: cfg.predict.max, chips: choices, selected: d.prediction, groupId: 'prediction', radio: true, limitGroup: 'prediction' })}
+      ${cfg.predict.footer ? `<details class="ts-context"><summary>ヒントを見る</summary><p class="ts-note">${esc(cfg.predict.footer)}</p></details>` : ''}
+      <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-next">${esc(COPY.predictNext)}</button></div>
+    </div>
+  </section>`;
 }
 
 function introView(ts, h) {
   const { esc } = h; const intro = INTRO[ts.side];
   const canCopy = ts.chapterId === 'voice' && ts.data.needs.hard.length > 0 && ts.data.voice.episodes.length === 0;
   const chapter = ts.chapterId === 'voice' ? `<p class="ts-chapter-name">${esc(cfgOf(ts).label)}</p>` : '';
-  return `<div class="ts-step" data-ts-key="intro:${esc(ts.side)}">
+  return `<section class="ts-step ts-gallery" data-ts-key="intro:${esc(ts.side)}" data-ts-scene="gallery" data-gallery-stage="arrival">
     ${stepperMarkup(ts, esc)}
-    ${chapter}
-    <h1 class="ts-q" tabindex="-1" data-focus>${esc(intro.title)}</h1>
-    <div class="ts-intro ts-side-${SIDE_COPY[ts.side].color}">${intro.lines.map((line) => `<p>${esc(line)}</p>`).join('')}</div>
-    <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-recall-start">${esc(intro.button)}</button>${canCopy ? `<button type="button" class="secondary-button" data-action="torisetsu-copy-hard">${esc(COPY.useNeedsHard)}</button>` : ''}</div>
-  </div>`;
+    <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
+      ${chapter}
+      <h1 class="ts-q" tabindex="-1" data-focus>${esc(intro.title)}</h1>
+      <div class="ts-intro ts-side-${SIDE_COPY[ts.side].color}">${intro.lines.map((line) => `<p>${esc(line)}</p>`).join('')}</div>
+      <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-recall-start">${esc(intro.button)}</button>${canCopy ? `<button type="button" class="secondary-button" data-action="torisetsu-copy-hard">${esc(COPY.useNeedsHard)}</button>` : ''}</div>
+    </div>
+  </section>`;
 }
 
 // 出来事の見出し（「しんどかった出来事　1つ目（3つ中）」）
@@ -1043,7 +1091,7 @@ function layerView(ts, h) {
   const { esc } = h; const side = SIDE_COPY[ts.side];
   const layers = LAYERS[ts.side]; const layer = layers[ts.layer]; const last = lastLayer(ts.side);
   const groups = layerGroups(ts.side, layer.id);
-  const depth = `<ol class="ts-depth" aria-label="${esc(COPY.depthLabel)}">${layers.map((item, i) => `<li class="${i === ts.layer ? 'is-now' : i < ts.layer ? 'is-past' : ''}"${i === ts.layer ? ' aria-current="step"' : ''}>${esc(item.depth)}</li>`).join('')}</ol>`;
+  const depth = `<div class="ts-layer-progress"><ol class="ts-depth" aria-label="${esc(COPY.depthLabel)}">${layers.map((item, i) => `<li class="${i === ts.layer ? 'is-now' : i < ts.layer ? 'is-past' : ''}"${i === ts.layer ? ' aria-current="step"' : ''}>${esc(item.depth)}</li>`).join('')}</ol><span class="ts-layer-count">${ts.layer + 1} / ${layers.length}</span></div>`;
   // 前の層の答えを、小さく 1 行で見せる
   let crumb = '';
   if (ts.layer > 0) {
@@ -1058,24 +1106,26 @@ function layerView(ts, h) {
   const title = typeof layer.title === 'function' ? layer.title(labelOfChip(layerGroups(ts.side, 'surface')[0]?.chips || [], ts.draft.surface[0])) : layer.title;
   const memo = ts.layer === 0 ? memoField(ts, esc, COPY.memoLabelEpisode, MEMO_PLACEHOLDER[ts.side]) : '';
   const lead = layer.lead ? `<p class="ts-lead">${esc(layer.lead)}</p>` : '';
+  const context = [crumb, lead].filter(Boolean).length ? `<details class="ts-context"><summary>前の答え・ヒント</summary>${[crumb, lead].filter(Boolean).join('')}</details>` : '';
   const chips = groups.map((group) => groupMarkup(ts, esc, group)).join('');
   const del = ts.phase === 'edit' && ts.target >= 0 ? `<button type="button" class="text-button ts-danger" data-action="torisetsu-delete-item">${esc(COPY.deleteEpisode)}</button>` : '';
   let actions;
   if (ts.layer === 0) actions = `<button type="button" class="primary-button" data-action="torisetsu-layer-next">${esc(COPY.layerNext)}</button><button type="button" class="text-button ts-skip" data-action="torisetsu-skip-item">${esc(COPY.dropEpisode)}</button>${del}`;
   else if (ts.layer < last) actions = `<button type="button" class="primary-button" data-action="torisetsu-layer-next">${esc(COPY.layerNext)}</button><button type="button" class="text-button ts-skip" data-action="torisetsu-layer-skip">${esc(ts.phase === 'edit' ? COPY.layerKeep : COPY.layerSkip)}</button>${del}`;
   else actions = `<button type="button" class="primary-button" data-action="torisetsu-record" data-ts-record>${esc(COPY.recordEpisode)}</button><button type="button" class="text-button ts-skip" data-action="torisetsu-layer-skip">${esc(ts.phase === 'edit' ? COPY.layerKeep : COPY.layerSkip)}</button>${del}`;
-  return `<div class="ts-step ts-layer" data-ts-key="layer">
+  return `<section class="ts-step ts-gallery ts-layer" data-ts-key="layer" data-ts-scene="gallery" data-gallery-stage="deep">
     ${stepperMarkup(ts, esc)}
-    <p class="ts-chapter-name${ts.side === 'hard' ? ' is-bad' : ''}">${esc(episodeHeadingText(ts))}</p>
-    ${depth}
-    ${crumb}
-    <div class="ts-step-heading"><h1 class="ts-q" tabindex="-1" data-focus>${esc(title)}</h1><img class="ts-step-art" src="./assets/manual-refresh/manual-discovery-cards-v3-neutral.png" alt="" aria-hidden="true" width="88" height="56" loading="lazy" /></div>
-    ${lead}
-    ${memo}
-    ${chips}
-    <div class="ts-actions">${actions}</div>
+    <figure class="ts-gallery-scene"><img class="ts-scene-art" src="./assets/torisetsu-gallery/deep-layers.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
+      <p class="ts-chapter-name${ts.side === 'hard' ? ' is-bad' : ''}">${esc(episodeHeadingText(ts))}</p>
+      ${depth}
+      ${context}
+      <div class="ts-step-heading"><h1 class="ts-q" tabindex="-1" data-focus>${esc(title)}</h1></div>
+      ${memo}
+      ${chips}
+      <div class="ts-actions">${actions}</div>
+    </div>
     <p class="ts-sidebar ts-side-${side.color}" aria-hidden="true">${esc(side.label)}</p>
-  </div>`;
+  </section>`;
 }
 
 // 第 2・3 章：1 つの場面／出来事（1 画面）
@@ -1088,22 +1138,25 @@ function itemView(ts, h) {
   const body = voice
     ? `<h2 class="ts-subq">何があった？</h2>${memo}${groupMarkup(ts, esc, groups[0])}${groupMarkup(ts, esc, groups[1])}`
     : `${groupMarkup(ts, esc, groups[0])}${memo}`;
-  return `<div class="ts-step" data-ts-key="item">
+  return `<section class="ts-step ts-gallery" data-ts-key="item" data-ts-scene="gallery" data-gallery-stage="arrival">
     ${stepperMarkup(ts, esc)}
+    <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
     <h1 class="ts-q" tabindex="-1" data-focus>${esc(episodeHeadingText(ts))}</h1>
     ${body}
     <p class="ts-missing" role="status" aria-live="polite" tabindex="-1" data-ts-missing>${esc(ts.missingMessage)}</p>
     <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-record" data-ts-record ${complete ? '' : 'aria-disabled="true"'}>${esc(voice ? COPY.recordVoice : COPY.recordEpisode)}</button><button type="button" class="text-button ts-skip" data-action="torisetsu-skip-item">${esc(voice ? COPY.skipVoice : COPY.skipValues)}</button>${del}</div>
     <p class="ts-sidebar ts-side-${side.color}" aria-hidden="true">${esc(side.label)}</p>
-  </div>`;
+    </div>
+  </section>`;
 }
 
 function admireView(ts, h) {
   const { esc } = h; const groups = currentGroups(ts);
   const complete = missingGroupNames(ts).length === 0;
   const del = ts.phase === 'edit' && ts.target >= 0 ? `<button type="button" class="text-button ts-danger" data-action="torisetsu-delete-item">${esc(COPY.deleteAdmire)}</button>` : '';
-  return `<div class="ts-step" data-ts-key="admire">
+  return `<section class="ts-step ts-gallery" data-ts-key="admire" data-ts-scene="gallery" data-gallery-stage="arrival">
     ${stepperMarkup(ts, esc)}
+    <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
     <h1 class="ts-q" tabindex="-1" data-focus>いいなと思った人</h1>
     <p class="ts-lead">最近「いいな」「あんなふうになれたら」と思った人はいる？</p>
     <p class="ts-note">身近な人でも、有名な人でも、物語の人でもOKです。</p>
@@ -1113,18 +1166,21 @@ function admireView(ts, h) {
     <p class="ts-missing" role="status" aria-live="polite" tabindex="-1" data-ts-missing>${esc(ts.missingMessage)}</p>
     <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-record" data-ts-record ${complete ? '' : 'aria-disabled="true"'}>${esc(COPY.recordAdmire)}</button><button type="button" class="text-button ts-skip" data-action="torisetsu-admire-skip">${esc(COPY.skipAdmire)}</button>${del}</div>
     <p class="ts-sidebar ts-side-good" aria-hidden="true">${esc(SIDE_COPY.admire.label)}</p>
-  </div>`;
+    </div>
+  </section>`;
 }
 
 function shortView(ts, h) {
   const { esc } = h;
   const text = ts.chapterId === 'needs' ? COPY.shortTitleNeeds : ts.chapterId === 'voice' ? COPY.shortTitleVoice : COPY.shortTitleValues;
   const addSide = shortSide(ts);
-  return `<div class="ts-step" data-ts-key="short">
+  return `<section class="ts-step ts-gallery" data-ts-key="short" data-ts-scene="gallery" data-gallery-stage="arrival">
     ${stepperMarkup(ts, esc)}
+    <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
     <h1 class="ts-q" tabindex="-1" data-focus>${esc(text)}</h1>
     <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-add-item" data-side="${esc(addSide)}" data-return-to="short">${esc(COPY.addMoreEpisode)}</button><button type="button" class="secondary-button" data-action="torisetsu-skip-short">${esc(COPY.later)}</button></div>
-  </div>`;
+    </div>
+  </section>`;
 }
 
 const dotCell = (on, esc, cls = '') => {
@@ -1219,17 +1275,30 @@ function lineupView(ts, h) {
   const { esc } = h;
   const body = ts.chapterId === 'needs' ? needsLineupBody(ts, esc) : ts.chapterId === 'voice' ? voiceLineupBody(ts, esc) : valuesLineupBody(ts, esc);
   const ask = ts.chapterId === 'needs' ? COPY.lineupAskNeeds : ts.chapterId === 'voice' ? COPY.lineupAskVoice : COPY.lineupAskValues;
-  return `<div class="ts-step" data-ts-key="lineup">
+  return `<div class="ts-step" data-ts-key="lineup" data-ts-scene="gallery">
     ${stepperMarkup(ts, esc)}
     <h1 class="ts-q" tabindex="-1" data-focus>${esc(COPY.lineupTitle)}</h1>
-    ${body}
+    <details class="ts-lineup-details"><summary>並べた表を見る</summary>${body}</details>
     <p class="ts-lead">${esc(ask)}</p>
-    <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-find">${esc(COPY.findCommon)}</button></div>
+    <div class="ts-actions"><button type="button" class="primary-button ts-find-primary" data-ts-primary="find" data-action="torisetsu-find">${esc(COPY.findCommon)}</button></div>
   </div>`;
 }
 
 const BAND_CLASS = { cross: 'ts-side-cross', link: 'ts-side-bad', hard: 'ts-side-bad', happy: 'ts-side-good' };
 const BAND_LABEL = { cross: COPY.bandCross, link: COPY.bandLink, hard: COPY.bandHard, happy: COPY.bandHappy };
+
+function insightResultCount(ts) {
+  const d = ts.data[ts.chapterId];
+  if (ts.chapterId === 'needs') return needsInsights(d.happy, d.hard).rows.length;
+  if (ts.chapterId === 'voice') return voiceInsights(d.episodes).items.length;
+  return valuesInsights(d.neg, d.pos, d.admire).items.length;
+}
+
+function insightPagerMarkup(ts, esc, total) {
+  if (total <= 1) return '';
+  const page = Math.max(0, Math.min(ts.insightPage, total - 1));
+  return `<nav class="ts-insight-pager" aria-label="発見のページ"><span>${page + 1} / ${total}</span><button type="button" class="ts-mini-button" data-action="torisetsu-insight-page" data-direction="prev"${page === 0 ? ' disabled' : ''}>前の発見</button></nav>`;
+}
 
 function countRowMarkup(parts, esc) {
   return `<span class="ts-count-row" aria-hidden="true">${parts.map((part, i) => `${i ? '<span class="ts-count-bar">｜</span>' : ''}<span class="${i === 0 ? 'ts-count-own' : 'ts-count-other'}">${esc(part.label)} <span class="ts-dots">${dotsOf(part.cells)}</span> ${esc(part.count)}</span>`).join('')}</span>`;
@@ -1242,9 +1311,17 @@ function insightEvidence(sentence, details) {
 function insightView(ts, h) {
   const { esc, support } = h; const d = ts.data[ts.chapterId];
   let body = ''; let actions = '';
+  const insightTotal = insightResultCount(ts);
+  const insightPage = Math.max(0, Math.min(ts.insightPage, Math.max(0, insightTotal - 1)));
   const hasGap = ts.chapterId !== 'voice' && d.prediction.length > 0 && gapFor(ts.chapterId, ts.data).rows.length > 0;
-  const primary = `<button type="button" class="primary-button" data-action="torisetsu-compare">${esc(hasGap ? COPY.compareGap : COPY.nextButton)}</button>`;
+  const primary = insightTotal > 1 && insightPage < insightTotal - 1
+    ? `<button type="button" class="primary-button" data-action="torisetsu-insight-page" data-direction="next">次の発見</button>`
+    : `<button type="button" class="primary-button" data-action="torisetsu-compare">${esc(hasGap ? COPY.compareGap : COPY.nextButton)}</button>`;
   const extraLine = (text) => `<p class="ts-extra">${esc(text)}</p>`;
+  const contextDetails = (parts) => {
+    const visible = parts.filter(Boolean);
+    return visible.length ? `<details class="ts-insight-context"><summary>答えのつながりを見る</summary>${visible.join('')}</details>` : '';
+  };
   const heavy = heavyNote(ts.chapterId, ts.data) ? `<section class="ts-heavy"><p>${esc(COPY.heavyNote)}</p>${support ? support() : ''}</section>` : '';
   if (ts.chapterId === 'needs') {
     const ins = needsInsights(d.happy, d.hard);
@@ -1254,21 +1331,21 @@ function insightView(ts, h) {
       body = `<p class="ts-insight-headline">${esc(COPY.insightNoneTitle)}</p><p class="ts-lead">${esc(COPY.insightNoneBody)}</p>${near}${list}${heavy}`;
       actions = `${d.happy.length < cfgOf(ts).maxes.happy ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="happy" data-return-to="insight">${esc(COPY.addHappy)}</button>` : ''}${d.hard.length < cfgOf(ts).maxes.hard ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="hard" data-return-to="insight">${esc(COPY.addHard)}</button>` : ''}<button type="button" class="primary-button" data-action="torisetsu-compare">${esc(COPY.goOn)}</button><button type="button" class="text-button" data-action="torisetsu-days">${esc(COPY.fixEpisodes)}</button>`;
     } else {
-      const bands = ins.rows.map((item, i) => `<section class="ts-band ${BAND_CLASS[item.band]}"><h2>${esc(BAND_LABEL[item.band])}</h2><ul class="ts-finds"><li class="ts-find" style="--i:${i}"><span class="ts-find-tag">${esc(item.heading)}</span>${insightEvidence(esc(item.sentence), countRowMarkup(item.parts, esc))}</li></ul></section>`).join('');
+      const bands = ins.rows.slice(insightPage, insightPage + 1).map((item, i) => `<section class="ts-band ${BAND_CLASS[item.band]}"><h2>${esc(BAND_LABEL[item.band])}</h2><ul class="ts-finds"><li class="ts-find" style="--i:${i}"><span class="ts-find-tag">${esc(item.heading)}</span>${insightEvidence(esc(item.sentence), countRowMarkup(item.parts, esc))}</li></ul></section>`).join('');
       const extra = ins.extra.length ? extraLine(`${COPY.extraHead}${ins.extra.map((item) => item.short).join('')}`) : '';
-      body = `<p class="ts-insight-lead">${esc(COPY.insightIntro)}</p>${ins.sceneLine ? `<p class="ts-compare-line">${esc(ins.sceneLine)}</p>` : ''}${bands}${extra}<p class="ts-note">${esc(ins.footer)}${esc(ins.footerAdd)}</p>${heavy}`;
+      body = `${bands}<p class="ts-note">今回の答えから見えた傾向です。</p>${contextDetails([`<p class="ts-insight-lead">${esc(COPY.insightIntro)}</p>`, ins.sceneLine ? `<p class="ts-compare-line">${esc(ins.sceneLine)}</p>` : '', extra, ins.footer || ins.footerAdd ? `<p class="ts-note">${esc(ins.footer || '')}${esc(ins.footerAdd || '')}</p>` : ''])}${heavy}`;
       actions = `${primary}<button type="button" class="secondary-button" data-action="torisetsu-days">${esc(COPY.fixEpisodes)}</button>`;
     }
   } else if (ts.chapterId === 'voice') {
     const ins = voiceInsights(d.episodes);
     if (ins.empty) {
       body = `<p class="ts-insight-headline">${esc(COPY.voiceNoneTitle)}</p><ul class="ts-list ts-cands">${ins.candidates.map((item) => `<li>『${esc(item.label)}』</li>`).join('')}</ul><p class="ts-lead">${esc(COPY.voiceNoneBody)}</p>${heavy}`;
-      actions = `${d.episodes.length < cfgOf(ts).maxes.voice ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="voice" data-return-to="insight">${esc(COPY.addScene)}</button>` : ''}<button type="button" class="primary-button" data-action="torisetsu-compare">${esc(COPY.goOn)}</button><button type="button" class="text-button" data-action="torisetsu-days">${esc(COPY.fixScenes)}</button>`;
+      actions = `${d.episodes.length < cfgOf(ts).maxes.voice ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="voice" data-return-to="insight">${esc(COPY.addScene)}</button>` : ''}${primary}<button type="button" class="text-button" data-action="torisetsu-days">${esc(COPY.fixScenes)}</button>`;
     } else {
-      const bands = ins.items.map((item, i) => `<section class="ts-band ts-side-bad"><h2>${esc(COPY.bandVoice)}</h2><ul class="ts-finds"><li class="ts-find" style="--i:${i}"><span class="ts-find-tag">${esc(item.heading)}</span>${insightEvidence(esc(item.sentence), `<span class="ts-count-row" aria-hidden="true"><span class="ts-count-own"><span class="ts-dots">${dotsOf(item.cells)}</span> ${esc(item.count)}${esc(item.paren)}</span></span>`)}</li></ul></section>`).join('');
+      const bands = ins.items.slice(insightPage, insightPage + 1).map((item, i) => `<section class="ts-band ts-side-bad"><h2>${esc(COPY.bandVoice)}</h2><ul class="ts-finds"><li class="ts-find" style="--i:${i}"><span class="ts-find-tag">${esc(item.heading)}</span>${insightEvidence(esc(item.sentence), `<span class="ts-count-row" aria-hidden="true"><span class="ts-count-own"><span class="ts-dots">${dotsOf(item.cells)}</span> ${esc(item.count)}${esc(item.paren)}</span></span>`)}</li></ul></section>`).join('');
       const extra = ins.extra.length ? extraLine(`${COPY.extraHead}${ins.extra.map((item) => item.heading).join('')}`) : '';
-      body = `<p class="ts-insight-lead">${esc(COPY.insightIntro)}</p>${bands}${extra}<p class="ts-note">${esc(ins.footer)}${esc(ins.footerAdd)}</p>${heavy}`;
-      actions = `<button type="button" class="primary-button" data-action="torisetsu-compare">${esc(COPY.nextButton)}</button><button type="button" class="secondary-button" data-action="torisetsu-days">${esc(COPY.fixScenes)}</button>`;
+      body = `${bands}<p class="ts-note">今回の答えから見えた傾向です。</p>${contextDetails([`<p class="ts-insight-lead">${esc(COPY.insightIntro)}</p>`, extra, ins.footer || ins.footerAdd ? `<p class="ts-note">${esc(ins.footer || '')}${esc(ins.footerAdd || '')}</p>` : ''])}${heavy}`;
+      actions = `${primary}<button type="button" class="secondary-button" data-action="torisetsu-days">${esc(COPY.fixScenes)}</button>`;
     }
   } else {
     const ins = valuesInsights(d.neg, d.pos, d.admire);
@@ -1276,28 +1353,31 @@ function insightView(ts, h) {
       body = `<p class="ts-insight-headline">${esc(COPY.valuesNoneTitle)}</p><ul class="ts-list ts-cands">${ins.candidates.map((item) => `<li>${esc(item.label)}</li>`).join('')}</ul><p class="ts-lead">${esc(COPY.valuesNoneBody)}</p>`;
       actions = `${d.neg.length < cfgOf(ts).maxes.neg ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="neg" data-return-to="insight">${esc(COPY.addNeg)}</button>` : ''}${d.pos.length < cfgOf(ts).maxes.pos ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="pos" data-return-to="insight">${esc(COPY.addPos)}</button>` : ''}<button type="button" class="primary-button" data-action="torisetsu-compare">${esc(COPY.goOn)}</button><button type="button" class="text-button" data-action="torisetsu-days">${esc(COPY.fixEpisodes)}</button>`;
     } else {
-      const lis = ins.items.map((item, i) => {
+      const lis = ins.items.slice(insightPage, insightPage + 1).map((item, i) => {
         const row = [item.a > 0 ? `イラッと ${dotsOf(d.neg.map((ep) => ep.value === item.id))}` : '', item.p > 0 ? `じーんと ${dotsOf(d.pos.map((ep) => ep.value === item.id))}` : '', item.m > 0 ? `いいなと思った人 ●` : ''].filter(Boolean).join('｜');
         return `<li class="ts-find" style="--i:${i}"><span class="ts-find-tag">『${esc(item.label)}』</span>${insightEvidence(esc(item.sentence), `<span class="ts-count-row" aria-hidden="true"><span class="ts-count-own"><span class="ts-dots">${esc(row)}</span></span></span>`)}</li>`;
       }).join('');
       const extra = ins.extra.length ? extraLine(`${COPY.extraValues}${ins.extra.map((item) => `『${item.label}』`).join('')}`) : '';
-      body = `<p class="ts-insight-lead">${esc(COPY.insightIntro)}</p><section class="ts-band ts-side-good"><ul class="ts-finds">${lis}</ul></section>${extra}<p class="ts-insight-summary">${esc(ins.summary)}</p><p class="ts-note">${esc(ins.footer)}</p>`;
+      body = `<section class="ts-band ts-side-good"><ul class="ts-finds">${lis}</ul></section><p class="ts-note">今回の答えから見えた傾向です。</p>${contextDetails([`<p class="ts-insight-lead">${esc(COPY.insightIntro)}</p>`, extra, ins.summary ? `<p class="ts-insight-summary">${esc(ins.summary)}</p>` : '', ins.footer ? `<p class="ts-note">${esc(ins.footer)}</p>` : ''])}`;
       actions = `${primary}<button type="button" class="secondary-button" data-action="torisetsu-days">${esc(COPY.fixEpisodes)}</button>`;
     }
   }
-  return `<div class="ts-step ts-insight" data-ts-key="insight">
+  return `<section class="ts-step ts-gallery ts-insight" data-ts-key="insight" data-ts-scene="insight" data-gallery-stage="discovery">
     ${stepperMarkup(ts, esc)}
-    <div class="ts-step-heading"><h1 class="ts-q" tabindex="-1" data-focus>${esc(COPY.insightTitle)}</h1><img class="ts-step-art" src="./assets/manual-refresh/manual-discovery-cards-v3-neutral.png" alt="" aria-hidden="true" width="88" height="56" loading="lazy" /></div>
-    ${body}
-    <div class="ts-actions">${actions}</div>
-  </div>`;
+    <figure class="ts-gallery-scene"><img class="ts-scene-art" src="./assets/torisetsu-gallery/discovery-sculpture.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
+      <div class="ts-step-heading"><h1 class="ts-q" tabindex="-1" data-focus>${esc(COPY.insightTitle)}</h1></div>
+      ${insightPagerMarkup(ts, esc, insightTotal)}
+      ${body}
+      <div class="ts-actions">${actions}</div>
+    </div>
+  </section>`;
 }
 
 function gapView(ts, h) {
   const { esc } = h;
   const gap = gapFor(ts.chapterId, ts.data);
   const rows = gap.rows.map((row) => `<div class="ts-gap-row ts-verdict-${esc(row.verdict)}"><p class="ts-gap-thought">${esc(row.thought)}</p><p class="ts-gap-result">${esc(row.text)}</p></div>`).join('');
-  return `<div class="ts-step ts-gap" data-ts-key="gap">
+  return `<div class="ts-step ts-gap" data-ts-key="gap" data-ts-scene="insight">
     ${stepperMarkup(ts, esc)}
     <h1 class="ts-q" tabindex="-1" data-focus>${esc(COPY.gapTitle)}</h1>
     ${rows}
@@ -1313,40 +1393,44 @@ function protectView(ts, h) {
   const choices = focusChoices(voice);
   const other = choices.length >= 2 ? `<button type="button" class="ts-mini-button ts-other-voice" data-action="torisetsu-focus-open" aria-expanded="${ts.focusPicker}">${esc(COPY.otherVoice)}</button>` : '';
   const picker = ts.focusPicker ? `<div class="ts-chips" role="radiogroup" aria-label="${esc(COPY.otherVoiceTitle)}">${choices.map((p) => `<button type="button" class="ts-chip${p.id === focus ? ' is-on' : ''}" role="radio" aria-checked="${p.id === focus}" data-action="torisetsu-focus-set" data-chip="${esc(p.id)}"><span>${esc(p.name)}声</span></button>`).join('')}</div>` : '';
-  return `<div class="ts-step" data-ts-key="protect">
+  return `<section class="ts-step ts-gallery" data-ts-key="protect" data-ts-scene="gallery" data-gallery-stage="arrival">
     ${stepperMarkup(ts, esc)}
+    <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
     <p class="ts-voice-head">${esc(COPY.protectVoiceHead(voices))}</p>
     ${other}${picker}
     <h1 class="ts-q" tabindex="-1" data-focus>${esc(COPY.protectTitle)}</h1>
     <p class="ts-lead">${esc(COPY.protectLead)}</p>
     ${chipGroupMarkup(ts, esc, { label: '2つまで', hint: '', max: 2, chips: INTENTS.map(({ id, label }) => ({ id, label })), selected: voice.intents, groupId: 'intents', radio: false, limitGroup: 'intents' })}
     <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-protect-next">${esc(COPY.protectNext)}</button><button type="button" class="text-button ts-skip" data-action="torisetsu-protect-next" data-key="skip">${esc(COPY.layerSkip)}</button></div>
-  </div>`;
+    </div>
+  </section>`;
 }
 
 // 第 2 章：大事な友だちなら、何て返す？
 function replyView(ts, h) {
   const { esc } = h; const voice = ts.data.voice;
   const focus = effectiveFocus(voice); const voices = focusVoices(voice, focus).map((t) => t.label);
-  const buttons = replyOptions(focus).map((item) => { const on = isPicked(ts, 'reply', item.id); return `<button type="button" class="ts-chip ts-chip-wide${on ? ' is-on' : ''}" role="radio" aria-checked="${on}" data-action="torisetsu-chip" data-group="reply" data-chip="${esc(item.id)}" data-pick-kind="reply" data-pick-key="${esc(item.id)}"><span>${esc(item.label)}</span></button>`; }).join('');
+  const buttons = replyOptions(focus).map((item) => { const on = isPicked(ts, 'reply', item.id); const feedback = ts.feedback?.group === 'reply' && ts.feedback?.chip === item.id ? ' is-feedback' : ''; return `<button type="button" class="ts-chip ts-chip-wide${on ? ' is-on' : ''}${feedback}" role="radio" aria-checked="${on}" data-action="torisetsu-chip" data-group="reply" data-chip="${esc(item.id)}" data-pick-kind="reply" data-pick-key="${esc(item.id)}"><span>${esc(item.label)}</span></button>`; }).join('');
   const open = ts.textOpen.reply || Boolean(voice.replyText);
   const free = open
     ? `<label class="ts-field ts-free"><span class="visually-hidden">${esc(COPY.freeWrite)}</span><input type="text" inputmode="text" autocomplete="off" maxlength="${TEXT_MAX}" data-ts-text="reply" value="${esc(voice.replyText)}" placeholder="${esc(COPY.replyPlaceholder)}" /><small data-ts-count="reply">${esc(COPY.freeCount(Array.from(voice.replyText).length))}</small></label>`
     : `<button type="button" class="ts-write" data-action="torisetsu-text-open" data-kind="reply">＋ ${esc(COPY.freeWrite)}</button>`;
-  return `<div class="ts-step" data-ts-key="reply">
+  return `<section class="ts-step ts-gallery" data-ts-key="reply" data-ts-scene="gallery" data-gallery-stage="arrival">
     ${stepperMarkup(ts, esc)}
+    <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
     <h1 class="ts-q" tabindex="-1" data-focus id="ts-reply-title">${esc(COPY.replyTitle)}</h1>
     <p class="ts-lead">${esc(COPY.replyLead(voices))}</p>
     <p class="ts-hint">${esc(COPY.replyHint)}</p>
     <div class="ts-chips ts-chips-col" role="radiogroup" aria-labelledby="ts-reply-title">${buttons}</div>${free}
     <p class="ts-note">${esc(COPY.replyClosing)}</p>
     <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-reply-next">${esc(COPY.replyNext)}</button></div>
-  </div>`;
+    </div>
+  </section>`;
 }
 
 function choiceListMarkup(ts, esc, kind, options) {
   const d = ts.data[ts.chapterId];
-  const buttons = options.map((item) => { const on = isPicked(ts, kind, item.key); return `<button type="button" class="ts-chip ts-chip-wide${on ? ' is-on' : ''}" role="radio" aria-checked="${on}" data-action="torisetsu-pick" data-kind="${kind}" data-pick-kind="${kind}" data-pick-key="${esc(item.key)}" data-key="${esc(item.key)}"><span>${esc(item.label ?? item.text)}</span></button>`; }).join('');
+  const buttons = options.map((item) => { const on = isPicked(ts, kind, item.key); const feedback = ts.feedback?.group === kind && ts.feedback?.chip === item.key ? ' is-feedback' : ''; return `<button type="button" class="ts-chip ts-chip-wide${on ? ' is-on' : ''}${feedback}" role="radio" aria-checked="${on}" data-action="torisetsu-pick" data-kind="${kind}" data-pick-kind="${kind}" data-pick-key="${esc(item.key)}" data-key="${esc(item.key)}"><span>${esc(item.label ?? item.text)}</span></button>`; }).join('');
   const open = ts.textOpen[kind] || Boolean(d[`${kind}Text`]);
   const placeholder = kind === 'surprise' ? COPY.surprisePlaceholder : COPY.tryPlaceholder;
   const free = open
@@ -1357,25 +1441,29 @@ function choiceListMarkup(ts, esc, kind, options) {
 
 function surpriseView(ts, h) {
   const { esc } = h;
-  return `<div class="ts-step" data-ts-key="surprise">
+  return `<section class="ts-step ts-gallery" data-ts-key="surprise" data-ts-scene="gallery" data-gallery-stage="arrival">
     ${stepperMarkup(ts, esc)}
+    <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
     <h1 class="ts-q" tabindex="-1" data-focus id="ts-pick-title">${esc(COPY.surpriseTitle)}</h1>
     <p class="ts-hint">${esc(COPY.surpriseHint)}</p>
     ${choiceListMarkup(ts, esc, 'surprise', surpriseOptions(ts.chapterId, ts.data))}
     <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-surprise-next">${esc(COPY.nextButton)}</button></div>
-  </div>`;
+    </div>
+  </section>`;
 }
 
 function tryView(ts, h) {
   const { esc } = h;
-  return `<div class="ts-step" data-ts-key="try">
+  return `<section class="ts-step ts-gallery" data-ts-key="try" data-ts-scene="gallery" data-gallery-stage="arrival">
     ${stepperMarkup(ts, esc)}
+    <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
     <h1 class="ts-q" tabindex="-1" data-focus id="ts-pick-title">${esc(COPY.tryTitle)}</h1>
     <p class="ts-hint">${esc(COPY.tryHint)}</p>
     ${choiceListMarkup(ts, esc, 'experiment', tryOptions(ts.chapterId, ts.data))}
     <p class="ts-note">${esc(COPY.tryFooter)}</p>
     <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-finish" data-ts-finish>${esc(finishLabel(ts))}</button></div>
-  </div>`;
+    </div>
+  </section>`;
 }
 
 function daysView(ts, h) {
@@ -1407,12 +1495,14 @@ function daysView(ts, h) {
     if (a) admire = `<section class="ts-days-group ts-side-good"><h2>${esc(SIDE_COPY.admire.label)}</h2><ol class="ts-days-list"><li><span class="ts-days-n">1つ目</span><span class="ts-days-text">${esc([admireWhoById(a.who)?.label || '', a.qualities.map((q) => qualityById(q.id).label).join('、')].filter(Boolean).join('／'))}</span><button type="button" class="ts-mini-button" data-action="torisetsu-edit-item" data-side="admire" data-index="0" aria-label="いいなと思った人を${esc(COPY.fixOne)}">${esc(COPY.fixOne)}</button></li></ol></section>`;
     else admire = `<section class="ts-days-group ts-side-good"><button type="button" class="secondary-button ts-add" data-action="torisetsu-add-item" data-side="admire" data-return-to="days">${esc(COPY.addOneAdmire)}</button></section>`;
   }
-  return `<div class="ts-step" data-ts-key="days">
+  return `<section class="ts-step ts-gallery" data-ts-key="days" data-ts-scene="gallery" data-gallery-stage="arrival">
     ${stepperMarkup(ts, esc)}
+    <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
     <h1 class="ts-q" tabindex="-1" data-focus>${esc(title)}</h1>
     ${cfg.sides.map(section).join('')}${admire}
     <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-days-done">${esc(COPY.backToInsight)}</button></div>
-  </div>`;
+    </div>
+  </section>`;
 }
 
 function doneView(ts, h) {
@@ -1428,13 +1518,15 @@ function doneView(ts, h) {
     if (tryText) own.push({ id: 'try', chapterId: null, title: '来週ためしてみること', icon: 'wrench', number: 6, chapterLabel: '', state: 'filled', lines: [bullet(tryText), para(MANUAL_COPY.tryOutro)] });
     return own;
   } });
-  return `<div class="ts-done" data-ts-key="done:${esc(ts.chapterId)}">
+  const banner = `<div class="ts-done-banner" role="img" aria-label="${esc(cfg.label)}のトリセツができました"><img src="./assets/torisetsu-gallery/book-cover-architecture.png" alt="" aria-hidden="true" width="180" height="120" /><span>${esc(cfg.label)}の章ができました</span></div>`;
+  return `<div class="ts-done ts-gallery" data-ts-key="done:${esc(ts.chapterId)}" data-ts-scene="gallery" data-gallery-stage="manual">
     <h1 class="ts-title" tabindex="-1" data-focus><span class="ts-done-check">${iconSvg('check', 22)}</span>${esc(cfg.done.title)}</h1>
     <p class="ts-lead">${esc(cfg.done.body)}</p>
-    ${paper}
+    ${banner}
     ${progressMarkup(ts, esc)}
     <div class="ts-actions">${primary}<button type="button" class="secondary-button" data-action="torisetsu-contents">${esc(COPY.toContents)}</button></div>
     ${saveCardMarkup(ts, esc)}
+    <details class="ts-done-details"><summary>この章のトリセツを読む</summary>${paper}</details>
     ${support ? support() : ''}
   </div>`;
 }
@@ -1456,7 +1548,7 @@ function startView(ts, h) {
   }
   return `<div class="ts-start" data-ts-key="start">
     ${notice}
-    <div class="ts-hero" aria-hidden="true"><svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${COVER_ICON}</svg></div>
+    <div class="ts-hero"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="220" loading="lazy" /></div>
     <h1 class="ts-title" tabindex="-1" data-focus>${esc(COPY.startTitle)}</h1>
     <p class="ts-lead">${esc(COPY.startLead)}</p>
     <div class="ts-privacy" role="note">${iconSvg('lock', 20)}<div><strong>${esc(COPY.privacyTitle)}</strong><p>${esc(COPY.privacyBody)}</p></div></div>
@@ -1500,18 +1592,29 @@ export function canSendImage() {
 function manualView(ts, helpers) {
   const { esc, support, imageEnabled, canSend, today } = helpers;
   const manual = composeManual(ts.data, { today });
+  const available = manual.sections.filter((section) => section.state !== 'hidden');
+  const active = available.find((section) => section.id === ts.manualSectionId) || available[0] || null;
+  if (active && ts.manualSectionId !== active.id) ts.manualSectionId = active.id;
+  const nav = available.length ? `<nav class="ts-manual-nav" aria-label="章を選ぶ">${available.map((section) => `<button type="button" class="ts-manual-nav-item${section.id === active?.id ? ' is-active' : ''}" data-action="torisetsu-manual-section" data-id="${esc(section.id)}" data-manual-section="${esc(section.id)}" aria-current="${section.id === active?.id ? 'page' : 'false'}"><span>${section.number}</span>${esc(section.title)}</button>`).join('')}</nav>` : '';
+  const paper = manualPaper(ts, helpers, { cover: false, sections: (manualData) => active ? manualData.sections.filter((section) => section.id === active.id) : manualData.sections });
   const image = imageEnabled !== false && manualHasContent(manual)
     ? `<section class="ts-share"><p>${esc(COPY.shareNote)}</p><div class="ts-share-buttons"><button type="button" class="secondary-button" data-action="torisetsu-image" ${ts.imageBusy ? 'disabled' : ''}>${esc(ts.imageBusy ? COPY.imageMaking : COPY.makeImage)}</button>${canSend ? `<button type="button" class="secondary-button" data-action="torisetsu-share" ${ts.imageBusy ? 'disabled' : ''}>${esc(COPY.sendImage)}</button>` : ''}</div>${canSend ? `<p class="ts-share-hint">${esc(COPY.sendHint)}</p>` : ''}<p class="ts-image-status" role="status" aria-live="polite">${esc(ts.imageStatus)}</p></section>`
     : '';
-  return `<div class="ts-manual" data-ts-key="manual">
+  return `<section class="ts-manual ts-gallery" data-ts-key="manual" data-ts-scene="manual" data-gallery-stage="manual" data-manual-active="${esc(active?.id || '')}">
     <h1 class="visually-hidden" tabindex="-1" data-focus>わたしのトリセツ</h1>
     ${progressMarkup(ts, esc)}
-    ${manualPaper(ts, helpers)}
+    <figure class="ts-gallery-scene"><img class="ts-scene-art" src="./assets/torisetsu-gallery/book-cover-architecture.png" alt="" aria-hidden="true" width="360" height="300" /></figure><div class="ts-gallery-copy">
+      <header class="ts-manual-heading"><small>取扱説明書</small><h1>${esc(manual.title)}</h1><p>${esc(manual.version)}</p></header>
+      ${nav}
+      ${nameBlock(ts, manual, esc, true)}
+      ${paper}
+      <p class="ts-warranty ts-manual-warranty">${esc(manual.warranty)}</p>
     ${saveCardMarkup(ts, esc)}
     ${image}
     <div class="ts-actions"><button type="button" class="secondary-button" data-action="torisetsu-contents">${esc(COPY.toContents)}</button></div>
     ${support ? support() : ''}
-  </div>`;
+    </div>
+  </section>`;
 }
 
 function stepView(ts, h) {
@@ -1550,9 +1653,9 @@ export function torisetsuView(ts, helpers) {
     ? `<div class="ts-modal" data-ts-modal role="alertdialog" aria-modal="true" aria-labelledby="ts-leave-title"><div class="ts-modal-card"><p id="ts-leave-title">${esc(canKeep ? COPY.leaveTitle : COPY.leaveTitleLoss)}</p><div class="ts-save-actions">${leaveButtons}</div></div></div>`
     : '';
   const toast = ts.undo ? `<div class="ts-toast" role="status"><span>${esc(COPY.deletedToast)}</span><button type="button" class="ts-toast-button" data-action="torisetsu-undo">${esc(COPY.undo)}</button></div>` : '';
-  return `<header class="topbar ts-topbar"><button type="button" class="ts-back" data-action="torisetsu-back" aria-label="${esc(COPY.back)}">${iconSvg('left', 20)}<span>${esc(COPY.back)}</span></button><strong class="ts-topbar-title">${esc(COPY.appTitle)}</strong><span class="ts-topbar-space" aria-hidden="true"></span></header><section class="content ts-content"><div class="ts-screen" data-ts-view="${esc(ts.view)}">${body}</div></section>${leave}${toast}`;
+  return `<header class="topbar ts-topbar"><button type="button" class="ts-back" data-action="torisetsu-back" aria-label="${esc(COPY.back)}">${iconSvg('left', 20)}<span>${esc(COPY.back)}</span></button><strong class="ts-topbar-title">${esc(COPY.appTitle)}</strong><span class="ts-topbar-space" aria-hidden="true"></span></header><section class="content ts-content ts-gallery-content"><div class="ts-screen" data-ts-view="${esc(ts.view)}" data-ts-view-key="${esc(torisetsuViewKey(ts))}">${body}</div></section>${leave}${toast}`;
 }
 
 export function torisetsuViewKey(ts) {
-  return `${ts.view}:${ts.chapterId || ''}:${ts.step || ''}:${ts.side || ''}:${ts.index}:${ts.layer}:${ts.phase}:${ts.target}`;
+  return `${ts.view}:${ts.chapterId || ''}:${ts.step || ''}:${ts.side || ''}:${ts.index}:${ts.layer}:${ts.phase}:${ts.target}:${ts.manualSectionId || ''}:${ts.insightPage || 0}`;
 }

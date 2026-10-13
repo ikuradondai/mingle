@@ -459,11 +459,23 @@ function render() {
     state.account.status = state.error;
   }
   const accountScroll = accountScrollSnapshot();
-  const torisetsuKeyBefore = state.screen === "torisetsu" && state.torisetsu ? torisetsuViewKey(state.torisetsu) : null;
+  // Read the key from the mounted DOM: state.torisetsu has already been updated
+  // by the action handler before render() runs.
+  const torisetsuKeyBefore = state.screen === "torisetsu" ? root.querySelector(".ts-screen")?.dataset.tsViewKey || null : null;
   const torisetsuScrollBefore = state.screen === "torisetsu" ? window.scrollY : 0;
   if (state.screen === "torisetsu" && !state.torisetsu) state.screen = "decks";
   root.innerHTML = state.shared ? sharedView() : state.screen === "torisetsu" ? torisetsuScreenView() : state.screen === "participants" ? participantsView() : state.screen === "decks" ? decksView() : playView();
-  if (state.screen === "torisetsu") { const sameView = torisetsuKeyBefore === torisetsuViewKey(state.torisetsu) && !state.torisetsuScrollTop; window.scrollTo({ left: 0, top: sameView ? torisetsuScrollBefore : 0, behavior: "auto" }); state.torisetsuScrollTop = false; bindTorisetsu(); }
+  if (state.screen === "torisetsu") {
+    const torisetsuKeyAfter = root.querySelector(".ts-screen")?.dataset.tsViewKey || null;
+    const sameView = torisetsuKeyBefore === torisetsuKeyAfter && !state.torisetsuScrollTop;
+    window.scrollTo({ left: 0, top: sameView ? torisetsuScrollBefore : 0, behavior: "auto" });
+    if (torisetsuKeyBefore && torisetsuKeyAfter && torisetsuKeyBefore !== torisetsuKeyAfter && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      const screen = root.querySelector(".ts-screen");
+      screen?.classList.add("is-entering");
+      window.setTimeout(() => screen?.classList.remove("is-entering"), 520);
+    }
+    state.torisetsuScrollTop = false; bindTorisetsu();
+  }
   const restoreExplorerRails = () => { for (const [id, left] of explorerScrollSnapshot) { const rail = root.querySelector(`[data-theme-rail]#${CSS.escape(id)}`); if (rail) rail.scrollLeft = left; } };
   restoreExplorerRails();
   restoreAccountScroll(accountScroll);
@@ -2277,7 +2289,7 @@ function handleTorisetsuAction(event) {
   const run = () => {
     torisetsuCommitting = false;
     if (state.torisetsu !== ts) return;
-    const result = applyTorisetsuAction(ts, action, { chip: button.dataset.chip, group: button.dataset.group, chapter: button.dataset.chapter, side: button.dataset.side, index: button.dataset.index, kind: button.dataset.kind, key: button.dataset.key, returnTo: button.dataset.returnTo }, torisetsuContext());
+    const result = applyTorisetsuAction(ts, action, { id: button.dataset.id, direction: button.dataset.direction, chip: button.dataset.chip, group: button.dataset.group, chapter: button.dataset.chapter, side: button.dataset.side, index: button.dataset.index, kind: button.dataset.kind, key: button.dataset.key, returnTo: button.dataset.returnTo }, torisetsuContext());
     if (result.leave) { leaveTorisetsu(); return; }
     if (result.image) { makeTorisetsuImage(result.image); return; }
     if (result.undoTimer) { clearTimeout(torisetsuUndoTimer); torisetsuUndoTimer = setTimeout(() => { if (state.torisetsu === ts && state.screen === "torisetsu" && expireTorisetsuUndo(ts)) root.querySelector(".ts-toast")?.remove(); }, result.undoTimer + 30); }
@@ -2290,7 +2302,8 @@ function handleTorisetsuAction(event) {
     // 共通点の行を順に色づけてから「見つける」へ（動きを減らす設定では、すぐ切りかえる）。
     const found = root.querySelectorAll(".ts-lineup .is-found, .ts-ep.is-found").length;
     const wrap = root.querySelector(".ts-lineup-wrap, .ts-ep-group");
-    if (wrap && found > 0 && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { torisetsuCommitting = true; root.querySelector(".ts-screen")?.classList.add("is-finding"); setTimeout(run, Math.min(1500, 300 + found * 200)); return; }
+    const details = wrap?.closest("details.ts-lineup-details");
+    if (wrap && (!details || details.open) && found > 0 && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { torisetsuCommitting = true; root.querySelector(".ts-screen")?.classList.add("is-finding"); setTimeout(run, Math.min(1500, 300 + found * 200)); return; }
   }
   run();
 }

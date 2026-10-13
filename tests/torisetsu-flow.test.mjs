@@ -154,11 +154,19 @@ test('running example A through the real actions produces the fixture data and t
   runChapter(ts, ctx, 'needs', A.data, { stopAt: 'insight' });
   assert.equal(ts.step, 'insight');
   assert.deepEqual(ts.data.needs.happy, A.data.happy); assert.deepEqual(ts.data.needs.hard, A.data.hard); assert.deepEqual(ts.data.needs.prediction, A.data.prediction);
-  const view = html(ts);
-  for (const row of A.expected.rows) { assert.ok(view.includes(esc(row.heading)), row.heading); assert.ok(view.includes(esc(row.sentence)), row.sentence); assert.ok(view.includes(row.band)); }
+  const insightViews = [];
+  for (const row of A.expected.rows) {
+    let view = html(ts); let guard = 0;
+    while (!view.includes(esc(row.heading)) && ts.step === 'insight' && guard++ < 12) {
+      act(ts, ctx, 'torisetsu-insight-page', { direction: 'next' }); view = html(ts);
+    }
+    insightViews.push(view);
+    assert.ok(view.includes(esc(row.heading)), row.heading); assert.ok(view.includes(esc(row.sentence)), row.sentence); assert.ok(view.includes(row.band));
+  }
+  const view = insightViews.join('');
   assert.ok(view.includes(esc(A.expected.sceneLine)));
   assert.ok(view.includes(esc(A.expected.footer + A.expected.footerAdd)));
-  assert.ok(view.includes('予想と比べる'));
+  assert.match(html(ts), /data-action="torisetsu-compare"/);
   act(ts, ctx, 'torisetsu-compare');
   assert.equal(ts.step, 'gap');
   const gap = html(ts);
@@ -369,8 +377,10 @@ test('all texts are escaped, in text and in attributes', () => {
   const { ts, ctx } = setup();
   const evil = '<img src=x onerror=alert(1)>"\'&';
   const fixedArtSrcs = new Set([
-    './assets/manual-refresh/manual-open-book-cards-v3-neutral.png',
-    './assets/manual-refresh/manual-discovery-cards-v3-neutral.png',
+    './assets/torisetsu-gallery/arrival-gallery.png',
+    './assets/torisetsu-gallery/deep-layers.png',
+    './assets/torisetsu-gallery/discovery-sculpture.png',
+    './assets/torisetsu-gallery/book-cover-architecture.png',
   ]);
   const assertSafeImages = (markup) => {
     const images = [...markup.matchAll(/<img\b[^>]*\bsrc="([^"]+)"[^>]*>/g)].map(([, src]) => src);
@@ -421,7 +431,10 @@ test('the manual lists the 7 sections in a fixed order and shows empty ones with
   const { ts, ctx } = setup();
   runChapter(ts, ctx, 'needs', A.data, { surprise: A.data.surprise, experiment: A.data.experiment });
   act(ts, ctx, 'torisetsu-manual');
-  const view = html(ts);
+  const visibleSections = composeManual(ts.data, { today: '2026-10-13' }).sections.filter((section) => section.state !== 'hidden');
+  const views = [];
+  for (const section of visibleSections) { act(ts, ctx, 'torisetsu-manual-section', { id: section.id }); views.push(html(ts)); }
+  const view = views.join('');
   const titles = ['満たされると元気になるもの', '揺れやすいところ', '周りの人へのお願い', '頭の中の声と、かけたい言葉', '大事にしていること', '来週ためしてみること', 'いちばん意外だったこと'];
   let at = -1;
   for (const title of titles) { const i = view.indexOf(`<span>${title}</span>`); assert.ok(i > at, title); at = i; }
@@ -543,4 +556,108 @@ test('editing a recorded layer and pressing the keep button keeps the recorded a
   assert.ok(html(ts).includes('このまま進む') && !html(ts).includes('わからないので飛ばす'));
   act(ts, ctx, 'torisetsu-layer-skip'); act(ts, ctx, 'torisetsu-layer-skip'); act(ts, ctx, 'torisetsu-layer-skip');
   assert.equal(JSON.stringify(ts.data.needs.hard[0]), before);
+});
+
+test('manual section navigation uses real data-id actions and preserves data/compose output', () => {
+  const { ts, ctx } = setup();
+  runChapter(ts, ctx, 'needs', A.data);
+  ts.data.voice = normalizeData({ voice: B.data }).voice;
+  ts.data.values = normalizeData({ values: Cx.data }).values;
+  act(ts, ctx, 'torisetsu-manual');
+  const beforeData = JSON.stringify(ts.data);
+  const beforeManual = JSON.stringify(composeManual(ts.data, { today: '2026-10-13' }));
+  const visible = composeManual(ts.data, { today: '2026-10-13' }).sections.filter((section) => section.state !== 'hidden');
+  assert.ok(visible.length > 1);
+  const target = visible.at(-1).id;
+  const result = act(ts, ctx, 'torisetsu-manual-section', { id: target });
+  assert.equal(ts.manualSectionId, target);
+  assert.equal(result.focus, `[data-manual-section="${target}"]`);
+  const view = html(ts);
+  assert.match(view, new RegExp(`data-action="torisetsu-manual-section"[^>]*data-id="${target}"`));
+  assert.ok(view.includes(`data-manual-section="${target}"`));
+  assert.equal(JSON.stringify(ts.data), beforeData);
+  assert.equal(JSON.stringify(composeManual(ts.data, { today: '2026-10-13' })), beforeManual);
+  act(ts, ctx, 'torisetsu-manual-section', { id: 'invalid-section-id' });
+  assert.equal(ts.manualSectionId, visible[0].id, 'invalid section falls back to first visible section');
+});
+
+test('insight pager reaches multiple findings for every chapter, backs up, then advances to compare', () => {
+  const voiceMulti = { ...B.data, episodes: [
+    { scene: 'sc_work', memo: '', thoughts: ['th_nogood', 'th_others'] },
+    { scene: 'sc_friend', memo: '', thoughts: ['th_nogood', 'th_others'] },
+    { scene: 'sc_family', memo: '', thoughts: ['th_burden'] },
+  ] };
+  for (const [chapter, fixture] of [['needs', A.data], ['voice', voiceMulti], ['values', Cx.data]]) {
+    const { ts, ctx } = setup();
+    runChapter(ts, ctx, chapter, fixture, { stopAt: 'insight' });
+    assert.equal(ts.step, 'insight', chapter);
+    const first = html(ts);
+    assert.match(first, /class="ts-insight-pager"/, `${chapter} has pager`);
+    const firstPage = ts.insightPage;
+    const firstKey = torisetsuViewKey(ts);
+    act(ts, ctx, 'torisetsu-insight-page', { direction: 'next' });
+    assert.equal(ts.step, 'insight', `${chapter} next page remains insight`);
+    assert.ok(ts.insightPage > firstPage, `${chapter} advances page`);
+    assert.notEqual(torisetsuViewKey(ts), firstKey, `${chapter} page transition changes view key`);
+    act(ts, ctx, 'torisetsu-back');
+    assert.equal(ts.step, 'insight', `${chapter} top back returns to prior page`);
+    assert.equal(ts.insightPage, firstPage);
+    let guard = 0;
+    while (ts.step === 'insight' && guard++ < 12) act(ts, ctx, 'torisetsu-insight-page', { direction: 'next' });
+    assert.notEqual(ts.step, 'insight', `${chapter} leaves insight after final page`);
+  }
+});
+
+test('zero and one insight results stay on a single non-paged insight view', () => {
+  const empty = gotoInsight('needs', { prediction: [], happy: [], hard: [] });
+  assert.equal(empty.ts.insightPage, 0);
+  assert.ok(!html(empty.ts).includes('ts-insight-pager'));
+  const one = gotoInsight('needs', { prediction: [], happy: [], hard: [hardEp('sf_irritated', ['dp_anxious'], ['nd_understood'])] });
+  assert.ok(!html(one.ts).includes('ts-insight-pager'));
+  assert.equal(one.ts.insightPage, 0);
+});
+
+test('local progress reflects the active side and layer from state', () => {
+  const { ts, ctx } = setup();
+  openHard(ts, ctx);
+  assert.match(html(ts), /data-ts-local-progress="1 \/ 3"/);
+  assert.match(html(ts), /data-ts-phase="思い出す"/);
+  act(ts, ctx, 'torisetsu-layer-next');
+  assert.match(html(ts), /data-ts-local-progress="1 \/ 3"/);
+  assert.match(html(ts), /class="ts-layer-count">2 \/ 4</);
+  const add = setup();
+  runChapter(add.ts, add.ctx, 'needs', A.data, { stopAt: 'insight' });
+  act(add.ts, add.ctx, 'torisetsu-add-item', { side: 'hard', returnTo: 'insight' });
+  assert.match(html(add.ts), /data-ts-local-progress="追加 4つ目"/);
+  const edit = setup();
+  runChapter(edit.ts, edit.ctx, 'needs', A.data, { stopAt: 'insight' });
+  act(edit.ts, edit.ctx, 'torisetsu-days');
+  act(edit.ts, edit.ctx, 'torisetsu-edit-item', { side: 'hard', index: '0' });
+  assert.match(html(edit.ts), /data-ts-local-progress="[^"]+"/);
+  const insight = setup();
+  runChapter(insight.ts, insight.ctx, 'needs', A.data, { stopAt: 'insight' });
+  assert.doesNotMatch(html(insight.ts), /data-ts-local-progress="[^"]+"/);
+});
+
+test('radio reselect is a no-op while multi-select reselect toggles', () => {
+  const voice = setup();
+  runChapter(voice.ts, voice.ctx, 'voice', B.data, { stopAt: 'insight' });
+  act(voice.ts, voice.ctx, 'torisetsu-compare');
+  act(voice.ts, voice.ctx, 'torisetsu-protect-next');
+  const reply = B.data.reply;
+  act(voice.ts, voice.ctx, 'torisetsu-chip', { group: 'reply', chip: reply });
+  const selected = voice.ts.data.voice.reply;
+  const feedbackNonce = voice.ts.feedbackNonce;
+  const selectedKey = torisetsuViewKey(voice.ts);
+  act(voice.ts, voice.ctx, 'torisetsu-chip', { group: 'reply', chip: reply });
+  assert.equal(voice.ts.data.voice.reply, selected);
+  assert.equal(voice.ts.feedbackNonce, feedbackNonce);
+  assert.equal(torisetsuViewKey(voice.ts), selectedKey);
+  const multi = setup(); openHard(multi.ts, multi.ctx);
+  act(multi.ts, multi.ctx, 'torisetsu-layer-next'); act(multi.ts, multi.ctx, 'torisetsu-layer-next');
+  act(multi.ts, multi.ctx, 'torisetsu-chip', { group: 'deep', chip: 'dp_uncared' });
+  const nonce = multi.ts.feedbackNonce;
+  act(multi.ts, multi.ctx, 'torisetsu-chip', { group: 'deep', chip: 'dp_uncared' });
+  assert.ok(!multi.ts.draft.deep.includes('dp_uncared'));
+  assert.ok(multi.ts.feedbackNonce > nonce);
 });
