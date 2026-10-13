@@ -50,6 +50,11 @@
       "dest": "/about/index.html"
     },
     {
+      "src": "/business/?",
+      "has": [{ "type": "host", "value": "about.mingle.cards" }],
+      "dest": "/about/business/index.html"
+    },
+    {
       "src": "/",
       "has": [{ "type": "host", "value": "partnerplan.mingle.cards" }],
       "dest": "/partnerplan/index.html"
