@@ -1566,20 +1566,22 @@ function contentsView(ts, h) {
   const { esc } = h;
   const done = doneCount(ts.data);
   const dots = CHAPTERS.map((chapter) => `<span class="ts-cell${ts.data[chapter.id].done ? ' is-done' : ''}"></span>`).join('');
+  const chapterArt = { needs: 'arrival-gallery.png', voice: 'deep-layers.png', values: 'discovery-sculpture.png' };
+  const statusLabel = { todo: '未着手', doing: '途中', done: '完了' };
   const rows = CHAPTERS.map((chapter) => {
     const status = chapterStatus(ts.data, chapter.id);
     const full = status === 'done';
     const label = full ? COPY.chapterReview : status === 'doing' ? COPY.chapterContinue : COPY.chapterStart;
     const line = chapterReady(chapter.id, ts.data) ? teaser(chapter.id, ts.data) : '';
-    return `<li class="ts-chapter${full ? ' is-done' : ''}"><div><strong>${esc(chapter.label)}</strong><small>${esc(chapter.subtitle)}${full ? `　${iconSvg('check', 14)}${esc(COPY.chapterDoneMark)}` : ''}</small>${line ? `<small class="ts-teaser">${esc(line)}</small>` : ''}</div><button type="button" class="${full ? 'secondary-button' : 'primary-button'} ts-chapter-button" data-action="torisetsu-chapter" data-chapter="${esc(chapter.id)}" aria-label="${esc(chapter.label)}を${esc(label)}">${esc(label)}</button></li>`;
+    const number = String(CHAPTERS.indexOf(chapter) + 1).padStart(2, '0');
+    return `<li class="ts-chapter ts-contents-card ts-status-${esc(status)}${full ? ' is-done' : ''}" data-ts-chapter="${esc(chapter.id)}" data-ts-status="${esc(status)}"><div class="ts-chapter-copy"><small class="ts-chapter-number">CHAPTER ${number}</small><strong>${esc(chapter.label)}</strong><small class="ts-chapter-subtitle">${esc(chapter.subtitle)}</small>${line ? `<small class="ts-teaser">${esc(line)}</small>` : ''}</div><img class="ts-chapter-thumb" src="./assets/torisetsu-gallery/${chapterArt[chapter.id]}" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /><div class="ts-chapter-footer"><span class="ts-chapter-status"><span aria-hidden="true">${full ? iconSvg('check', 14) : status === 'doing' ? '◐' : '○'}</span>${statusLabel[status]}</span><button type="button" class="${full ? 'secondary-button' : 'primary-button'} ts-chapter-button" data-action="torisetsu-chapter" data-chapter="${esc(chapter.id)}" aria-label="${esc(chapter.label)}を${esc(label)}">${esc(label)}<span aria-hidden="true">　→</span></button></div></li>`;
   }).join('');
   const label = done >= CHAPTERS.length ? COPY.allDone : COPY.progressLabel(done);
   const view = done > 0 || CHAPTER_IDS.some((id) => chapterReady(id, ts.data)) ? `<button type="button" class="secondary-button ts-view" data-action="torisetsu-manual">${esc(COPY.viewManual)}</button>` : '';
-  return `<div class="ts-contents" data-ts-key="contents">
-    <h1 class="ts-title" tabindex="-1" data-focus>${esc(COPY.contentsTitle)}</h1>
-    <div class="ts-progress"><div class="ts-cells" role="img" aria-label="${esc(label)}">${dots}</div><p class="ts-progress-label">${esc(label)}</p></div>
+  return `<div class="ts-contents ts-contents-editorial" data-ts-key="contents">
+    <header class="ts-contents-header"><h1 class="ts-title" tabindex="-1" data-focus>${esc(COPY.contentsTitle)}</h1><div class="ts-contents-progress"><p class="ts-progress-label">${esc(label)}</p><div class="ts-progress"><div class="ts-cells" role="img" aria-label="${esc(label)}">${dots}</div><span>${done} / ${CHAPTERS.length}</span></div></div></header>
     <ul class="ts-chapters">${rows}</ul>
-    ${view}
+    ${view ? `<div class="ts-contents-manual">${view}</div>` : ''}
   </div>`;
 }
 
