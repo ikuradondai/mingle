@@ -1508,6 +1508,10 @@ function daysView(ts, h) {
 function doneView(ts, h) {
   const { esc, support } = h; const cfg = cfgOf(ts);
   const complete = doneCount(ts.data) >= CHAPTERS.length;
+  const chapterIndex = Math.max(0, CHAPTERS.findIndex((chapter) => chapter.id === ts.chapterId));
+  const chapterNumber = chapterIndex + 1;
+  const chapterProgress = `完了 ${doneCount(ts.data)} / ${CHAPTERS.length}`;
+  const chapterMarkers = CHAPTERS.map((chapter, index) => `<li class="ts-done-chapter-marker${ts.data[chapter.id].done ? ' is-done' : ''}${index === chapterIndex ? ' is-current' : ''}"${index === chapterIndex ? ' aria-current="step"' : ''}><span>${index + 1}</span><small>${esc(chapter.short || chapter.label)}</small></li>`).join('');
   const nextChapter = CHAPTERS.find((item) => !ts.data[item.id].done && item.id !== ts.chapterId);
   const primary = nextChapter && !complete
     ? `<button type="button" class="primary-button" data-action="torisetsu-chapter" data-chapter="${esc(nextChapter.id)}">${esc(COPY.doneNext(nextChapter.label))}</button>`
@@ -1518,17 +1522,18 @@ function doneView(ts, h) {
     if (tryText) own.push({ id: 'try', chapterId: null, title: '来週ためしてみること', icon: 'wrench', number: 6, chapterLabel: '', state: 'filled', lines: [bullet(tryText), para(MANUAL_COPY.tryOutro)] });
     return own;
   } });
-  const banner = `<div class="ts-done-banner" role="img" aria-label="${esc(cfg.label)}のトリセツができました"><img src="./assets/torisetsu-gallery/book-cover-architecture.png" alt="" aria-hidden="true" width="180" height="120" /><span>${esc(cfg.label)}の章ができました</span></div>`;
-  return `<div class="ts-done ts-gallery" data-ts-key="done:${esc(ts.chapterId)}" data-ts-scene="gallery" data-gallery-stage="manual">
-    <h1 class="ts-title" tabindex="-1" data-focus><span class="ts-done-check">${iconSvg('check', 22)}</span>${esc(cfg.done.title)}</h1>
-    <p class="ts-lead">${esc(cfg.done.body)}</p>
-    ${banner}
-    ${progressMarkup(ts, esc)}
-    <div class="ts-actions">${primary}<button type="button" class="secondary-button" data-action="torisetsu-contents">${esc(COPY.toContents)}</button></div>
-    ${saveCardMarkup(ts, esc)}
-    <details class="ts-done-details"><summary>この章のトリセツを読む</summary>${paper}</details>
-    ${support ? support() : ''}
-  </div>`;
+  const book = `<figure class="ts-done-book"><img src="./assets/torisetsu-gallery/done-book-cover.png" alt="" aria-hidden="true" width="1086" height="1448" /><figcaption class="ts-done-book-label"><small>CHAPTER ${String(chapterNumber).padStart(2, '0')}</small><strong>${esc(cfg.label)}</strong></figcaption><span class="ts-done-book-brand">わたしのトリセツ<br>Mingle.cards</span></figure>`;
+  return `<section class="ts-done ts-done-gallery" data-ts-key="done:${esc(ts.chapterId)}" data-ts-scene="gallery" data-gallery-stage="manual" data-ts-done-chapter="${esc(ts.chapterId)}">
+    <nav class="ts-done-progress" aria-label="章の進み具合"><ol>${chapterMarkers}</ol><span class="ts-done-progress-count">${esc(chapterProgress)}</span></nav>
+    <div class="ts-done-layout"><div class="ts-done-visual">${book}<details class="ts-done-details"><summary>この章の内容</summary>${paper}</details></div><div class="ts-done-content">
+      <p class="ts-done-marker"><span aria-hidden="true"></span>CHAPTER ${String(chapterNumber).padStart(2, '0')}　${esc(cfg.short || cfg.label)}</p>
+      <h1 class="ts-title" tabindex="-1" data-focus>${esc(complete ? 'トリセツが、できました。' : 'この章が、できました。')}</h1>
+      <p class="ts-lead">${esc(cfg.done.body)}</p>
+      <div class="ts-done-actions"><div class="ts-actions">${primary}</div><button type="button" class="text-button ts-done-contents" data-action="torisetsu-contents">${esc(COPY.toContents)}</button></div>
+      <section class="ts-done-save" aria-label="保存設定">${saveCardMarkup(ts, esc)}</section>
+      ${support ? `<div class="ts-done-support">${support()}</div>` : ''}
+    </div></div>
+  </section>`;
 }
 
 function startView(ts, h) {

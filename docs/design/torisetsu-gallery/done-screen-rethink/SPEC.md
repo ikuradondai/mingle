@@ -1,0 +1,43 @@
+# Done screen rethink — ImageGen-first design
+
+## Deliverables
+
+- `done-desktop-mockup.png`: desktop completion UI reference, generated with built-in `image_gen__imagegen`.
+- `done-mobile-mockup.png`: 390px mobile completion UI reference, generated with built-in `image_gen__imagegen`.
+- These are visual design references only. All UI text, controls, privacy state, actions, and details remain HTML/CSS.
+
+## Design intent
+
+The completion moment is a quiet editorial chapter cover rather than a full-width banner. A compact progress line and by Mingle.cards header establish context. The desktop uses a book-cover/gallery image column and a clear completion column: small chapter marker, concise completion title, one sentence, one medium primary next-chapter CTA, and a text-only contents link. Privacy is an accessible compact disclosure below the main action. Current chapter details stay collapsed. Mobile stacks a controlled image crop, concise achievement message, one primary CTA, contents link, privacy disclosure, and collapsed details. Warm cream, deep navy, vivid blue, and a very small coral accent are retained. Thick left rails, asymmetric callout corners, giant banner surfaces, CTA stacks, and repeated rounded cards are removed.
+
+## Desktop prompt (exact)
+
+Use case: ui-mockup. Asset type: high-fidelity desktop product UI concept board for Mingle “わたしのトリセツ” chapter-complete screen. Primary request: redesign the entire completion screen as a refined, adult editorial digital manual experience, using the existing information structure only as content reference. Scene/backdrop: warm cream page with a restrained deep navy content canvas, generous white space, calm asymmetrical editorial layout. Subject: completion moment for one chapter, one clear primary next-chapter action, a quiet privacy choice, and a subtle link back to contents. Style/medium: polished contemporary Japanese editorial web UI, premium but humane, crisp sans-serif typography, no illustration-heavy decoration. Composition/framing: desktop 1440px wide screen shown as a realistic browserless app viewport; by Mingle.cards header at top; a narrow progress indication integrated into the header region; main content arranged as a balanced two-column composition with a compact architectural book-cover image or gallery crop on the left and completion title plus one-sentence reassurance on the right; a small chapter-complete marker; primary CTA is one medium-width navy or vivid blue button; contents is a quiet text link; privacy save choice is a compact accessible disclosure panel below with two clearly readable options and restrained controls; completed chapter details are collapsed behind a single text disclosure. Avoid full-width stacked buttons, giant banner, giant heading, repeated rounded cards, excessive cream rectangle, dense text, dashboard grids, left vertical color strips, pseudo decorative rails, fake AI ornaments, multiple pills, heavy shadows, gradients, childish illustration, gender-coded people, flowers, hearts, retro Showa, watercolor, cheap stock. Color palette: warm cream, deep navy, Mingle vivid blue, very small coral accent, no loud gradient. Materials/textures: flat editorial surfaces with subtle paper warmth only. Text (verbatim): use only short realistic Japanese UI fragments such as “章ができました”, “次の章へ”, “目次”, “この端末に残す？”, “残さない”, “この章を読む”; keep all other text minimal and legible. Constraints: this is a visual reference for implementation, not a production image; keep UI controls and copy separate in final HTML/CSS; no logo recreation, no watermark, no phone or browser chrome; show a mature, beautiful, spacious completion experience.
+
+## Mobile prompt (exact)
+
+Use case: ui-mockup. Asset type: high-fidelity mobile product UI concept for Mingle “わたしのトリセツ” chapter-complete screen. Design a mature editorial completion experience in a 390px mobile viewport, using only the content structure as reference and redesigning the visual hierarchy. Keep a slim by Mingle.cards header with back and contents link, a compact progress marker, a single restrained book-cover or architectural crop with generous margins, then a concise completion title and one sentence. Show exactly one clear primary blue action for the next chapter, with a quiet text link to contents. Place the privacy choice in a compact accessible disclosure below, with readable radio-like options “この端末に残す？” and “残さない”, without stealing attention from the achievement. Keep chapter details behind one collapsed text disclosure. Warm cream background, deep navy typography, vivid blue action, tiny coral dot accent. Crisp contemporary Japanese editorial design, generous whitespace, strong hierarchy, no full-width stacked CTA wall, no giant banner, no repeated rounded cards, no thick left color rails, no decorative pseudo-AI ornaments, no pill festival, no heavy shadows, no loud gradients, no childish illustration, no gender-coded person, no flowers/hearts, no retro Showa, no dashboard UI. Use only short legible Japanese labels; this is a design reference and final HTML/CSS will render exact text. No logo recreation, no watermark, no browser or phone chrome.
+
+## Production book asset
+
+- Production path: `C:\dev\carding\wt-torisetsu-redesign-qa\dist\assets\torisetsu-gallery\done-book-cover.png`
+- Original archive: `C:\dev\carding\wt-torisetsu-redesign-qa\docs\design\torisetsu-gallery\done-screen-rethink\done-book-cover-original.png`
+- Built-in ImageGen output is RGBA `(1086, 1448)` with alpha range `(0,255)`. No manual pixel edit or background removal was performed.
+
+### Exact book prompt
+
+Use case: product-mockup. Asset type: transparent isolated editorial book object for the Mingle “わたしのトリセツ” completion screen. Create one upright navy hardcover book, nearly front-facing with minimal perspective and a clean rectangular silhouette. The cover is deep navy tactile cloth with a subtle architectural light-and-shadow inset on the right side of the cover, like a quiet cream stone arch and pale sky reflection, refined contemporary Japanese editorial photography. Keep the book centered, vertical, and compact enough for a 210–240px mobile image column and a larger desktop left column. Transparent background outside the book, with no table, no room, no cast shadow, no halo. The cover must be completely blank: no text, letters, numbers, chapter labels, logo, watermark, buttons, or UI. No people, no hands, no gender cues. No childish illustration, watercolor diary, collage paper, flowers, hearts, retro Showa, cheap stock, loud gradient, excessive grain, or glossy 3D toy look. Preserve real alpha transparency.
+
+## Implementation contract for done screen
+
+- Root keeps `ts-done` and adds a done-specific gallery/layout class; this screen alone uses the redesign layer.
+- Desktop: left book column (`done-book-cover.png`) and right completion/content column. The book image uses `object-fit:contain`, a controlled aspect ratio, and no baked text.
+- Mobile: book is approximately 210–240px wide and 240px-ish tall before the completion title; keep the next CTA reachable without a large image or banner.
+- Preserve behavior: next action remains `torisetsu-chapter` when another chapter exists and `torisetsu-manual` at the end; contents remains `torisetsu-contents`; save choice remains explicit and defaults unselected; current chapter details remain a collapsed `details` section.
+- Use one medium primary CTA, a text link for contents, a compact privacy choice, fine dividers, and no full-width CTA stack or decorative left rails.
+
+## Final implementation status
+
+- The three design assets are references/production media only: `done-desktop-mockup.png` and `done-mobile-mockup.png` are review boards, while `dist/assets/torisetsu-gallery/done-book-cover.png` is the production book object. The book PNG is the only image embedded by the done screen; all labels and controls are rendered by HTML/CSS.
+- The mockup's sample chapter number, sample logo/header treatment, and preselected save choice are not production content. The live header remains the existing “わたしのトリセツ by Mingle.cards” header, chapter markers use the actual chapter data/count, and save defaults remain unselected while preserving the existing opt-in behavior.
+- The implemented done layer is scoped to `.ts-done-gallery`: desktop uses a left book and right content column, mobile moves the collapsed chapter details after content/save, and tablet widths stack the layout to avoid overflow. The production CSS also keeps the book brand inside the navy cover with a safe lower inset and shortens the desktop progress-to-book gap.

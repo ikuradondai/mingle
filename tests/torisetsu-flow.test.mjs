@@ -307,6 +307,16 @@ test('example B through the actions: protect → reply → surprise → try → 
   assert.ok(manual.sections.find((s) => s.id === 'voice').lines.some((l) => l.text === '「気にしすぎだよ、大丈夫」'));
 });
 
+test('done progress counts completed chapters without marking earlier chapters complete', () => {
+  const { ts, ctx } = setup();
+  runChapter(ts, ctx, 'voice', B.data, { stopAt: 'done' });
+  const view = html(ts);
+  assert.match(view, /ts-done-progress-count[^>]*>完了 1 \/ 3</);
+  assert.match(view, /ts-done-chapter-marker is-done is-current/);
+  assert.match(view, /ts-done-chapter-marker[^>]*><span>1<\/span>/);
+  assert.doesNotMatch(view, /ts-done-chapter-marker is-done[^>]*><span>1<\/span>/);
+});
+
 test('a focus whose scenes are later removed falls back, and its stale reply is dropped', () => {
   const { ts, ctx } = setup();
   runChapter(ts, ctx, 'voice', B.data, { stopAt: 'insight' });
