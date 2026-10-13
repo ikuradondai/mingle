@@ -1,271 +1,227 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { CHAPTERS, SECTIONS, COPY } from '../dist/data/torisetsu-content.js';
-import {
-  composeSection, composeManual, sectionPlainText, normalizeAnswer, progress, sanitizeText, torisetsuView, createTorisetsuState, applyAction,
-} from '../dist/torisetsu.js';
+import * as C from '../dist/data/torisetsu-content.js';
+import { torisetsuView, createTorisetsuState, applyAction, composeManual, normalizeData } from '../dist/torisetsu.js';
+import * as I from '../dist/torisetsu-insight.js';
 import { soloDecks } from '../dist/data/solo-decks.js';
 import { BANNED, STIFF_WORDS } from './helpers/banned-words.mjs';
+import { runChapter, makeCtx } from './helpers/torisetsu-flow.mjs';
+import * as ex1 from './fixtures/torisetsu/example1-office-worker.mjs';
+import * as ex2 from './fixtures/torisetsu/example2-retired.mjs';
+import * as ex3 from './fixtures/torisetsu/example3-student.mjs';
 
 const len = (text) => Array.from(text).length;
 const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[c]);
 
-// 文言を全部集める（チップの形、固定文、関数で作る文）。
+// この機能だけの禁止語（共通の BANNED に追加）
+const EXTRA_BANNED = [/あなた/u, /タイプ/u, /性格/u, /診断/u, /傾向/u, /型/u, /な人です/u, /向いていない/u, /ダメ/u, /べき/u, /必ず/u, /絶対/u];
+
+// 文言を全部集める
 function allStrings() {
   const out = [];
   const add = (label, value) => { if (typeof value === 'string' && value) out.push([label, value]); };
-  for (const chapter of CHAPTERS) { add(`${chapter.id}.label`, chapter.label); add(`${chapter.id}.subtitle`, chapter.subtitle); add(`${chapter.id}.done`, chapter.done); }
-  for (const section of SECTIONS) {
-    for (const key of ['title', 'question', 'hint', 'typeQuestion', 'nameLabel', 'namePlaceholder', 'textPlaceholder', 'tail', 'intro', 'outro']) add(`${section.id}.${key}`, section[key]);
-    for (const item of section.chips) for (const key of ['label', 'line', 'cond', 'tari', 'toki']) add(`${section.id}.${item.id}.${key}`, item[key]);
-    if (section.textLine) add(`${section.id}.textLine`, section.textLine('テスト'));
-    if (section.textForms) for (const [k, v] of Object.entries(section.textForms('テスト'))) add(`${section.id}.textForms.${k}`, v);
-    if (section.outroFromFirst) add(`${section.id}.outroFromFirst`, section.outroFromFirst('テスト'));
+  for (const chapter of C.CHAPTERS) {
+    for (const key of ['label', 'subtitle', 'short', 'teaserNone']) add(`${chapter.id}.${key}`, chapter[key]);
+    for (const key of ['question', 'hint', 'footer', 'title']) add(`${chapter.id}.predict.${key}`, chapter.predict[key]);
+    add(`${chapter.id}.done.title`, chapter.done.title); add(`${chapter.id}.done.body`, chapter.done.body); add(`${chapter.id}.again`, chapter.again.text);
   }
-  for (const [key, value] of Object.entries(COPY)) add(`COPY.${key}`, typeof value === 'function' ? value('基本編') : value);
+  for (const group of C.DAY_GROUPS) add(`group.${group.id}`, group.label);
+  for (const chip of [...C.DAY_CHIPS, ...C.COMBO_FEATURES]) for (const key of ['label', 'tag', 'power', 'lamp', 'tryMore', 'tryLess']) add(`${chip.id}.${key}`, chip[key]);
+  for (const item of C.ENERGY_PREDICTIONS) add(`pred.${item.id}`, item.label);
+  for (const item of C.VALUES) for (const key of ['label', 'request', 'tryMore']) add(`${item.id}.${key}`, item[key]);
+  for (const side of ['neg', 'pos']) {
+    for (const item of C.SITUATIONS[side]) add(item.id, item.label);
+    for (const item of C.FEELINGS[side]) add(item.id, item.label);
+  }
+  for (const item of C.STRENGTHS) for (const key of ['label', 'tryMore', 'tryShow']) add(`${item.id}.${key}`, item[key]);
+  for (const item of [...C.TASKS, ...C.KINDS, ...C.FROMS]) add(item.id, item.label);
+  for (const [key, value] of Object.entries(C.INTRO)) { add(`intro.${key}.title`, value.title); value.lines.forEach((line, i) => add(`intro.${key}.${i}`, line)); add(`intro.${key}.button`, value.button); }
+  for (const [key, value] of Object.entries(C.SIDE_COPY)) add(`side.${key}`, value.label);
+  for (const [key, value] of Object.entries(C.DAY_MEMO)) add(`dayMemo.${key}`, value);
+  for (const [key, value] of Object.entries(C.EPISODE_MEMO)) add(`epMemo.${key}`, value);
+  for (const label of [...C.STEP_LABELS, ...C.STEP_LABELS_OTHERS]) add('step', label);
+  for (const section of C.MANUAL_SECTIONS) add(`section.${section.id}`, section.title);
+  for (const [key, value] of Object.entries(C.MANUAL_COPY)) add(`MANUAL.${key}`, typeof value === 'function' ? value('テスト') : value);
+  const sample = { limitMessage: [2], memoCount: [3, 30], missingGroups: [[ '誰といた', '前の晩は' ]], dayHeading: ['good', 1, 3], episodeHeading: [1, 2], progressLabel: [1], gapThought: ['テスト'], compareLine: [3, 3], lineupOneDay: [2], doneNext: ['元気のもと'], doneCheck: ['テスト'], freeCount: [3] };
+  for (const [key, value] of Object.entries(C.COPY)) add(`COPY.${key}`, typeof value === 'function' ? value(...(sample[key] || ['テスト'])) : value);
+  add('deck.subtitle', C.COPY.deckSubtitle); add('deck.description', C.COPY.deckDescription);
   return out;
 }
 
-test('8 sections in 3 chapters (3/3/2) with unique ids', () => {
-  assert.equal(SECTIONS.length, 8);
-  assert.deepEqual(CHAPTERS.map((chapter) => chapter.sections.length), [3, 3, 2]);
-  assert.equal(new Set(SECTIONS.map((section) => section.id)).size, 8);
-  assert.deepEqual(CHAPTERS.flatMap((chapter) => chapter.sections), SECTIONS.map((section) => section.id));
-  for (const section of SECTIONS) {
-    assert.equal(CHAPTERS.find((chapter) => chapter.id === section.chapterId).sections.includes(section.id), true, section.id);
-    assert.equal(new Set(section.chips.map((item) => item.id)).size, section.chips.length, `${section.id}: duplicate chip id`);
-  }
+test('3 chapters with unique ids; every id space is unique', () => {
+  assert.deepEqual(C.CHAPTERS.map((chapter) => chapter.id), ['energy', 'values', 'others']);
+  const unique = (label, ids) => assert.equal(new Set(ids).size, ids.length, `${label}: duplicate id`);
+  unique('chips', C.DAY_CHIPS.map((x) => x.id));
+  unique('features', C.ENERGY_FEATURES.map((x) => x.id));
+  unique('groups', C.DAY_GROUPS.map((x) => x.id));
+  unique('values', C.VALUES.map((x) => x.id));
+  unique('situations', [...C.SITUATIONS.neg, ...C.SITUATIONS.pos].map((x) => x.id));
+  unique('feelings', [...C.FEELINGS.neg, ...C.FEELINGS.pos].map((x) => x.id));
+  unique('strengths', C.STRENGTHS.map((x) => x.id));
+  unique('tasks', C.TASKS.map((x) => x.id));
+  unique('kinds+froms', [...C.KINDS, ...C.FROMS].map((x) => x.id));
+  unique('predictions', C.ENERGY_PREDICTIONS.map((x) => x.id));
+  unique('manual sections', C.MANUAL_SECTIONS.map((x) => x.id));
+  assert.equal(C.MANUAL_SECTIONS.length, 7);
+  // 日の入力グループの上限
+  assert.deepEqual(C.DAY_GROUPS.map((g) => [g.id, g.max]), [['who', 2], ['where', 2], ['doing', 3], ['sleep', 1], ['body', 1]]);
+  assert.deepEqual([C.CHAPTERS[0].init, C.CHAPTERS[0].min, C.CHAPTERS[0].max], [3, 2, 5]);
 });
 
-test('chip counts, label/line/question lengths and placeholders follow the limits', () => {
-  for (const section of SECTIONS) {
-    assert.ok(section.chips.length >= 6 && section.chips.length <= 10, `${section.id}: chips ${section.chips.length}`);
-    assert.ok(len(section.question) <= 40, `${section.id}: question`);
-    assert.match(section.textPlaceholder, /^例：/u, `${section.id}: placeholder`);
-    for (const item of section.chips) {
-      assert.ok(len(item.label) <= 12, `${section.id}.${item.id}: label ${item.label}`);
-      for (const key of ['line', 'cond', 'tari', 'toki']) if (item[key]) assert.ok(len(item[key]) <= 40, `${section.id}.${item.id}.${key}: ${item[key]}`);
-    }
-    if (section.mode === 'list' || section.mode === 'steps') for (const item of section.chips) assert.ok(item.line, `${section.id}.${item.id}: needs line`);
-    if (section.mode === 'cond') for (const item of section.chips) assert.ok(item.cond && item.tari, `${section.id}.${item.id}: needs cond/tari`);
-    if (section.mode === 'toki') for (const item of section.chips) assert.ok(item.toki, `${section.id}.${item.id}: needs toki`);
-  }
+test('references line up (situations -> values, tasks -> strengths, predictions -> features, v1 migration)', () => {
+  const valueIds = new Set(C.VALUES.map((x) => x.id));
+  for (const item of [...C.SITUATIONS.neg, ...C.SITUATIONS.pos]) assert.ok(valueIds.has(item.value), item.id);
+  const strengthIds = new Set(C.STRENGTHS.map((x) => x.id));
+  for (const task of C.TASKS) assert.ok(strengthIds.has(task.strength), task.id);
+  const featureIds = new Set(C.ENERGY_FEATURES.map((x) => x.id));
+  for (const item of C.ENERGY_PREDICTIONS) assert.ok(featureIds.has(item.id), item.id);
+  for (const feature of C.ENERGY_FEATURES) { assert.ok(feature.tag, feature.id); assert.ok(feature.lamp, `${feature.id}: lamp`); }
+  for (const combo of C.COMBO_FEATURES) for (const member of combo.members) assert.ok(C.DAY_CHIPS.some((chip) => chip.id === member), member);
+  for (const [a, b] of C.OPPOSITES) { assert.ok(featureIds.has(a)); assert.ok(featureIds.has(b)); }
+  // chips not reported on: home / ふつう / 覚えていない
+  for (const id of ['where_home', 'sleep_ok', 'sleep_unknown', 'body_ok']) assert.equal(C.DAY_CHIPS.find((chip) => chip.id === id).rep, false, id);
+  assert.equal(C.VALUE_PREDICTIONS?.length ?? C.VALUES.length, 9);
 });
 
-test('no banned, diagnostic, stiff words or あなた anywhere in the builder copy', () => {
+test('length limits: chips 16, tag 14, power/lamp 20, try/request 34, questions 40, sentences 70', () => {
+  for (const chip of [...C.DAY_CHIPS, ...C.COMBO_FEATURES]) {
+    assert.ok(len(chip.label) <= 16, chip.id);
+    assert.ok(len(chip.tag) <= 14, `${chip.id} tag`);
+    assert.ok(len(chip.power) <= 20, `${chip.id} power`);
+    assert.ok(len(chip.lamp) <= 20, `${chip.id} lamp`);
+    assert.ok(len(chip.tryMore) <= 34 && len(chip.tryLess) <= 34, `${chip.id} try`);
+  }
+  for (const item of [...C.ENERGY_PREDICTIONS, ...C.VALUES, ...C.SITUATIONS.neg, ...C.SITUATIONS.pos, ...C.FEELINGS.neg, ...C.FEELINGS.pos, ...C.STRENGTHS, ...C.TASKS, ...C.KINDS, ...C.FROMS]) assert.ok(len(item.label) <= 16, item.id);
+  for (const value of C.VALUES) { assert.ok(len(value.request) <= 34, value.id); assert.ok(len(value.tryMore) <= 34, value.id); }
+  for (const item of C.STRENGTHS) { assert.ok(len(item.tryMore) <= 34 && len(item.tryShow) <= 34, item.id); }
+  for (const chapter of C.CHAPTERS) { assert.ok(len(chapter.predict.question) <= 40); assert.ok(len(chapter.again.text) <= 34, chapter.id); }
+  for (const group of C.DAY_GROUPS) assert.ok(len(group.label) <= 40);
+  for (const intro of Object.values(C.INTRO)) assert.ok(len(intro.title) <= 40, intro.title);
+  for (const [label, text] of allStrings()) for (const sentence of text.split('。').filter(Boolean)) assert.ok(len(sentence) <= 70, `${label}: ${sentence}`);
+});
+
+test('banned and stiff words never appear (shared list + this feature)', () => {
   for (const [label, text] of allStrings()) {
-    for (const pattern of BANNED) assert.doesNotMatch(text, pattern, `${label}: ${text}`);
+    for (const pattern of [...BANNED, ...EXTRA_BANNED]) assert.doesNotMatch(text, pattern, `${label}: ${text}`);
     for (const pattern of STIFF_WORDS) assert.doesNotMatch(text, pattern, `${label}: ${text}`);
-    assert.doesNotMatch(text, /あなた/u, label);
   }
 });
 
-test('overly soft hiragana words from the kanji pass are not left in the copy', () => {
-  const all = allStrings().map(([, text]) => text).join('\n');
-  for (const word of ['ねむ', 'さいご', 'へる', 'おそい', 'ちらかる', 'あたたかい', '飲みもの', '落ちこ', 'つづける', 'ためす', 'たよる', 'ひとこと', '気くばり', 'しんちょう', '負けずぎらい', '書きこ', 'かたづけ', 'あびる']) {
-    assert.ok(!all.includes(word), `still hiragana: ${word}`);
+test('assembled insight sentences also avoid banned words and stay short', () => {
+  const sentences = [];
+  const ins = I.energyInsights(ex1.input.good, ex1.input.bad);
+  sentences.push(...[...ins.ordered.good, ...ins.ordered.bad].map((x) => x.sentence), ins.footer, ins.footerAdd);
+  const b = I.energyInsights(Array.from({ length: 5 }, (_, i) => ({ ...ex1.input.good[0], doing: ['do_help'], who: ['who_mates'] })), Array.from({ length: 5 }, () => ({ ...ex1.input.bad[0] })));
+  sentences.push(...b.ordered.good.map((x) => x.sentence), ...b.ordered.bad.map((x) => x.sentence));
+  sentences.push(...I.valuesInsights(ex2.input.neg, ex2.input.pos).ordered.map((x) => x.sentence));
+  sentences.push(...I.othersInsights(ex3.input.self, ex3.input.episodes).lines.map((x) => x.text));
+  // すべての特徴を 2 日以上あるものとして作った最長の文
+  for (const feature of C.ENERGY_FEATURES) {
+    for (const side of ['good', 'bad']) for (const stage of ['A', 'B']) sentences.push(I.renderEnergySentence({ id: feature.id, tag: feature.tag, side, stage, g: 3, b: 1, nG: 5, nB: 5 }));
   }
-});
-
-function combos(section) {
-  const ids = section.chips.map((item) => item.id);
-  const list = [];
-  for (const id of ids) list.push([id]);
-  for (let i = 0; i < ids.length; i += 1) for (let j = 0; j < ids.length; j += 1) if (i !== j && section.max >= 2) list.push([ids[i], ids[j]]);
-  if (section.max >= 3) list.push(ids.slice(0, 3));
-  return list;
-}
-
-test('every composition combo is well formed (no undefined/null/braces, ends with 。, <=160 chars)', () => {
-  const longText = 'あ'.repeat(30);
-  for (const section of SECTIONS) {
-    const cases = [];
-    for (const chips of combos(section)) { cases.push({ chips, text: '' }); if (chips.length < section.max) cases.push({ chips, text: 'テスト' }); }
-    cases.push({ chips: [], text: 'テスト' }, { chips: [], text: section.mode === 'name' ? 'あ'.repeat(12) : longText });
-    if (section.mode === 'name') cases.push({ chips: [], text: '', name: 'のんびり号' }, { chips: ['mypace'], text: '', name: 'のんびり号' });
-    for (const answer of cases) {
-      const composed = composeSection(section.id, answer);
-      assert.equal(composed.empty, false, `${section.id} ${JSON.stringify(answer)}`);
-      const text = sectionPlainText(composed);
-      assert.doesNotMatch(text, /undefined|null|NaN|[{}]/u, `${section.id}: ${text}`);
-      if (section.mode !== 'name') {
-        assert.ok(text.endsWith('。'), `${section.id}: ${text}`);
-        assert.ok(len(text.replace(/\n/g, '')) <= 160, `${section.id}: ${len(text)} ${text}`);
-      }
-    }
+  for (const text of sentences) {
+    for (const pattern of [...BANNED, ...EXTRA_BANNED, ...STIFF_WORDS]) assert.doesNotMatch(text, pattern, text);
+    for (const sentence of text.split('。').filter(Boolean)) assert.ok(len(sentence) <= 70, `${len(sentence)}: ${sentence}`);
   }
+  // 「ラベル」を貼らない: 気づきの文は『今回の答え』か回数を伴う
+  assert.match(C.COPY.insightIntro, /今回の答えでは/);
 });
 
-test('composition shape: fixed expected sentences', () => {
-  const text = (id, answer) => sectionPlainText(composeSection(id, answer));
-  assert.equal(text('warning', { chips: ['sleepy'] }), '眠くなったら、充電が切れかけています。早めに休ませてあげてください。');
-  assert.equal(text('warning', { chips: ['sleepy', 'quiet'] }), '眠くなったり、口数が減ったりしたら、充電が切れかけています。早めに休ませてあげてください。');
-  assert.equal(text('warning', { chips: [], text: 'ため息が多くなる' }), '「ため息が多くなる」が出たら、充電が切れかけています。早めに休ませてあげてください。');
-  assert.equal(text('warning', { chips: ['sleepy'], text: 'ため息が多くなる' }), '眠くなったり、「ため息が多くなる」が出たりしたら、充電が切れかけています。早めに休ませてあげてください。');
-  assert.equal(text('handle', { chips: ['tired', 'hungry'] }), '疲れて帰ってきたときや、お腹がすいているときは、少しそっとしておいてください。時間がたてば、元に戻ります。');
-  assert.equal(text('handle', { chips: ['tired', 'hungry', 'cry'] }), '疲れて帰ってきたときや、お腹がすいているときや、泣きたい気分のときは、少しそっとしておいてください。時間がたてば、元に戻ります。');
-  assert.equal(text('recovery', { chips: ['warm-drink', 'sleep-early', 'talk'] }), '次の順番で、試してください。\n1. 温かい飲み物を飲む\n2. 早めに寝る\n3. 誰かに話を聞いてもらう\nそれでも直らないときは、誰かに頼ってOKです。');
-  assert.equal(text('upkeep', { chips: ['alone', 'meal'] }), '・一人の時間をつくる\n・ごはんをちゃんと食べる\n特に「一人の時間」は、忙しい日も削らないでください。');
-  assert.equal(text('upkeep', { chips: [], text: '寝る前にストレッチ' }), '・「寝る前にストレッチ」\n「寝る前にストレッチ」は、忙しい日も削らないでください。');
-  assert.equal(text('switch', { chips: ['eat', 'walk'] }), '・おいしい物を食べる\n・外を少し歩く\nどれか1つで、スイッチが入ります。');
-  assert.equal(text('strengths', { chips: ['listen', 'absorbed'] }), '・人の話を、最後まで聞けます。\n・好きなことには、とことん夢中になれます。');
-  assert.equal(text('name', { name: 'のんびり号', chips: ['mypace', 'listener'] }), '製品名：のんびり号\nタイプ：マイペース・聞き上手モデル');
-  assert.equal(text('name', { chips: ['mypace'], text: '朝に強い' }), '製品名：わたし\nタイプ：マイペース・「朝に強い」モデル');
-});
-
-test('answers are validated: unknown ids dropped, limits enforced, control characters removed', () => {
-  const section = SECTIONS.find((item) => item.id === 'warning');
-  assert.equal(normalizeAnswer(section, { chips: ['nope'], text: '' }), null);
-  assert.deepEqual(normalizeAnswer(section, { chips: ['sleepy', 'sleepy', 'quiet', 'heavy', 'phone'], text: '' }).chips, ['sleepy', 'quiet', 'heavy']);
-  assert.equal(normalizeAnswer(section, { chips: [], text: 'あ'.repeat(50) }).text.length, 30);
-  assert.equal(normalizeAnswer(section, { chips: ['sleepy', 'quiet', 'heavy'], text: 'x' }).chips.length, 2);
-  assert.equal(sanitizeText('a\nb\tc\u0007d'), 'a b c d'.replace(/ /g, ' '));
-  const name = SECTIONS.find((item) => item.id === 'name');
-  assert.equal(normalizeAnswer(name, { name: 'あ'.repeat(20), chips: [] }).name.length, 12);
-  assert.equal(normalizeAnswer(name, { chips: ['mypace', 'steady', 'listener'] }).chips.length, 2);
-});
-
-test('progress counts answered sections per chapter', () => {
-  assert.deepEqual(progress({}), { done: 0, total: 8, byChapter: { basic: { done: 0, total: 3 }, trouble: { done: 0, total: 3 }, people: { done: 0, total: 2 } } });
-  const p = progress({ name: { chips: ['mypace'], text: '' }, warning: { chips: ['sleepy'], text: '' }, request: { chips: [], text: 'x' } });
-  assert.equal(p.done, 3);
-  assert.equal(p.byChapter.people.done, 1);
-});
-
-test('manual composition: cover title, numbering and empty sections', () => {
-  const empty = composeManual({}, { today: '2026-10-13' });
-  assert.equal(empty.title, 'わたしの取扱説明書');
-  assert.equal(empty.sections.length, 7);
-  assert.ok(empty.sections.every((section) => section.empty));
-  assert.deepEqual(empty.sections.map((section) => section.number), [1, 2, 3, 4, 5, 6, 7]);
-  assert.equal(empty.version, '第1版 2026年10月');
-  const full = composeManual({ name: { name: 'のんびり号', chips: ['mypace'], text: '' }, strengths: { chips: ['listen'], text: '' } }, { today: '2026-10-13' });
-  assert.equal(full.title, 'のんびり号 取扱説明書');
-  assert.equal(full.typeLine, 'タイプ：マイペースモデル');
-  assert.equal(full.sections[0].empty, false);
-});
-
-test('rendered screens never contain あなた or banned words and escape free text', () => {
-  const helpers = { esc, today: '2026-10-13', support: () => '' };
-  const ts = createTorisetsuState();
-  const payload = '<img src=x onerror=alert(1)>';
-  const views = [];
-  views.push(torisetsuView(ts, helpers));
-  applyAction(ts, 'torisetsu-begin');
-  views.push(torisetsuView(ts, helpers));
-  for (const chapter of CHAPTERS) {
-    applyAction(ts, 'torisetsu-chapter', { chapter: chapter.id });
-    for (const id of chapter.sections) {
-      assert.equal(ts.sectionId, id);
-      applyAction(ts, 'torisetsu-write');
-      ts.draft.text = payload.slice(0, 12);
-      ts.draft.chips = [SECTIONS.find((section) => section.id === id).chips[0].id];
-      views.push(torisetsuView(ts, helpers));
-      applyAction(ts, 'torisetsu-commit', {}, { storage: null, today: '2026-10-13' });
-      views.push(torisetsuView(ts, helpers));
-    }
-  }
-  assert.equal(ts.view, 'chapterDone');
-  views.push(torisetsuView(ts, helpers));
-  applyAction(ts, 'torisetsu-manual');
-  views.push(torisetsuView(ts, helpers));
-  for (const html of views) {
-    assert.doesNotMatch(html, /あなた/u);
-    assert.doesNotMatch(html, /<img /u);
-    const visible = html.replace(/<[^>]*>/g, ' ');
-    for (const pattern of BANNED) assert.doesNotMatch(visible, pattern);
-  }
-  assert.ok(views.some((html) => html.includes('&lt;img')));
-});
-
-test('self-values deck keeps its 12 cards and opens the builder', () => {
+test('the deck card matches the redesign and keeps the old 12 questions', () => {
   const deck = soloDecks.find((item) => item.id === 'self-values');
   assert.equal(deck.builder, 'torisetsu');
-  assert.deepEqual(deck.questions.map((card) => card.id), Array.from({ length: 12 }, (_, i) => `self-values-${String(i + 1).padStart(2, '0')}`));
-  assert.ok(deck.description.includes('8つの欄'));
+  assert.equal(deck.subtitle, C.COPY.deckSubtitle);
+  assert.equal(deck.description, C.COPY.deckDescription);
+  assert.ok(!deck.description.includes('12問'));
+  assert.ok(len(deck.description) <= 100);
+  assert.equal(deck.questions.length, 12);
 });
 
-test('solo recommendation shelf starts with self-values and keeps the old order after it', async () => {
-  const { readFileSync } = await import('node:fs');
-  const source = readFileSync(new URL('../dist/app.js', import.meta.url), 'utf8');
-  assert.match(source, /const torisetsuDeck = all\.find\(\(deck\) => deck\.id === 'self-values'\)/);
-  assert.match(source, /const recommendedWithSponsors = \[\.\.\.\(torisetsuDeck \? \[torisetsuDeck\] : \[\]\)/);
-  assert.match(source, /recommendedRest = recommended\.filter\(\(deck\) => deck\.id !== 'self-values'\)/);
-  // 既存のおすすめ順（基準 id）は変えない
-  assert.match(source, /const recommendedIds = \['self-checkin', 'self-values', 'self-confidence', 'self-work', 'self-school', 'self-love-now', 'self-decision', 'self-strengths'\];/);
+test('chips fit students, workers, homemakers and retirees (neutral wording)', () => {
+  const who = C.DAY_CHIPS.filter((chip) => chip.group === 'who').map((chip) => chip.label);
+  const doing = C.DAY_CHIPS.filter((chip) => chip.group === 'doing').map((chip) => chip.label);
+  assert.ok(who.includes('学校や仕事の人'));
+  assert.ok(doing.includes('勉強や仕事') && doing.includes('家事や用事') && doing.includes('趣味・好きなこと'));
+  assert.ok(C.DAY_CHIPS.find((chip) => chip.id === 'where_work').label === '学校や職場');
+  for (const [label, text] of allStrings()) assert.doesNotMatch(text, /彼氏|彼女|旦那|奥さん|主婦|部下|上司|先輩|息子|娘/u, `${label}: ${text}`);
 });
 
-test('single-item and free-text-only forms read naturally', () => {
-  const text = (id, answer) => sectionPlainText(composeSection(id, answer));
-  assert.equal(text('switch', { chips: ['eat'] }), '・おいしい物を食べる\nこれで、スイッチが入ります。');
-  assert.equal(text('switch', { chips: [], text: 'コーヒーを入れる' }), '・「コーヒーを入れる」\nこれで、スイッチが入ります。');
-  assert.equal(text('recovery', { chips: ['warm-drink'] }), 'まずは、これを試してください。\n温かい飲み物を飲む\nそれでも直らないときは、誰かに頼ってOKです。');
-  assert.equal(text('recovery', { chips: [], text: '散歩する' }), 'まずは、これを試してください。\n「散歩する」\nそれでも直らないときは、誰かに頼ってOKです。');
-  assert.doesNotMatch(text('recovery', { chips: ['warm-drink'] }), /次の順番|1\./u);
-  assert.equal(composeSection('recovery', { chips: ['warm-drink'] }).lines.some((line) => line.kind === 'step'), false);
-  assert.equal(text('strengths', { chips: [], text: '道案内' }), '・「道案内」が得意です。');
-  assert.equal(text('strengths', { chips: ['listen'], text: '道案内' }), '・人の話を、最後まで聞けます。\n・「道案内」も得意です。');
-  assert.equal(text('upkeep', { chips: ['meal'] }), '・ごはんをちゃんと食べる\n「ごはんを食べる」は、忙しい日も削らないでください。');
-});
-
-test('save card appears only after a chapter is fully completed', () => {
-  const helpers = { esc, today: '2026-10-13', support: () => '' };
+test('free text is escaped everywhere it is shown', () => {
+  const evil = '<img src=x onerror=1>&"\'';
   const ts = createTorisetsuState();
-  applyAction(ts, 'torisetsu-manual');
-  assert.doesNotMatch(torisetsuView(ts, helpers), /torisetsu-save"/u);
-  assert.match(torisetsuView(ts, helpers), /章を1つ書き終えると/u);
-  ts.answers.name = { chips: ['mypace'], text: '' };
-  ts.answers.strengths = { chips: ['listen'], text: '' };
-  assert.doesNotMatch(torisetsuView(ts, helpers), /data-action="torisetsu-save"/u);
-  ts.answers.switch = { chips: ['eat'], text: '' };
-  const html = torisetsuView(ts, helpers);
-  assert.match(html, /data-action="torisetsu-save"/u);
-  assert.doesNotMatch(html, /章を1つ書き終えると/u);
+  const ctx = makeCtx();
+  const input = JSON.parse(JSON.stringify(ex1.input));
+  input.good[0].memo = evil; input.bad[0].memo = evil;
+  runChapter(ts, ctx, 'energy', input, { surprise: 'g:do_talk', experimentText: evil, surpriseText: '' });
+  const views = [];
+  const render = () => views.push(torisetsuView(ts, { esc, today: '2026-10-13', imageEnabled: true, canSend: false }));
+  render();
+  applyAction(ts, 'torisetsu-manual', {}, ctx); render();
+  applyAction(ts, 'torisetsu-contents', {}, ctx); render();
+  applyAction(ts, 'torisetsu-chapter-days', { chapter: 'energy' }, ctx); render();
+  applyAction(ts, 'torisetsu-edit-item', { side: 'good', index: '0' }, ctx); render();
+  applyAction(ts, 'torisetsu-back', {}, ctx);
+  applyAction(ts, 'torisetsu-days-done', {}, ctx); render();
+  applyAction(ts, 'torisetsu-back', {}, ctx); render(); // lineup
+  const name = normalizeData({ name: evil });
+  assert.ok(name.name.length <= 12);
+  for (const html of views) {
+    assert.doesNotMatch(html, /<img/i);
+    assert.doesNotMatch(html, /onerror=1>/);
+  }
+  assert.ok(views.some((html) => html.includes('&lt;img')), 'the memo is shown, escaped');
+  // 画像用の文字列も同じ元データから作る（HTML ではない）
+  assert.ok(composeManual(ts.data, { today: '2026-10-13' }).sections.length === 7);
 });
 
-test('top bar back label is 戻る and the leave dialog is a labelled modal', () => {
-  const helpers = { esc, today: '2026-10-13', support: () => '' };
-  const ts = createTorisetsuState();
-  assert.doesNotMatch(torisetsuView(ts, helpers), /もどる/u);
-  assert.match(torisetsuView(ts, helpers), /aria-label="戻る"/u);
-  ts.answers.name = { chips: ['mypace'], text: '' };
-  ts.view = 'contents';
-  assert.equal(applyAction(ts, 'torisetsu-back').render, true);
-  assert.match(torisetsuView(ts, helpers), /data-ts-modal role="alertdialog" aria-modal="true"/u);
-  assert.equal(applyAction(ts, 'torisetsu-leave-keep').focus, '[data-action="torisetsu-back"]');
+test('screens render for every step without throwing and keep tap targets as buttons', () => {
+  const ctx = makeCtx();
+  for (const [chapterId, input] of [['energy', ex1.input], ['values', ex2.input], ['others', ex3.input]]) {
+    const ts = createTorisetsuState();
+    runChapter(ts, ctx, chapterId, input, { stopAt: 'lineup' });
+    for (const step of ['lineup']) assert.ok(torisetsuView(ts, { esc, today: '2026-10-13' }).includes('共通点を探す'), step);
+    applyAction(ts, 'torisetsu-find', {}, ctx);
+    const insight = torisetsuView(ts, { esc, today: '2026-10-13' });
+    assert.ok(insight.includes('今回の答えでは'), chapterId);
+    applyAction(ts, 'torisetsu-compare', {}, ctx);
+    const html = torisetsuView(ts, { esc, today: '2026-10-13' });
+    assert.ok(html.length > 500, `${chapterId} ${ts.step}`);
+  }
 });
 
-test('leave dialog: keep option only when a chapter is complete; saved work never asks', () => {
-  const helpers = { esc, today: '2026-10-13', support: () => '' };
-  const ts = createTorisetsuState();
-  ts.answers.name = { chips: ['mypace'], text: '' };
-  ts.view = 'contents';
-  applyAction(ts, 'torisetsu-back');
-  let html = torisetsuView(ts, helpers);
-  assert.match(html, /閉じると、ここまで書いたことは消えます。/u);
-  assert.match(html, /data-ts-default data-action="torisetsu-leave-cancel"[^>]*>続ける/u);
-  assert.doesNotMatch(html, /torisetsu-leave-keep|戻って残す/u);
-  applyAction(ts, 'torisetsu-leave-cancel');
-  assert.equal(ts.leaveConfirm, false);
-  assert.equal(ts.view, 'contents');
-  ts.answers.strengths = { chips: ['listen'], text: '' };
-  ts.answers.switch = { chips: ['eat'], text: '' };
-  applyAction(ts, 'torisetsu-back');
-  html = torisetsuView(ts, helpers);
-  assert.match(html, /data-ts-default data-action="torisetsu-leave-keep"[^>]*>戻って残す/u);
-  assert.doesNotMatch(html, /torisetsu-leave-cancel/u);
-  const saved = createTorisetsuState({ stored: { answers: { name: { chips: ['mypace'], text: '' } }, savedAt: '2026-10-13' } });
-  assert.deepEqual(applyAction(saved, 'torisetsu-back'), { leave: true });
+test('who chips include 近所・地域の人 and it counts as being with someone', () => {
+  const chip = C.DAY_CHIPS.find((item) => item.id === 'who_local');
+  assert.equal(chip.label, '近所・地域の人');
+  assert.equal(chip.group, 'who');
+  assert.ok(C.COMBO_FEATURES.find((item) => item.id === 'people').members.includes('who_local'));
+  assert.equal(normalizeData({ energy: { good: [{ who: ['who_local'], where: ['where_town'], doing: ['do_talk'], sleep: 'sleep_ok', body: 'body_ok' }] } }).energy.good[0].who[0], 'who_local');
 });
 
-test('app.js guards the commit animation, image share fallback and leave dialog keys', async () => {
-  const { readFileSync } = await import('node:fs');
-  const app = readFileSync(new URL('../dist/app.js', import.meta.url), 'utf8');
-  assert.match(app, /if \(torisetsuCommitting\) return;[^\n]*\n\s*const sectionAtClick = ts\.sectionId;/u);
-  assert.match(app, /action === "torisetsu-commit" && \(ts\.view !== "item" \|\| ts\.sectionId !== sectionAtClick\)\) return;/u);
-  assert.match(app, /event\.key === "Escape"[^\n]*data-ts-default/u);
-  assert.match(app, /\.ts-topbar, \.ts-content"\)\.forEach\(\(element\) => \{ element\.inert = Boolean\(modal\)/u);
-  assert.match(app, /element\.matches\("\.ts-topbar"\)/u);
-  const image = readFileSync(new URL('../dist/torisetsu-image.js', import.meta.url), 'utf8');
-  assert.match(image, /if \(error\?\.name === 'AbortError'\) throw error;/u);
+test('insight screen (energy): compact rows, counts, hidden sentence, and body tags only in 「ほかに見えたこと」', () => {
+  const ts = createTorisetsuState(); const ctx = makeCtx();
+  runChapter(ts, ctx, 'energy', ex1.input, { stopAt: 'insight' });
+  const html = torisetsuView(ts, { esc, today: '2026-10-13' });
+  for (const text of ['よかった日3日と、悪かった日3日を比べました。', 'よかった日には『ゆっくり話した』、悪かった日には『前の晩が寝不足』がありました。', 'よかった日にあって、悪かった日にはなかったこと', '悪かった日にあって、よかった日にはなかったこと', '3日とも', '3日中2日', '決まりではありません。']) assert.ok(html.includes(text), text);
+  assert.ok(html.includes(`<span class="visually-hidden">${esc(ex1.expected.good[0])}</span>`), 'full sentence kept for screen readers');
+  assert.ok(!html.includes('3日ずつの答えから'), 'footer sentence is not repeated under the compare line');
+  assert.ok(html.includes('ほかに見えたこと：『体が軽い』'), 'body tag goes to the extras');
+  assert.ok(html.includes('『疲れていた・だるい』'));
+  assert.ok(!html.includes('<span class="ts-find-tag" aria-hidden="true">『体が軽い』'), 'body tag is never a band row');
+});
+
+test('lineup (energy): one-day rows are folded; bad-day columns are marked', () => {
+  const ts = createTorisetsuState(); const ctx = makeCtx();
+  runChapter(ts, ctx, 'energy', ex1.input, { stopAt: 'lineup' });
+  const html = torisetsuView(ts, { esc, today: '2026-10-13' });
+  const detailsAt = html.indexOf('<details class="ts-lineup-more">');
+  assert.ok(detailsAt > 0);
+  assert.match(html, /<summary>1日だけ出たこと（\d+）<\/summary>/);
+  const main = html.slice(0, detailsAt);
+  const folded = html.slice(detailsAt);
+  assert.ok(main.includes('ゆっくり話した') && main.includes('前の晩が寝不足'), 'findings and 2+ day rows stay visible');
+  assert.ok(folded.includes('趣味や好きなこと') === false || folded.includes('<th scope="row">'), 'folded table has row headers');
+  assert.ok(html.includes('is-bad is-bad-first'), 'first bad-day column is marked');
+  assert.ok((html.match(/<th scope="col"/g) || []).length > 0 && (html.match(/scope="colgroup"/g) || []).length >= 2);
+  const folded2 = folded.match(/<tbody>[\s\S]*?<\/tbody>/)[0];
+  for (const tr of folded2.match(/<tr [\s\S]*?<\/tr>/g)) assert.equal((tr.match(/class="is-on/g) || []).length <= 1, true, 'folded rows appear on one day only');
 });

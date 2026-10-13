@@ -1,4 +1,4 @@
-// 「画像にする」: トリセツを canvas でその場で PNG にする。通信はしない。
+// 「画像を保存」「送る」: トリセツを canvas でその場で PNG にする。通信はしない。
 // canvas.toBlob -> 共有シート（使えれば）または ダウンロード。サーバーには何も送らない。
 import { COPY } from './data/torisetsu-content.js';
 
@@ -33,33 +33,29 @@ function layout(ctx, manual) {
   const bandHeight = 120 + titleLines.length * 76;
   ops.push({ type: 'band', height: bandHeight, titleLines });
   y = bandHeight + 52;
-  const meta = [manual.typeLine, manual.version].filter(Boolean).join('　｜　');
+  const meta = manual.version;
   ctx.font = `600 30px ${FONT}`;
   for (const line of wrapLines(ctx, meta, bodyWidth)) { ops.push({ type: 'text', text: line, x: MARGIN, y, font: `600 30px ${FONT}`, color: MUTED }); y += 46; }
   y += 20;
-  let lastChapter = '';
   let skipped = 0;
   for (const section of manual.sections) {
-    if (section.empty) { skipped += 1; continue; }
-    if (section.chapterLabel !== lastChapter) {
-      lastChapter = section.chapterLabel;
-      ops.push({ type: 'text', text: section.chapterLabel, x: MARGIN, y: y + 34, font: `800 28px ${FONT}`, color: MUTED });
-      y += 52;
-    }
+    if (section.state === 'hidden') continue;
+    if (section.state !== 'filled') { skipped += 1; continue; } // 空欄・未調査の欄は画像に出さない
     ops.push({ type: 'dash', y });
     y += 38;
     ops.push({ type: 'heading', y: y + 20, number: section.number, text: section.title, lamp: section.id === 'warning' });
     y += 70;
     ctx.font = `500 31px ${FONT}`;
     for (const line of section.lines) {
-      const prefix = line.kind === 'bullet' ? '・' : line.kind === 'step' ? `${line.n}. ` : '';
-      const indent = line.kind === 'step' ? 56 : 0;
-      const rows = wrapLines(ctx, line.kind === 'bullet' ? `・${line.text}` : line.text, bodyWidth - 24 - indent);
-      rows.forEach((row, index) => {
-        ops.push({ type: 'text', text: row, x: MARGIN + 12 + indent, y: y + 31, font: `500 31px ${FONT}`, color: INK });
-        if (line.kind === 'step' && index === 0) ops.push({ type: 'text', text: prefix.trim(), x: MARGIN + 12, y: y + 31, font: `800 31px ${FONT}`, color: BLUE });
+      const sub = line.kind === 'sub';
+      const font = sub ? `800 30px ${FONT}` : `500 31px ${FONT}`;
+      ctx.font = font;
+      const rows = wrapLines(ctx, line.kind === 'bullet' ? `・${line.text}` : line.text, bodyWidth - 24);
+      rows.forEach((row) => {
+        ops.push({ type: 'text', text: row, x: MARGIN + 12, y: y + 31, font, color: sub ? MUTED : INK });
         y += 47;
       });
+      ctx.font = `500 31px ${FONT}`;
       y += 6;
     }
     y += 14;
@@ -117,22 +113,29 @@ export async function renderTorisetsuImage(manual) {
   return new Promise((resolve, reject) => canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('no-blob'))), 'image/png'));
 }
 
-export async function exportTorisetsuImage(manual) {
-  const blob = await renderTorisetsuImage(manual);
-  const file = typeof File === 'function' ? new File([blob], 'my-torisetsu.png', { type: 'image/png' }) : null;
-  if (file && typeof navigator !== 'undefined' && typeof navigator.canShare === 'function' && typeof navigator.share === 'function' && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: 'わたしのトリセツ' });
-      return 'shared';
-    } catch (error) {
-      if (error?.name === 'AbortError') throw error; // 共有をやめた。ダウンロードには進まない。
-      // 共有できなかった（操作の有効期限切れなど）。ダウンロードに切り替える。
-    }
-  }
+function downloadBlob(blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url; link.download = 'my-torisetsu.png'; link.rel = 'noopener'; link.style.display = 'none';
   document.body.appendChild(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   return 'downloaded';
+}
+
+// mode 'save'（既定）: 共有シートは出さず、必ず端末へ保存する。mode 'share': 共有シートを開く（失敗時は保存）。
+export async function exportTorisetsuImage(manual, mode = 'save') {
+  const blob = await renderTorisetsuImage(manual);
+  if (mode === 'share') {
+    const file = typeof File === 'function' ? new File([blob], 'my-torisetsu.png', { type: 'image/png' }) : null;
+    if (file && typeof navigator !== 'undefined' && typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'わたしのトリセツ' });
+        return 'shared';
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error; // 共有をやめた。ダウンロードには進まない。
+        // 共有できなかった（操作の有効期限切れなど）。ダウンロードに切り替える。
+      }
+    }
+  }
+  return downloadBlob(blob);
 }

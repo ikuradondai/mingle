@@ -22,7 +22,7 @@ import { CREATOR_PRESET_IDS, normalizeCreatorDesign, effectiveCreatorAdult } fro
 import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, rankThemeRecommendations, themeExplorerBookmarks, toggleThemeExplorerBookmark, themeExplorerExperienced, toggleThemeExplorerExperienced } from "./theme-explorer.js";
 import { loadRecommendationLabels, recommendationLabel } from "./recommendation-labels.js";
 import { themeExampleForDeck } from "./theme-examples.js";
-import { createTorisetsuState, torisetsuView, applyAction as applyTorisetsuAction, loadTorisetsu, expireUndo as expireTorisetsuUndo, torisetsuViewKey, setDraftText as setTorisetsuText, previewMarkup as torisetsuPreview, draftComplete as torisetsuDraftComplete, chipCapacity as torisetsuChipCapacity, sectionById as torisetsuSection, composeManual as composeTorisetsuManual } from "./torisetsu.js";
+import { createTorisetsuState, torisetsuView, applyAction as applyTorisetsuAction, loadTorisetsu, expireUndo as expireTorisetsuUndo, torisetsuViewKey, setDraftText as setTorisetsuText, draftComplete as torisetsuDraftComplete, isPicked as torisetsuIsPicked, finishLabel as torisetsuFinishLabel, composeManual as composeTorisetsuManual, canSendImage } from "./torisetsu.js";
 import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText } from "./participant-rule.js";
 import { consumeMinorityAuthIntent, clearMinorityAuthIntent } from "./minority-auth-intent.js";
@@ -1176,7 +1176,7 @@ function themeExplorerCard(deck, { solo = false, mixed = false, selectedMySet = 
   const experiencedToggle = `<button type="button" class="theme-explorer-experienced ${experienced ? 'is-active' : ''}" data-action="theme-experienced" data-experienced-id="${esc(bookmarkId)}" aria-pressed="${experienced}" aria-label="${experienced ? '体験済みを外す' : '体験済みにする'}：${esc(title)}">${experienced ? '✓ 体験済み' : '体験済みにする'}</button>`;
   const settings = startsOnSelect && !solo && !locked ? `<button type="button" class="theme-explorer-card-settings" data-action="theme-card-settings" data-theme-id="${esc(deck.id)}" data-theme-key="${esc(shelfId)}:${esc(deck.id)}" aria-label="${esc(title)}の詳細設定" title="詳細設定">${actionIcon('settings')}</button>` : '';
   const sponsorLabel = sponsor ? `<small class="theme-explorer-sponsor-label">スポンサー · ${esc(sponsor.providerName || '公式提供')}の公式カード</small>` : '';
-  return `<div class="theme-explorer-card-wrap">${bookmark}${settings}<button type="button" class="theme-explorer-card ${cardSelected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}" data-action="${action}" data-theme-card data-theme-id="${esc(deck.id)}" ${sponsor ? `data-sponsor-id="${esc(sponsor.id)}"` : ''} ${set ? `data-set-id="${esc(set.id)}"` : ''} data-theme-key="${esc(shelfId)}:${esc(deck.id)}" ${startsOnSelect ? '' : `aria-pressed="${selected}"`} aria-disabled="${locked}" ${locked ? 'disabled' : ''}>${imageMarkup}<span class="theme-explorer-card-body">${control}${sponsorLabel}<strong>${esc(title)}</strong><small>${esc(subtitle)}</small><span class="theme-explorer-meta">${locked ? '🔒 登録で解放' : `${deck.builder === 'torisetsu' ? '8つの欄' : `${count}枚`}${startsOnSelect ? ' ・ はじめる' : ''}`}</span></span></button>${experiencedToggle}</div>`;
+  return `<div class="theme-explorer-card-wrap">${bookmark}${settings}<button type="button" class="theme-explorer-card ${cardSelected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}" data-action="${action}" data-theme-card data-theme-id="${esc(deck.id)}" ${sponsor ? `data-sponsor-id="${esc(sponsor.id)}"` : ''} ${set ? `data-set-id="${esc(set.id)}"` : ''} data-theme-key="${esc(shelfId)}:${esc(deck.id)}" ${startsOnSelect ? '' : `aria-pressed="${selected}"`} aria-disabled="${locked}" ${locked ? 'disabled' : ''}>${imageMarkup}<span class="theme-explorer-card-body">${control}${sponsorLabel}<strong>${esc(title)}</strong><small>${esc(subtitle)}</small><span class="theme-explorer-meta">${locked ? '🔒 登録で解放' : `${deck.builder === 'torisetsu' ? '3つの章' : `${count}枚`}${startsOnSelect ? ' ・ はじめる' : ''}`}</span></span></button>${experiencedToggle}</div>`;
 }
 function themeExplorerShelf(id, title, decksForShelf, options = {}) {
   const cards = decksForShelf.map((deck) => themeExplorerCard(deck, { ...options, shelfId: id })).join('');
@@ -2230,7 +2230,7 @@ let torisetsuCommitting = false;
 function localIsoDate() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function torisetsuContext() { return { storage: () => window.localStorage, today: localIsoDate(), now: () => Date.now() }; }
 function openTorisetsu() {
-  state.torisetsu = createTorisetsuState({ stored: loadTorisetsu(() => window.localStorage) });
+  state.torisetsu = createTorisetsuState({ stored: loadTorisetsu(() => window.localStorage, { today: localIsoDate() }) });
   state.account.open = false; state.error = "";
   trackThemeStart("self-values");
   recordThemeExplorerStart({ ownerId: state.account.user?.id, mode: "solo", themeIds: ["self-values"] });
@@ -2242,16 +2242,15 @@ function leaveTorisetsu() {
   render(); window.scrollTo({ left: 0, top: 0, behavior: "auto" });
 }
 function torisetsuScreenView() {
-  return torisetsuView(state.torisetsu, { esc, today: localIsoDate(), support: () => soloSupportView({ general: true, youth: true }), imageEnabled: true });
+  return torisetsuView(state.torisetsu, { esc, today: localIsoDate(), support: () => soloSupportView({ general: true, youth: true }), imageEnabled: true, canSend: canSendImage() });
 }
-function refreshTorisetsuItem() {
-  const ts = state.torisetsu; if (!ts || ts.view !== "item") return;
-  const preview = root.querySelector("[data-ts-preview]"); if (preview) preview.innerHTML = torisetsuPreview(ts, esc);
-  const commit = root.querySelector('[data-action="torisetsu-commit"]'); if (commit) commit.disabled = !torisetsuDraftComplete(ts);
-  const section = torisetsuSection(ts.sectionId);
-  if (section) { const full = ts.draft.chips.length >= torisetsuChipCapacity(section, ts.draft); root.querySelectorAll(".ts-chip").forEach((chip) => chip.classList.toggle("is-dim", full && chip.getAttribute("aria-pressed") !== "true")); }
-  const count = root.querySelector("[data-ts-count]"); const text = root.querySelector("[data-ts-text]");
-  if (count && text) count.textContent = `${Array.from(ts.draft.text).length}/${text.maxLength}字`;
+function refreshTorisetsuDraft() {
+  const ts = state.torisetsu; if (!ts) return;
+  const record = root.querySelector("[data-ts-record]");
+  if (record) { if (ts.draft && torisetsuDraftComplete(ts)) record.removeAttribute("aria-disabled"); else record.setAttribute("aria-disabled", "true"); }
+  root.querySelectorAll("[data-pick-kind]").forEach((chip) => { const on = torisetsuIsPicked(ts, chip.dataset.pickKind, chip.dataset.pickKey); chip.setAttribute("aria-checked", String(on)); chip.classList.toggle("is-on", on); });
+  const finish = root.querySelector("[data-ts-finish]"); if (finish) finish.textContent = torisetsuFinishLabel(ts);
+  root.querySelectorAll("[data-ts-count]").forEach((count) => { const input = root.querySelector(`[data-ts-text="${count.dataset.tsCount}"]`); if (input) count.textContent = `${Array.from(input.value).length}/${input.maxLength}字`; });
 }
 function bindTorisetsu() {
   const modal = root.querySelector("[data-ts-modal]");
@@ -2266,40 +2265,41 @@ function bindTorisetsu() {
     else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
-  root.querySelector("[data-ts-text]")?.addEventListener("input", (event) => { if (!state.torisetsu) return; setTorisetsuText(state.torisetsu, event.target.value, "text"); state.torisetsu.limitMessage = ""; const limit = root.querySelector(".ts-limit"); if (limit) limit.textContent = ""; refreshTorisetsuItem(); });
-  root.querySelector("[data-ts-name]")?.addEventListener("input", (event) => { if (!state.torisetsu) return; setTorisetsuText(state.torisetsu, event.target.value, "name"); refreshTorisetsuItem(); });
+  root.querySelectorAll("[data-ts-text]").forEach((input) => input.addEventListener("input", (event) => { if (!state.torisetsu) return; setTorisetsuText(state.torisetsu, event.target.value, input.dataset.tsText, torisetsuContext()); refreshTorisetsuDraft(); }));
+  root.querySelector("[data-ts-name]")?.addEventListener("input", (event) => { if (!state.torisetsu) return; setTorisetsuText(state.torisetsu, event.target.value, "name", torisetsuContext()); });
   root.querySelectorAll("[data-ts-text],[data-ts-name]").forEach((input) => input.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.isComposing) event.preventDefault(); }));
 }
 function handleTorisetsuAction(event) {
   const ts = state.torisetsu; if (!ts) return;
   const button = event.currentTarget; const action = button.dataset.action;
-  if (torisetsuCommitting) return; // 「書く」の動きの間は、ほかの操作を受け付けない
-  const sectionAtClick = ts.sectionId;
+  if (torisetsuCommitting) return; // 「共通点を探す」の動きの間は、ほかの操作を受け付けない
+  if (button.getAttribute("aria-disabled") === "true" && action === "torisetsu-next") return;
   const run = () => {
     torisetsuCommitting = false;
     if (state.torisetsu !== ts) return;
-    if (action === "torisetsu-commit" && (ts.view !== "item" || ts.sectionId !== sectionAtClick)) return;
-    const result = applyTorisetsuAction(ts, action, { chip: button.dataset.chip, section: button.dataset.section, chapter: button.dataset.chapter }, torisetsuContext());
+    const result = applyTorisetsuAction(ts, action, { chip: button.dataset.chip, group: button.dataset.group, chapter: button.dataset.chapter, side: button.dataset.side, index: button.dataset.index, kind: button.dataset.kind, key: button.dataset.key, returnTo: button.dataset.returnTo }, torisetsuContext());
     if (result.leave) { leaveTorisetsu(); return; }
-    if (result.image) { makeTorisetsuImage(); return; }
+    if (result.image) { makeTorisetsuImage(result.image); return; }
     if (result.undoTimer) { clearTimeout(torisetsuUndoTimer); torisetsuUndoTimer = setTimeout(() => { if (state.torisetsu === ts && state.screen === "torisetsu" && expireTorisetsuUndo(ts)) root.querySelector(".ts-toast")?.remove(); }, result.undoTimer + 30); }
     if (action === "torisetsu-undo") clearTimeout(torisetsuUndoTimer);
     if (result.focus) state.focusSelector = result.focus;
     if (result.scrollTop) state.torisetsuScrollTop = true;
     if (result.render) render();
   };
-  if (action === "torisetsu-commit") {
-    const preview = root.querySelector(".ts-preview-card");
-    if (preview && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { torisetsuCommitting = true; preview.classList.add("is-absorbing"); setTimeout(run, 250); return; }
+  if (action === "torisetsu-find") {
+    // 共通点の行を順に色づけてから「見つける」へ（動きを減らす設定では、すぐ切りかえる）。
+    const found = root.querySelectorAll(".ts-lineup .is-found, .ts-ep.is-found").length;
+    const wrap = root.querySelector(".ts-lineup-wrap, .ts-ep-group");
+    if (wrap && found > 0 && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { torisetsuCommitting = true; root.querySelector(".ts-screen")?.classList.add("is-finding"); setTimeout(run, Math.min(1500, 300 + found * 200)); return; }
   }
   run();
 }
-async function makeTorisetsuImage() {
+async function makeTorisetsuImage(mode = "save") {
   const ts = state.torisetsu; if (!ts || ts.imageBusy) return;
   ts.imageBusy = true; ts.imageStatus = ""; render();
   try {
     const { exportTorisetsuImage } = await import("./torisetsu-image.js");
-    const result = await exportTorisetsuImage(composeTorisetsuManual(ts.answers, { today: localIsoDate() }));
+    const result = await exportTorisetsuImage(composeTorisetsuManual(ts.data, { today: localIsoDate() }), mode);
     ts.imageStatus = result === "downloaded" ? "画像を保存しました。" : "";
   } catch (error) {
     ts.imageStatus = error?.name === "AbortError" ? "" : "画像を作れませんでした。スクリーンショットで残してね。";

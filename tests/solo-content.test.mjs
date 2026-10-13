@@ -80,8 +80,8 @@ test('titles, subtitles and descriptions avoid banned and diagnostic expressions
       assert.ok(deck[field].trim().length > 0, `${deck.id}.${field}`);
       for (const pattern of BANNED) assert.doesNotMatch(deck[field], pattern, `${deck.id}.${field}: ${pattern}`);
     }
-    // builder を持つデッキ（自分のトリセツ）は専用ビルダーを開くので、12問ではなく「8つの欄」を説明する。
-    if (deck.builder) assert.ok(deck.description.includes('8つの欄'), `${deck.id}: builder description must mention 8つの欄`);
+    // builder を持つデッキ（自分のトリセツ）は専用ビルダーを開くので、12問とは書かない。
+    if (deck.builder) assert.ok(!deck.description.includes('12問'), `${deck.id}: builder description must not mention 12問`);
     else assert.ok(deck.description.includes('12問'), `${deck.id}: description must mention 12問`);
     assert.ok(Array.from(deck.description).length <= 100, `${deck.id}: description too long`);
   }
