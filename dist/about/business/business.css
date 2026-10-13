@@ -45,6 +45,7 @@ img{max-width:100%;display:block}
 .role-example{border-top:1px solid #cfd8d4;margin-top:28px;padding-top:18px}
 .role-example b{display:block;color:var(--muted);font-size:11px;letter-spacing:.1em;margin-top:9px}
 .role-example p{margin:2px 0 0;font-size:14px}
+.role-feature-note{color:var(--ink);font-size:14px;line-height:1.8;margin:23px 0 0}
 .role-note{text-align:center;color:var(--muted);font-size:13px;margin:27px auto 0}
 .scene-intro{text-align:center}
 .scene-intro h2,.section-heading h2{font-size:clamp(28px,3.4vw,47px);line-height:1.35;letter-spacing:-.05em;margin:12px 0 15px}
