@@ -1458,6 +1458,17 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .ts-contents .ts-chapters { min-width:0; max-width:100%; }
 .ts-contents .ts-chapter { min-width:0; box-sizing:border-box; }
 .ts-gallery .ts-sidebar { display:none; }
+.ts-gallery .ts-intro,
+.ts-gallery .ts-intro.ts-side-bad,
+.ts-gallery .ts-band,
+.ts-gallery .ts-band.ts-side-bad,
+.ts-gallery .ts-band.ts-side-cross { border-left:0; border-radius:0; padding-left:0; padding-right:0; background:transparent; background-image:none; }
+.ts-gallery[data-gallery-stage="discovery"] .ts-band,
+.ts-gallery[data-gallery-stage="discovery"] .ts-band.ts-side-bad,
+.ts-gallery[data-gallery-stage="discovery"] .ts-band.ts-side-cross { background:transparent; }
+.ts-gallery .ts-intro { padding-right:0; }
+.ts-hero { border-left:0; border-radius:12px; }
+.ts-done-banner { border-left:0; }
 @media (max-width:759px) {
   .ts-start .ts-hero .ts-scene-art { height:240px; object-fit:cover; object-position:center; }
 }
