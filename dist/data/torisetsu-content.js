@@ -1,245 +1,319 @@
-// 「自分のトリセツ」v2（気づき型）の中身。データだけ。ここから通信しない。
+// 「自分のトリセツ」v3（内面をたどる型）の中身。データだけ。ここから通信しない。
 // 文は「部品」を組み立てて作る。日本語の活用はコードでしない（使う場面ごとの完成した形を持つ）。
 // 自由文は「」で囲んでそのまま入れる。集計には使わない。「あなた」は使わない。主語は書かない。
 
 export const TEXT_MAX = 30;
 export const NAME_MAX = 12;
-export const DAY_MIN = 2;
-export const DAY_INIT = 3;
-export const DAY_MAX = 5;
 
 export const CHAPTERS = [
   {
-    id: 'energy', label: '元気のもと', subtitle: '調子のいい日・悪い日を比べる', short: '元気のもと',
-    sides: ['good', 'bad'], unit: 'day', init: 3, min: 2, max: 5,
-    predict: { question: '自分は、何があると調子のいい日になると思う？', hint: '2つまで選べます', max: 2, footer: 'あとで、実際の答えと比べます。当たらなくて大丈夫です。', title: 'まず予想してみよう' },
-    done: { title: '元気のもとができました', body: '調子のいい日と悪い日の違いが、トリセツに書き込まれました。' },
-    again: { key: 'again', text: '調子のいい日・悪い日を、また3日ずつ思い出してみる' },
-    teaserNone: 'まだはっきりした共通点はありません',
+    id: 'needs', label: '満たされるもの、足りないもの', subtitle: '出来事の奥にある気持ちをたどる', short: '満たされるもの',
+    sides: ['happy', 'hard'], inits: { happy: 2, hard: 3 }, maxes: { happy: 3, hard: 5 }, min: 3,
+    predict: { question: '自分にとって、いちばん大事なのはどれだと思う？', hint: '1つ選んでね', max: 1, footer: 'あとで、実際の答えと比べます。当たらなくて大丈夫です。', title: 'まず予想してみよう' },
+    done: { title: '満たされるもの、足りないものができました', body: '奥でくり返していたものが、トリセツに書き込まれました。' },
+    again: { key: 'again', text: 'うれしかったこと・しんどかったことを、また思い出してみる' },
+    teaserNone: 'まだはっきりしたくり返しはありません',
   },
   {
-    id: 'values', label: '心が動くとき', subtitle: 'イラッと・うれしいの裏にあるもの', short: '心が動くとき',
-    sides: ['neg', 'pos'], unit: 'episode', init: 2, min: 1, max: 3,
+    id: 'voice', label: '頭の中の声', subtitle: 'しんどいときの声と、かけたい言葉', short: '頭の中の声',
+    sides: ['voice'], inits: { voice: 3 }, maxes: { voice: 5 }, min: 2,
+    predict: null,
+    done: { title: '頭の中の声ができました', body: '頭の中の声と、かけたい言葉が、トリセツに書き込まれました。' },
+    again: { key: 'again', text: '頭の中の声に気づいたら、メモしてみる' },
+    teaserNone: '場面ごとにちがう声がしていました',
+  },
+  {
+    id: 'values', label: '心が動くとき', subtitle: 'イラッと・じーんの裏にある大事なこと', short: '心が動くとき',
+    sides: ['neg', 'pos'], inits: { neg: 2, pos: 2 }, maxes: { neg: 3, pos: 3 }, min: 3,
     predict: { question: '自分がいちばん大事にしていることは、何だと思う？', hint: '1つ選んでね', max: 1, footer: 'あとで、実際の答えと比べます。', title: 'まず予想してみよう' },
-    done: { title: '心が動くときができました', body: '心が動く理由の「大事なこと」が、トリセツに書き込まれました。' },
+    done: { title: '心が動くときができました', body: '大事にしていることが、トリセツに書き込まれました。' },
     again: { key: 'again', text: '心が動いたことを、来週もう1つメモしてみる' },
-  },
-  {
-    id: 'others', label: '人から見たわたし', subtitle: '頼まれること と 自分で思う得意', short: '人から見たわたし',
-    sides: ['others'], unit: 'episode', init: 3, min: 2, max: 5,
-    predict: { question: '自分で得意だと思うことは？', hint: '3つまで選べます', max: 3, footer: '', title: '' },
-    done: { title: '人から見たわたしができました', body: '人から頼りにされている特長が、トリセツに書き込まれました。' },
-    again: { key: 'again', text: '来週、人にお礼を言われたことをメモしてみる' },
   },
 ];
 export const CHAPTER_IDS = CHAPTERS.map((chapter) => chapter.id);
 
-// ---------- 第1章 元気のもと ----------
-export const DAY_GROUPS = [
-  { id: 'who', label: '誰といた？', max: 2 },
-  { id: 'where', label: 'どこにいた？', max: 2 },
-  { id: 'doing', label: '何をしていた？', max: 3 },
-  { id: 'sleep', label: '前の晩は？', max: 1 },
-  { id: 'body', label: '体の調子は？', max: 1 },
+// ---------- 共通: 場面（1つ。集計しない） ----------
+export const SCENES = [
+  { id: 'sc_family', label: '家族やパートナーのこと', short: '家族やパートナーのこと' },
+  { id: 'sc_friend', label: '友だちのこと', short: '友だちのこと' },
+  { id: 'sc_work', label: '学校や仕事のこと', short: '学校や仕事のこと' },
+  { id: 'sc_local', label: '近所や地域のこと', short: '近所や地域のこと' },
+  { id: 'sc_alone', label: 'ひとりのとき', short: 'ひとりのとき' },
+  { id: 'sc_health', label: '体や健康のこと', short: '体や健康のこと' },
+  { id: 'sc_chores', label: '家事やお金・用事のこと', short: '家事やお金・用事のこと' },
+  { id: 'sc_net', label: 'ネットやSNSのこと', short: 'ネットやSNSのこと' },
+  { id: 'sc_other', label: 'そのほか', short: 'そのほかのこと' },
 ];
 
-// [id, group, label, tag, power, lamp, tryMore, tryLess]。tag が空のものは「見つけたこと」に出さない（rep なし）。
-const E = (id, group, label, tag, power = '', lamp = '', tryMore = '', tryLess = '') => ({ id, group, label, tag, power, lamp, tryMore, tryLess, rep: Boolean(tag), kind: 'chip' });
-
-export const DAY_CHIPS = [
-  E('who_alone', 'who', 'ひとり', 'ひとりだった', 'ひとりの時間をつくる', 'ずっとひとりだった日', 'ひとりの時間を、来週30分つくってみる', '誰かに1回、短い連絡をしてみる'),
-  E('who_family', 'who', '家族・パートナー', '家族やパートナーといた', '家族やパートナーと過ごす', '家族やパートナーとずっと一緒の日', '家族やパートナーと過ごす時間を、来週1回つくってみる'),
-  E('who_friend', 'who', '友だち', '友だちといた', '友だちと会う', '友だちと会った日', '友だちに、来週1回連絡してみる'),
-  E('who_mates', 'who', '学校や仕事の人', '学校や仕事の人といた', '学校や仕事の人と過ごす', '学校や仕事の人とずっと一緒の日', '学校や仕事の人と、来週1回ゆっくり話してみる'),
-  E('who_local', 'who', '近所・地域の人', '近所や地域の人といた', '近所や地域の人と過ごす', '近所や地域の人と過ごした日', '近所の人に、来週1回あいさつしてみる'),
-  E('who_new', 'who', '初めて会った人', '初めて会う人がいた', '初めての人と会う', '初めての人と会った日', '初めての人と話せる場に、来週1回行ってみる'),
-  E('who_pet', 'who', '動物・ペット', '動物と過ごした', '動物と過ごす', '動物と過ごした日', '動物と過ごす時間を、来週1回つくってみる'),
-  E('where_home', 'where', '家', ''),
-  E('where_work', 'where', '学校や職場', '学校や職場に行った', '学校や職場に行く', '学校や職場に行った日'),
-  E('where_town', 'where', '街・お店', '街やお店に出かけた', '街やお店に出かける', '街やお店に出かけた日', '街やお店に、来週1回出かけてみる'),
-  E('where_nature', 'where', '公園・自然の中', '公園や自然の中にいた', '公園や自然の中に行く', '公園や自然の中に行った日', '公園や自然の中に、来週1回行ってみる'),
-  E('where_away', 'where', 'いつもと違う場所', 'いつもと違う場所に行った', 'いつもと違う場所に行く', 'いつもと違う場所に行った日', 'いつもと違う道や場所に、来週1回行ってみる'),
-  E('do_work', 'doing', '勉強や仕事', '勉強や仕事をした', '勉強や仕事に打ち込む', '勉強や仕事が中心の日', '', '勉強や仕事の合間に、5分休んでみる'),
-  E('do_chores', 'doing', '家事や用事', '家事や用事をした', '家事や用事を片付ける', '家事や用事が続いた日', '', '家事や用事を1つ、次の日に回してみる'),
-  E('do_hobby', 'doing', '趣味・好きなこと', '趣味や好きなことをした', '趣味や好きなことをする', '趣味や好きなことをした日', '趣味や好きなことを、来週30分やってみる'),
-  E('do_move', 'doing', '体を動かした', '体を動かした', '体を動かす', '体を動かした日', '体を動かす時間を、来週10分つくってみる'),
-  E('do_rest', 'doing', 'のんびり休んだ', 'のんびり休んだ', 'のんびり休む', 'のんびり休んだ日', '何もしない時間を、来週30分つくってみる'),
-  E('do_talk', 'doing', 'ゆっくり話した', 'ゆっくり話した', '誰かとゆっくり話す', 'ゆっくり話した日', '誰かとゆっくり話す時間を、来週1回つくってみる'),
-  E('do_eat', 'doing', 'おいしい物を食べた', 'おいしい物を食べた', 'おいしい物を食べる', 'おいしい物を食べた日', '食べたい物を、来週1回ちゃんと食べてみる'),
-  E('do_new', 'doing', '初めてのことをした', '初めてのことをした', '初めてのことをしてみる', '初めてのことをした日', '小さな初めてのことを、来週1つやってみる'),
-  E('do_help', 'doing', '人の役に立った', '人の役に立った', '人の役に立つことをする', '人の役に立とうとした日', '誰かのために、小さなことを来週1つしてみる'),
-  E('do_screen', 'doing', 'スマホや動画を長く見た', 'スマホや動画を長く見た', '', 'スマホや動画を長く見た日', '', '寝る前のスマホを、1日だけ早めに置いてみる'),
-  E('do_rush', 'doing', '予定に追われた', '予定に追われた', '', '予定に追われた日', '', '予定のない時間を、1日30分つくってみる'),
-  E('sleep_good', 'sleep', 'よく眠れた', '前の晩よく眠れた', '前の晩によく眠る', '前の晩によく眠れた日', 'いつもより30分早く寝る日を、1日つくってみる'),
-  E('sleep_ok', 'sleep', 'ふつう', ''),
-  E('sleep_short', 'sleep', '寝不足', '前の晩が寝不足', '', '前の晩が寝不足の日', '', 'いつもより30分早く寝る日を、1日つくってみる'),
-  E('sleep_unknown', 'sleep', '覚えていない', ''),
-  E('body_good', 'body', '体が軽い', '体が軽い', '', '体が軽い日'),
-  E('body_ok', 'body', 'ふつう', ''),
-  E('body_tired', 'body', '疲れていた・だるい', '疲れていた・だるい', '', '体が疲れている日', '', '疲れている日は、やることを1つ減らしてみる'),
+// ---------- 第1章 満たされるもの、足りないもの ----------
+// 表の気持ち・しんどい側（1つ。集計は「表と奥」のつながりにだけ使う）
+const sf = (id, label, tag) => ({ id, label, tag });
+export const SURFACE_HARD = [
+  sf('sf_irritated', 'イライラした', 'イライラ'),
+  sf('sf_down', '落ち込んだ', '落ち込み'),
+  sf('sf_rushed', 'あせった', 'あせり'),
+  sf('sf_foggy', 'モヤモヤした', 'モヤモヤ'),
+  sf('sf_letdown', 'がっかりした', 'がっかり'),
+  sf('sf_drained', 'ぐったりした', 'ぐったり'),
+  sf('sf_awkward', '気まずかった', '気まずさ'),
+  sf('sf_frozen', '固まって、何も言えなかった', '固まってしまう感じ'),
+  sf('sf_quit', '投げ出したくなった', '投げ出したい気持ち'),
 ];
 
-const C = (id, group, tag, power, lamp, tryMore, tryLess, members) => ({ id, group, label: tag, tag, power, lamp, tryMore, tryLess, rep: true, kind: 'combo', members });
-export const COMBO_FEATURES = [
-  C('out', 'where', '外に出た', '外に出る', '外に出ていた日', '外に出る時間を、来週10分つくってみる', '', ['where_work', 'where_town', 'where_nature', 'where_away']),
-  C('home_only', 'where', '一日家にいた', '家でゆっくり過ごす', '一日家にいた日', '家でゆっくり過ごす日を、来週1日つくってみる', '家にいる日も、10分だけ外に出てみる', []),
-  C('people', 'who', '誰かと一緒だった', '誰かと一緒に過ごす', 'ずっと人と一緒だった日', '誰かと過ごす時間を、来週1回つくってみる', 'ひとりで過ごす時間を、30分つくってみる', ['who_family', 'who_friend', 'who_mates', 'who_local', 'who_new']),
-];
-// 打ち消し合うペア
-export const OPPOSITES = [['out', 'home_only'], ['people', 'who_alone']];
-// 予想の「反対」（予想が外れたとき、反対側が悪かった日に出ていないか見る）。本当に反対のものだけ。
-export const MIRROR = { sleep_good: 'sleep_short', out: 'home_only', people: 'who_alone', who_alone: 'people' };
-// 体の調子（体が軽い・疲れていた）は「調子」と同じことなので、帯には出さず「ほかに見えたこと」にまわす。
-export const BODY_GROUP = 'body';
-
-// 特徴（見つけたことの対象）のデータ順。誰と → どこ → 何を → 前の晩 → 体。組み立て特徴はそのグループの末尾。
-export const ENERGY_FEATURES = [
-  ...DAY_CHIPS.filter((chip) => chip.group === 'who' && chip.rep),
-  COMBO_FEATURES[2],
-  ...DAY_CHIPS.filter((chip) => chip.group === 'where' && chip.rep),
-  COMBO_FEATURES[0], COMBO_FEATURES[1],
-  ...DAY_CHIPS.filter((chip) => chip.group === 'doing'),
-  ...DAY_CHIPS.filter((chip) => chip.group === 'sleep' && chip.rep),
-  ...DAY_CHIPS.filter((chip) => chip.group === 'body' && chip.rep),
-];
-// 見つけたことの並べ替え用のグループ順（同点のとき）
-export const INSIGHT_GROUP_ORDER = { sleep: 0, doing: 1, where: 2, who: 3, body: 4 };
-// 「並べる」表の行の順
-export const LINEUP_GROUP_ORDER = { doing: 0, who: 1, where: 2, sleep: 3, body: 4 };
-
-export const ENERGY_PREDICTIONS = [
-  { id: 'sleep_good', label: 'よく眠ること' }, { id: 'out', label: '外に出ること' },
-  { id: 'people', label: '誰かと一緒にいること' }, { id: 'who_alone', label: 'ひとりの時間' },
-  { id: 'do_move', label: '体を動かすこと' }, { id: 'do_hobby', label: '趣味・好きなこと' },
-  { id: 'do_eat', label: 'おいしい物を食べること' }, { id: 'do_rest', label: 'のんびり休むこと' },
-  { id: 'do_talk', label: 'ゆっくり話すこと' }, { id: 'do_new', label: '初めてのこと' },
-  { id: 'do_help', label: '人の役に立つこと' }, { id: 'where_nature', label: '自然の中にいること' },
+// 奥の気持ち・しんどい側（2つまで。集計する）
+const dp = (id, label, tag) => ({ id, label, tag });
+export const DEEP = [
+  dp('dp_anxious', '不安・こわかった', '不安'),
+  dp('dp_lonely', 'さびしかった', 'さびしさ'),
+  dp('dp_behind', '置いていかれた感じ', '置いていかれた感じ'),
+  dp('dp_sad', '悲しかった', '悲しさ'),
+  dp('dp_bitter', 'くやしかった', 'くやしさ'),
+  dp('dp_small', '自分が小さく感じた', '自分が小さく感じる気持ち'),
+  dp('dp_expect', '期待に応えられない感じ', '期待に応えられない感じ'),
+  dp('dp_blamed', '責められている感じ', '責められている感じ'),
+  dp('dp_uncared', '大事にされていない感じ', '大事にされていない感じ'),
+  dp('dp_guilty', '申し訳ない気持ち', '申し訳なさ'),
+  dp('dp_full', 'いっぱいいっぱいだった', 'いっぱいいっぱいな気持ち'),
+  dp('dp_empty', 'むなしかった', 'むなしさ'),
 ];
 
-export const DAY_MEMO = { good: '例：土曜、友だちとランチ', bad: '例：月曜、朝から雨だった' };
+// 気持ち・うれしい側（2つまで。集計しない）
+export const SURFACE_HAPPY = [
+  { id: 'hf_glad', label: 'うれしかった' },
+  { id: 'hf_relief', label: 'ほっとした' },
+  { id: 'hf_relax', label: '力が抜けて、安心した' },
+  { id: 'hf_warm', label: '胸があたたかくなった' },
+  { id: 'hf_proud', label: '誇らしかった' },
+  { id: 'hf_excited', label: 'わくわくした' },
+  { id: 'hf_clear', label: 'すっきりした' },
+  { id: 'hf_likeself', label: '自分を少し好きになれた' },
+];
 
-// ---------- 第2章 心が動くとき ----------
-const V = (id, label, request, tryMore) => ({ id, label, request, tryMore });
+// 本当の願い（各側2つまで。両側を同じ id で集計する）
+const nd = (id, wish, met, tag, fuel, request, tryText) => ({ id, wish, met, tag, label: tag, fuel, request, try: tryText });
+export const NEEDS = [
+  nd('nd_understood', 'わかってほしかった', 'わかってもらえた', 'わかってもらえること', '気持ちや事情を、わかってもらえること', 'アドバイスより先に、まず話を聞いてもらえると助かります。', '話す前に「聞いてほしいだけ」と伝えてみる'),
+  nd('nd_speak', '本音を言いたかった', '本音を言えた', '本音を言えること', '思っていることを、そのまま言えること', '言いかけたときは、最後まで待ってもらえると話せます。', '小さな本音を1つ、言葉にしてみる'),
+  nd('nd_respect', '大切に扱われたかった', '大切に扱われた', '大切に扱われること', '一人の人として、大切に扱われること', '急いでいるときも、ひと言そえてもらえるとうれしいです。', '自分にも、ていねいな言葉をかけてみる'),
+  nd('nd_recognized', '認めてほしかった', '認めてもらえた', '認めてもらえること', 'がんばりや、できたことを認めてもらえること', 'できたことに気づいたら、ひと言もらえるとがんばれます。', '寝る前に、今日できたことを1つ書いてみる'),
+  nd('nd_belong', 'ひとりじゃないと思いたかった', 'ひとりじゃないと思えた', 'ひとりじゃないと思えること', '誰かとつながっていると感じられること', 'ときどき声をかけてもらえると、ほっとします。', '気になる人に、短い連絡を1回してみる'),
+  nd('nd_useful', '役に立ちたかった', '役に立てた', '役に立てること', '誰かの役に立てていると感じられること', '手伝えることがあれば、声をかけてもらえるとうれしいです。', '誰かのために、小さなことを1つしてみる'),
+  nd('nd_competent', 'ちゃんとできたと思いたかった', 'ちゃんとできた', 'ちゃんとできた手ごたえ', '自分の力で、ちゃんとやれたと思えること', '任せたことは、最後まで見守ってもらえると力が出ます。', '15分で終わることを、1つやりきってみる'),
+  nd('nd_choose', '自分で決めたかった', '自分で決められた', '自分で決められること', 'やり方やペースを、自分で決められること', 'やり方は、できるだけ任せてもらえると力が出ます。', '1日の中で、自分で決める時間を30分つくる'),
+  nd('nd_rest', 'ひと息つきたかった', 'ひと息つけた', 'ひと息つける時間', '何もしなくていい時間があること', '疲れて見えるときは、そっとしておいてもらえると助かります。', '予定のない時間を、30分だけつくってみる'),
+  nd('nd_safe', '安心したかった', '安心できた', '安心できること', '先が見えて、安心していられること', '予定や変更は、早めに教えてもらえると助かります。', '心配なことを1つ、紙に書き出してみる'),
+  nd('nd_grow', '前に進みたかった', '前に進めた', '前に進めている感じ', '少しずつでも、前に進めていると感じられること', '新しいことをするときは、見守ってもらえると心強いです。', 'できるようになりたいことを、5分だけやってみる'),
+  nd('nd_cared', '大事な人に笑っていてほしかった', '大事な人が笑っていた', '大事な人が元気でいること', '大事な人が、元気で笑っていること', '困ったときは、ひとりで抱えずに話してもらえると安心します。', '大事な人に「元気？」と1回聞いてみる'),
+];
+export const NEED_PREDICTIONS = NEEDS.map((need) => ({ id: need.id, label: need.tag }));
+
+// 第1章の層（1層1画面）。side ごとの並び。group は draft のキー、max は選べる数。
+export const LAYERS = {
+  hard: [
+    { id: 'scene', depth: '出来事', title: '何があった？', groups: ['scene'] },
+    { id: 'surface', depth: '表の気持ち', title: 'そのとき、表に出た気持ちは？', hint: 'いちばん近いものを1つ', groups: ['surface'] },
+    { id: 'deep', depth: '奥の気持ち', title: (picked) => (picked ? `『${picked}』の、もう少し奥には？` : 'そのときの気持ちの、もう少し奥には？'), lead: '表の気持ちの下に、別の気持ちがかくれていることがあります。', groups: ['deep'] },
+    { id: 'needs', depth: '本当は', title: '本当は、どうなってほしかった？', groups: ['needs'] },
+  ],
+  happy: [
+    { id: 'scene', depth: '出来事', title: '何があった？', groups: ['scene'] },
+    { id: 'feelings', depth: '気持ち', title: 'そのときの気持ちは？', groups: ['feelings'] },
+    { id: 'needs', depth: '満たされたもの', title: 'そのとき、何が満たされていた？', groups: ['needs'] },
+  ],
+};
+
+// ---------- 第2章 頭の中の声 ----------
+const PT = (id, name, tryText) => ({ id, name, try: tryText });
+export const PATTERNS = [
+  PT('pt_blame', '自分を責める', 'うまくいかなかったとき、自分のせいじゃない理由も1つ書いてみる'),
+  PT('pt_worry', '先を悪く読む', '心配が浮かんだら、いちばんありそうなことも考えてみる'),
+  PT('pt_read', '人の気持ちを先に読む', '気になったら、思いこまずに1回だけ聞いてみる'),
+  PT('pt_must', '「〜しなきゃ」でしばる', '「しなきゃ」を1つ、「できたらいいな」に言いかえてみる'),
+  PT('pt_compare', '人と比べる', '人と比べたら、前の自分とも比べてみる'),
+  PT('pt_alone', 'ひとりで抱える', 'しんどいことを1つ、誰かに短く話してみる'),
+];
+const TH = (id, label, pattern) => ({ id, label, pattern });
+export const THOUGHTS = [
+  TH('th_nogood', '自分はダメだ', 'pt_blame'),
+  TH('th_myfault', '自分のせいだ', 'pt_blame'),
+  TH('th_hopeless', 'どうせうまくいかない', 'pt_worry'),
+  TH('th_end', '失敗したら終わりだ', 'pt_worry'),
+  TH('th_disliked', '嫌われたかも', 'pt_read'),
+  TH('th_burden', '迷惑をかけている', 'pt_read'),
+  TH('th_must', 'ちゃんとしなきゃ', 'pt_must'),
+  TH('th_cantsay', '断ったら悪い', 'pt_must'),
+  TH('th_others', 'みんなはできているのに', 'pt_compare'),
+  TH('th_fake', '本当はできないのがバレる', 'pt_compare'),
+  TH('th_noweak', '弱音ははけない', 'pt_alone'),
+  TH('th_nobody', '誰もわかってくれない', 'pt_alone'),
+];
+const RP = (id, pattern, label) => ({ id, pattern, label });
+export const REPLIES = [
+  RP('rp_blame1', 'pt_blame', 'それだけ真剣だったんだね'),
+  RP('rp_blame2', 'pt_blame', '全部が自分のせいじゃないよ'),
+  RP('rp_worry1', 'pt_worry', 'やってみないと、わからないよ'),
+  RP('rp_worry2', 'pt_worry', 'うまくいかなくても、終わりじゃないよ'),
+  RP('rp_read1', 'pt_read', '聞いてみないと、わからないよ'),
+  RP('rp_read2', 'pt_read', '頼ってもらえたら、うれしいよ'),
+  RP('rp_must1', 'pt_must', '今日はここまでで十分だよ'),
+  RP('rp_must2', 'pt_must', '断っても、大事な人は離れないよ'),
+  RP('rp_compare1', 'pt_compare', '人は人。自分のペースでいいよ'),
+  RP('rp_compare2', 'pt_compare', 'できていることも、ちゃんとあるよ'),
+  RP('rp_alone1', 'pt_alone', 'しんどいって、言っていいんだよ'),
+  RP('rp_alone2', 'pt_alone', '話してくれて、うれしいよ'),
+  RP('rp_any1', '', 'よくやってるよ'),
+  RP('rp_any2', '', '少し休もうよ'),
+];
+const IN = (id, label) => ({ id, label });
+export const INTENTS = [
+  IN('in_fail', '失敗しないように'),
+  IN('in_disliked', '嫌われないように'),
+  IN('in_shame', '恥をかかないように'),
+  IN('in_ready', 'がっかりする前に、心の準備をさせる'),
+  IN('in_push', '手を抜かないように、背中を押す'),
+  IN('in_duty', '大事な役目を果たせるように'),
+  IN('in_others', '大事な人を困らせないように'),
+  IN('in_stop', 'これ以上がんばりすぎないように'),
+];
+
+// ---------- 第3章 心が動くとき ----------
+const V = (id, label, tryMore) => ({ id, label, tryMore });
 export const VALUES = [
-  V('v_honest', '約束や正直さ', 'できない約束は、早めに言ってもらえると助かります。', '小さな約束を1つ決めて、守ってみる'),
-  V('v_fair', '公平さ', '決めごとは、みんなに同じように説明してもらえると安心します。', 'みんなで決めるときに、全員の考えを聞いてみる'),
-  V('v_respect', '気持ちを大切にされること', '気持ちを話したときは、まず受け止めてもらえるとうれしいです。', '自分の気持ちを、1回だけ言葉にして伝えてみる'),
-  V('v_free', '自分で決めること', 'やり方は、できるだけ任せてもらえると力が出ます。', '1日の中に、自分で決める時間を30分つくってみる'),
-  V('v_bond', '人と分かり合うこと', '話を最後まで聞いてもらえると、うれしいです。', '気になっている人に、自分から1回連絡してみる'),
-  V('v_seen', 'がんばりを認められること', 'できたことに気づいてもらえると、がんばれます。', '自分のがんばりを、寝る前に1つ書き出してみる'),
-  V('v_care', '人への優しさ', '困っている人がいたら、一緒に気にかけてもらえるとうれしいです。', '身近な人に、小さな親切を1つしてみる'),
-  V('v_grow', 'できることが増えること', '新しいことに挑戦するときは、見守ってもらえると心強いです。', 'できるようになりたいことを、5分だけ練習してみる'),
-  V('v_calm', '落ち着いて過ごせること', '予定や用事は、早めに教えてもらえると助かります。', '予定のない時間を、1日30分つくってみる'),
+  V('vl_honest', '正直さ・約束', '小さな約束を1つ決めて、守ってみる'),
+  V('vl_fair', '公平さ', 'みんなで決めるときに、全員の考えを聞いてみる'),
+  V('vl_kind', 'やさしさ', '身近な人に、小さな親切を1つしてみる'),
+  V('vl_respect', '一人ひとりを大切にすること', '話す番が少ない人に、1回声をかけてみる'),
+  V('vl_free', '自分で選ぶこと', '1日の中に、自分で選ぶ時間を30分つくってみる'),
+  V('vl_bond', '分かり合うこと', '気になっている人と、ゆっくり話してみる'),
+  V('vl_grow', '成長すること', 'できるようになりたいことを、5分だけ練習してみる'),
+  V('vl_effort', 'こつこつ努力すること', '続けたいことを、来週も1回やってみる'),
+  V('vl_calm', '落ち着いた暮らし', '予定のない時間を、1日30分つくってみる'),
+  V('vl_true', '自分らしさ', '合わせすぎた場面で、1回だけ本音を言ってみる'),
+  V('vl_contrib', '人の役に立つこと', '誰かのために、小さなことを1つしてみる'),
 ];
 export const VALUE_PREDICTIONS = VALUES.map((value) => ({ id: value.id, label: value.label }));
 
 const S = (id, label, value) => ({ id, label, value });
 export const SITUATIONS = {
   neg: [
-    S('n_promise', '約束を破られた', 'v_honest'), S('n_lie', 'うそやごまかしがあった', 'v_honest'),
-    S('n_unfair', 'ずるい・不公平なことを見た', 'v_fair'), S('n_ignored', '話を聞いてもらえなかった', 'v_respect'),
-    S('n_forced', 'やり方を押しつけられた', 'v_free'), S('n_unseen', 'がんばりに気づいてもらえなかった', 'v_seen'),
-    S('n_mean', '誰かが雑に扱われていた', 'v_care'), S('n_rude', '失礼なことを言われた', 'v_respect'),
-    S('n_rushed', '急かされた・予定を乱された', 'v_calm'), S('n_stuck', '思うように進まなかった', 'v_grow'),
-    S('n_left', '仲間に入れてもらえなかった', 'v_bond'),
+    S('sn_promise', '約束を破られた', 'vl_honest'), S('sn_lie', 'うそやごまかしがあった', 'vl_honest'),
+    S('sn_unfair', 'ずるい・不公平なことを見た', 'vl_fair'), S('sn_mean', '誰かが雑に扱われていた', 'vl_respect'),
+    S('sn_cold', '困っている人が放っておかれていた', 'vl_kind'), S('sn_forced', 'やり方を押しつけられた', 'vl_free'),
+    S('sn_nottalk', '話が通じなかった', 'vl_bond'), S('sn_lazy', '手を抜いている人を見た', 'vl_effort'),
+    S('sn_stuck', '思うように成長できなかった', 'vl_grow'), S('sn_rushed', 'せかされて、落ち着けなかった', 'vl_calm'),
+    S('sn_fitin', '自分を出せず、合わせすぎた', 'vl_true'), S('sn_useless', '役に立てなかった', 'vl_contrib'),
   ],
   pos: [
-    S('p_thanks', 'お礼を言われた', 'v_seen'), S('p_understood', '気持ちを分かってもらえた', 'v_bond'),
-    S('p_kind', '人の優しさを見た', 'v_care'), S('p_fair', 'ちゃんと公平に決まった', 'v_fair'),
-    S('p_honest', '正直に話してもらえた', 'v_honest'), S('p_did', 'できなかったことができた', 'v_grow'),
-    S('p_choose', '自分で決めて動けた', 'v_free'), S('p_together', 'みんなで何かをやりとげた', 'v_bond'),
-    S('p_quiet', 'のんびり落ち着いて過ごせた', 'v_calm'), S('p_praised', 'がんばりをほめられた', 'v_seen'),
+    S('sp_honest', '正直に話してもらえた', 'vl_honest'), S('sp_fair', 'ちゃんと公平に決まった', 'vl_fair'),
+    S('sp_kind', '人のやさしさを見た', 'vl_kind'), S('sp_respect', '一人ひとりが大事にされていた', 'vl_respect'),
+    S('sp_choose', '自分で決めて動けた', 'vl_free'), S('sp_understood', '気持ちが通じた', 'vl_bond'),
+    S('sp_effort', '努力が実った', 'vl_effort'), S('sp_did', 'できなかったことができた', 'vl_grow'),
+    S('sp_quiet', '落ち着いて、ていねいに過ごせた', 'vl_calm'), S('sp_self', '自分らしくいられた', 'vl_true'),
+    S('sp_helped', '人の役に立てた', 'vl_contrib'),
   ],
 };
-export const FEELINGS = {
-  neg: [
-    { id: 'f_irritated', label: 'イライラ' }, { id: 'f_disappointed', label: 'がっかり' }, { id: 'f_sad', label: '悲しい' },
-    { id: 'f_frustrated', label: 'くやしい' }, { id: 'f_uneasy', label: 'モヤモヤ' }, { id: 'f_hurried', label: 'あせり' },
-  ],
-  pos: [
-    { id: 'f_happy', label: 'うれしい' }, { id: 'f_relieved', label: 'ほっとした' }, { id: 'f_moved', label: 'じーんとした' },
-    { id: 'f_excited', label: 'わくわく' }, { id: 'f_proud', label: '誇らしい' },
-  ],
+export const ADMIRE_WHO = [
+  { id: 'aw_near', label: '身近な人' }, { id: 'aw_mates', label: '学校や職場の人' },
+  { id: 'aw_famous', label: '有名な人' }, { id: 'aw_story', label: '本や映画・物語の人' },
+];
+const Q = (id, label, value, wish) => ({ id, label, value, wish });
+export const QUALITIES = [
+  Q('ql_speak', '思ったことを、はっきり言う', 'vl_true', '思ったことを、はっきり言える'),
+  Q('ql_kind', '誰にでもやさしい', 'vl_kind', '誰にでもやさしくできる'),
+  Q('ql_calm', 'いつも落ち着いている', 'vl_calm', 'どんなときも落ち着いていられる'),
+  Q('ql_try', '新しいことに挑戦している', 'vl_grow', '新しいことに挑戦できる'),
+  Q('ql_free', '自分のペースで、好きに生きている', 'vl_free', '自分のペースで、好きに生きる'),
+  Q('ql_fair', 'ずるをしない', 'vl_fair', 'ずるをしないでいられる'),
+  Q('ql_listen', '人の話をよく聞く', 'vl_bond', '人の話を、よく聞ける'),
+  Q('ql_help', '人のために動ける', 'vl_contrib', '人のために動ける'),
+  Q('ql_steady', 'こつこつ続けている', 'vl_effort', 'こつこつ続けられる'),
+  Q('ql_respect', '相手が誰でも、態度を変えない', 'vl_respect', '相手が誰でも、態度を変えない'),
+];
+
+// 章をまたぐ対応（トリセツ 5 の最後の 1 行だけに使う）
+export const NEED_TO_VALUE = {
+  nd_choose: 'vl_free', nd_useful: 'vl_contrib', nd_understood: 'vl_bond', nd_respect: 'vl_respect', nd_speak: 'vl_true',
+  nd_grow: 'vl_grow', nd_competent: 'vl_effort', nd_rest: 'vl_calm', nd_safe: 'vl_calm', nd_cared: 'vl_kind', nd_belong: 'vl_bond',
 };
-export const EPISODE_MEMO = { neg: '例：待ち合わせに来なかった', pos: '例：先生がほめてくれた', others: '例：友だちの進路の相談にのった' };
 
-// ---------- 第3章 人から見たわたし ----------
-const T = (id, label, tryMore, tryShow) => ({ id, label, tryMore, tryShow });
-export const STRENGTHS = [
-  T('s_listen', '話を聞くこと', '人の話を、最後までじっくり聞いてみる', '誰かの話を聞く時間を、来週1回つくってみる'),
-  T('s_explain', '分かりやすく伝えること', '知っていることを、誰かに1つ教えてみる', '知っていることを、誰かに1つ教えてみる'),
-  T('s_solve', '調べて解決すること', '困っている人の調べものを、1回手伝ってみる', '困っている人の調べものを、1回手伝ってみる'),
-  T('s_make', '手を動かして作ること', '作った物を、誰かに1つ渡してみる', '何かを作る時間を、来週30分つくってみる'),
-  T('s_organize', '段取りを決めること', '次の予定の段取りを、自分から決めてみる', '次の予定の段取りを、自分から決めてみる'),
-  T('s_cheer', '場を明るくすること', '集まりで、自分から1回話しかけてみる', '集まりで、自分から1回話しかけてみる'),
-  T('s_notice', '人の変化に気づくこと', '気になった人に、ひと言声をかけてみる', '気になった人に、ひと言声をかけてみる'),
-  T('s_steady', '最後まで続けること', '続けていることを、来週も1回やってみる', '小さく続けることを、1つ決めてみる'),
-  T('s_calm', '落ち着いて動くこと', '慌てている人のそばで、手伝いを申し出てみる', '慌てている人のそばで、手伝いを申し出てみる'),
-  T('s_try', '新しいことに挑戦すること', '小さな新しいことを、来週1つやってみる', '小さな新しいことを、来週1つやってみる'),
-];
-export const TASKS = [
-  { id: 't_listen', label: '話や相談を聞いた', strength: 's_listen' }, { id: 't_teach', label: 'やり方を教えた', strength: 's_explain' },
-  { id: 't_write', label: '文章や連絡をまとめた', strength: 's_explain' }, { id: 't_fix', label: '調べた・直した', strength: 's_solve' },
-  { id: 't_cook', label: '料理やおやつを作った', strength: 's_make' }, { id: 't_make', label: '物を作った・飾った', strength: 's_make' },
-  { id: 't_plan', label: '予定や段取りを決めた', strength: 's_organize' }, { id: 't_tidy', label: '片付けや整理をした', strength: 's_organize' },
-  { id: 't_mood', label: '場を盛り上げた', strength: 's_cheer' }, { id: 't_care', label: '元気がない人に声をかけた', strength: 's_notice' },
-  { id: 't_finish', label: '最後までやりとげた', strength: 's_steady' }, { id: 't_steady', label: '困った場面で落ち着いて動いた', strength: 's_calm' },
-  { id: 't_first', label: '最初にやってみせた', strength: 's_try' },
-];
-export const KINDS = [{ id: 'k_asked', label: '頼まれた' }, { id: 'k_thanked', label: 'お礼を言われた' }, { id: 'k_praised', label: 'ほめられた' }];
-export const FROMS = [
-  { id: 'w_family', label: '家族・パートナー' }, { id: 'w_friend', label: '友だち' }, { id: 'w_mates', label: '学校や仕事の人' },
-  { id: 'w_local', label: '近所・地域の人' }, { id: 'w_other', label: 'その他' },
-];
+// 入力画面の例（placeholder）
+export const MEMO_PLACEHOLDER = {
+  happy: '例：久しぶりに友だちと長電話', hard: '例：会議で意見を流された', voice: '例：グループ発表で失敗した',
+  neg: '例：店で年配の人が後回しにされた', pos: '例：会で全員に話す番が回った', admire: '例：近所の80代の先輩',
+};
 
-// 入力画面のグループ（1日／1出来事）。side で中身が変わるものは chips を関数にする。
+// 画面ごとの入力グループ。chips は {id,label}。required は記録の条件。
+export function layerGroups(side, layerId) {
+  if (layerId === 'scene') return [{ id: 'scene', label: 'どんなこと？', hint: '（1つ）', max: 1, required: false, chips: SCENES.map(({ id, label }) => ({ id, label })) }];
+  if (side === 'hard') {
+    if (layerId === 'surface') return [{ id: 'surface', label: SIDE_HEAD.surface, hint: '', max: 1, required: false, chips: SURFACE_HARD.map(({ id, label }) => ({ id, label })) }];
+    if (layerId === 'deep') return [{ id: 'deep', label: SIDE_HEAD.deep, hint: '', max: 2, required: false, chips: DEEP.map(({ id, label }) => ({ id, label })) }];
+    if (layerId === 'needs') return [{ id: 'needs', label: SIDE_HEAD.needsHard, hint: '', max: 2, required: false, chips: NEEDS.map((need) => ({ id: need.id, label: need.wish })) }];
+  }
+  if (side === 'happy') {
+    if (layerId === 'feelings') return [{ id: 'feelings', label: SIDE_HEAD.feelings, hint: '', max: 2, required: false, chips: SURFACE_HAPPY }];
+    if (layerId === 'needs') return [{ id: 'needs', label: SIDE_HEAD.needsHappy, hint: '', max: 2, required: false, chips: NEEDS.map((need) => ({ id: need.id, label: need.met })) }];
+  }
+  return [];
+}
+const SIDE_HEAD = {
+  surface: 'いちばん近いものを1つ', deep: '2つまで', needsHard: '2つまで', feelings: '2つまで', needsHappy: '2つまで',
+};
+
+// 第2・3章（と いいなと思った人）の入力グループ
 export function episodeGroups(chapterId, side) {
-  if (chapterId === 'energy') return DAY_GROUPS.map((group) => ({ ...group, required: true, chips: DAY_CHIPS.filter((chip) => chip.group === group.id).map(({ id, label }) => ({ id, label })) }));
-  if (chapterId === 'values') {
+  if (chapterId === 'voice') {
     return [
-      { id: 'situation', label: 'どんな出来事だった？', max: 1, required: true, chips: (SITUATIONS[side] || []).map(({ id, label }) => ({ id, label })) },
-      { id: 'feeling', label: 'そのときの気持ちに、いちばん近いのは？', max: 1, required: true, chips: FEELINGS[side] || [] },
+      { id: 'scene', label: 'どんなこと？', hint: '（1つ・なくてOK）', max: 1, required: false, chips: SCENES.map(({ id, label }) => ({ id, label })) },
+      { id: 'thoughts', name: '頭の中の声', label: 'そのとき、頭の中でどんな声がした？', hint: '（2つまで）', max: 2, required: true, chips: THOUGHTS.map(({ id, label }) => ({ id, label })) },
     ];
   }
-  return [
-    { id: 'kind', label: 'どれに近い？', max: 1, required: true, chips: KINDS },
-    { id: 'task', label: 'どんなこと？', max: 1, required: true, chips: TASKS.map(({ id, label }) => ({ id, label })) },
-    { id: 'who', label: '誰から？', max: 1, required: false, optionalNote: 'なくてOK', chips: FROMS },
-  ];
+  if (chapterId === 'values' && side === 'admire') {
+    return [
+      { id: 'who', label: 'どんな人？', hint: '（1つ・なくてOK）', max: 1, required: false, chips: ADMIRE_WHO },
+      { id: 'qualities', name: 'どこがいいか', label: 'その人の、どこがいいと思った？', hint: '（2つまで）', max: 2, required: true, chips: QUALITIES.map(({ id, label }) => ({ id, label })) },
+    ];
+  }
+  if (chapterId === 'values') {
+    return [{ id: 'situation', name: '心が動いたこと', label: '何に心が動いた？', hint: '（1つ）', max: 1, required: true, chips: (SITUATIONS[side] || []).map(({ id, label }) => ({ id, label })) }];
+  }
+  return [];
 }
 
 // ---------- 画面に出す固定文 ----------
 export const STEP_LABELS = ['予想', '思い出す', '並べる', '見つける', 'ためす'];
-export const STEP_LABELS_OTHERS = ['自分で思う', '思い出す', '並べる', '見つける', 'ためす'];
+export const STEP_LABELS_VOICE = ['思い出す', '並べる', '見つける', '声に返す', 'ためす'];
 
 export const SIDE_COPY = {
-  good: { label: '調子がよかった日', short: 'よかった日', unitName: '日', noun: '日', color: 'good' },
-  bad: { label: '調子が悪かった日', short: '悪かった日', unitName: '日', noun: '日', color: 'bad' },
-  neg: { label: 'イラッと・がっかり', short: 'イラッと・がっかり', unitName: '出来事', noun: 'つ', color: 'bad' },
-  pos: { label: 'うれしい・じーんと', short: 'うれしい・じーんと', unitName: '出来事', noun: 'つ', color: 'good' },
-  others: { label: '人から頼まれた・お礼を言われたこと', short: '人から', unitName: '出来事', noun: 'つ', color: 'good' },
+  happy: { label: 'うれしかった出来事', short: 'うれしかった', color: 'good' },
+  hard: { label: 'しんどかった出来事', short: 'しんどかった', color: 'bad' },
+  voice: { label: 'しんどかった場面', short: '場面', color: 'bad' },
+  neg: { label: 'イラッと・モヤッと', short: 'イラッと', color: 'bad' },
+  pos: { label: 'じーんと・いいなと思った', short: 'じーんと', color: 'good' },
+  admire: { label: 'いいなと思った人', short: 'いいなと思った人', color: 'good' },
 };
 
 export const INTRO = {
-  good: { title: '調子がよかった日を3日、思い出そう', lines: ['この1〜2週間で「いい感じだったな」という日です。', 'すごくいい日でなくても大丈夫。だいたいで選んでね。'], button: '1日目を思い出す' },
-  bad: { title: '次は、調子が悪かった日を3日、思い出そう', lines: ['「なんだかうまくいかなかったな」という日です。', '自分を責めるためではなく、比べるために思い出します。'], button: '1日目を思い出す' },
-  neg: { title: '最近、イラッとしたり、がっかりしたりした出来事を2つ思い出そう', lines: ['大きなことでなくて大丈夫。「ちょっとモヤッとした」くらいでOKです。', '思い出すのがつらいことは、選ばなくて大丈夫です。'], button: '1つ目を思い出す' },
-  pos: { title: '次は、うれしかったり、じーんとしたりした出来事を2つ思い出そう', lines: ['小さなことで大丈夫です。'], button: '1つ目を思い出す' },
-  others: { title: '最近、人から頼まれたこと・お礼を言われたこと・ほめられたことを3つ思い出そう', lines: ['家族や友だち、学校や仕事、近所の人など、誰からでもOKです。', '小さなことで大丈夫です。'], button: '1つ目を思い出す' },
+  happy: { title: 'うれしかった・ほっとした出来事を、2つ思い出そう', lines: ['この1〜2週間の、小さなことで大丈夫です。', '「ちょっとよかったな」くらいでOKです。'], button: '1つ目を思い出す' },
+  hard: { title: '次は、しんどかった出来事を、3つ思い出そう', lines: ['最近の小さな出来事で大丈夫です。「ちょっとモヤッとした」くらいでOK。', '昔のつらいことや、思い出すと苦しくなることは、選ばないでね。', '自分を責めるためではなく、奥にあるものを見つけるために思い出します。'], button: '1つ目を思い出す' },
+  voice: { title: 'しんどかったり、自分にがっかりしたりした場面を、3つ思い出そう', lines: ['最近の小さなことで大丈夫です。「ちょっと落ちこんだ」くらいでOK。', '昔のつらいことや、思い出すと苦しくなることは、選ばないでね。', '自分を責めるためではなく、声のくせに気づくために思い出します。'], button: '1つ目を思い出す' },
+  neg: { title: '最近、イラッとしたり、モヤッとしたりした出来事を2つ思い出そう', lines: ['大きなことでなくて大丈夫です。人のことでも、自分のことでもOK。', '思い出すのがつらいことは、選ばなくて大丈夫です。'], button: '1つ目を思い出す' },
+  pos: { title: '次は、じーんとしたり、いいなと思ったりした出来事を2つ思い出そう', lines: ['小さなことで大丈夫です。'], button: '1つ目を思い出す' },
 };
 
 export const COPY = {
   appTitle: 'わたしのトリセツ',
-  deckSubtitle: '思い出して並べると、自分が見えてくる',
-  deckDescription: '最近の調子のいい日・悪い日や、心が動いた出来事を思い出して並べ、自分の共通点を見つけます。見つけたことから、自分の取扱説明書を作ります。',
+  deckSubtitle: '出来事の奥に、くり返すものがある',
+  deckDescription: '最近の出来事を思い出して、その奥にある気持ちや願い、頭の中の声をたどります。くり返し出てくるものから、自分の取扱説明書を作ります。',
   cardMeta: '3つの章',
   startTitle: 'わたしのトリセツを作ろう',
-  startLead: '最近あったことを思い出して並べると、自分では気づいていなかった「自分の動かし方」が見えてきます。見つけたことから、自分の取扱説明書を作ります。',
+  startLead: '出来事はバラバラでも、その奥には、同じ気持ちや願いがくり返し出てくることがあります。最近の小さな出来事を思い出して、自分の奥にあるものを見つけます。',
   privacyTitle: 'ここに書いたことは、どこにも送られません。',
   privacyBody: 'この画面を閉じると消えます。章を1つ書き終えると、この端末に残すかどうか選べます。',
-  startGuide: '目安：1つの章が3〜5分。どの章からでも始められます。',
+  startGuide: '目安：1つの章が4〜6分。どの章からでも始められます。',
+  startGuide2: 'どの質問も、飛ばして大丈夫です。',
   begin: '作り始める',
-  noticeMigrated: 'トリセツの作り方が新しくなりました。前のトリセツから「製品名」と「元気になるスイッチ」を引き継ぎました。ほかの欄は、新しい作り方で書き直してね。',
+  noticeMigrated: 'トリセツの作り方が新しくなりました。前のトリセツから『製品名』だけ引き継ぎました。ほかは、新しい作り方で書いてね。',
   noticeDiscarded: 'トリセツの作り方が新しくなりました。前のトリセツの答えは新しい作り方では使えないため、この端末から消しました。',
   savedTitle: '前に作ったトリセツがあります',
   viewManual: 'トリセツを見る',
@@ -255,81 +329,114 @@ export const COPY = {
   chapterDoneMark: 'できた',
   teaserPrefix: '見つけたこと：',
   predictNext: '次へ',
-  predictFromV1: '前のトリセツで選んでいたものを入れています。変えてもOK。',
   limitMessage: (n) => `${n}つまでです。どれかを外すと選べます。`,
   memoLabel: 'ひとことメモ（なくてOK）',
+  memoLabelEpisode: 'ひとことで（なくてOK）',
   memoCount: (n, max) => `${n}/${max}字`,
-  recordDay: 'この日を記録する',
+  layerNext: '次へ',
+  layerSkip: 'わからないので飛ばす',
+  layerKeep: 'このまま進む',
   recordEpisode: 'この出来事を記録する',
-  recordOther: 'これを記録する',
-  skipItem: '思い出せないので飛ばす',
+  recordVoice: 'この場面を記録する',
+  recordAdmire: 'これを記録する',
+  dropEpisode: 'この出来事はやめておく',
+  skipVoice: '声は思い出せないので飛ばす',
+  skipValues: '思い出せないので飛ばす',
+  skipAdmire: '思いつかないので飛ばす',
   missingGroups: (names) => `選んでいないところがあります：${names.join('、')}`,
-  dayHeading: (side, n, total) => (total ? `${n}日目（${total}日中）` : `${n}日目`),
   episodeHeading: (n, total) => (total ? `${n}つ目（${total}つ中）` : `${n}つ目`),
-  deleteItem: 'これを消す',
-  deleteDay: 'この日を消す',
-  shortTitleEnergy: '比べるには、2日以上あると安心です。少し前の日でも大丈夫です。',
-  shortTitleValues: 'イラッとした出来事とうれしかった出来事を、どちらも1つ以上、合わせて3つ以上思い出すと見つけやすくなります。',
-  shortTitleOthers: '見つけるには、出来事が2つ以上あると安心です。小さなことでも大丈夫です。',
-  addMoreDay: 'もう1日思い出す',
+  depthLabel: '深さ',
+  deleteEpisode: 'この出来事を消す',
+  deleteVoice: 'この場面を消す',
+  deleteAdmire: 'この記録を消す',
+  useNeedsHard: '第1章の「しんどかった出来事」を使う',
+  shortTitleNeeds: '合わせて3つ以上あると、くり返しが見つけやすくなります。小さなことでも大丈夫です。',
+  shortTitleVoice: '見つけるには、場面が2つ以上あると安心です。小さなことでも大丈夫です。',
+  shortTitleValues: '出来事といいなと思った人が、合わせて3つ以上あると見つけやすくなります。',
   addMoreEpisode: 'もう1つ思い出す',
   later: 'あとにする（目次へ）',
   lineupTitle: '並べてみよう',
-  lineupLeadEnergy: '思い出した日を、横に並べました。',
+  lineupLeadNeeds: '出来事を横に、その奥にあったものを縦に並べました。',
+  lineupLeadVoice: '頭の中の声を、場面ごとに並べました。',
   lineupLeadValues: '出来事の裏にありそうな「大事なこと」を、横に書きました。',
-  lineupLeadOthers: '自分で思うことと、人から頼まれたことを並べました。',
+  lineupAskNeeds: '出来事はバラバラでも、奥に同じものがある？',
+  lineupAskVoice: '声はちがっても、同じ種類の声がある？',
+  lineupAskValues: '自分でも、何か気づくことはある？',
   lineupNoteValues: '「→」の先は、ちがうと思ったら押して変えられます。',
-  lineupAsk: '自分でも、何か気づくことはある？',
+  lineupLayerSurface: '表の気持ち',
+  lineupLayerDeep: '奥の気持ち',
+  lineupLayerNeeds: '本当の願い・満たされたもの',
+  lineupNa: 'この出来事には聞いていません',
+  lineupOneEpisode: (n) => `1つだけに出たこと（${n}）`,
   findCommon: '共通点を探す',
   lineupYes: 'あり', lineupNo: 'なし',
-  lineupGood: 'よかった日', lineupBad: '悪かった日', lineupSelf: '自分で思う', lineupOthers: '人から',
-  lineupMemo: 'メモ',
+  lineupHappy: 'うれしかった', lineupHard: 'しんどかった', lineupScenes: '場面',
+  lineupMemo: '出来事',
+  lineupAdmire: 'いいなと思った人',
   changeValue: '大事なことを選び直す',
   nameEmpty: '名前をつけると、ここに出ます。',
   insightTitle: '見つけたこと',
   insightIntro: '今回の答えでは──',
-  insightNoneTitle: '今回の答えでは、はっきりした共通点はまだ見えません。',
-  insightNoneBody: 'よかった日と悪かった日に、同じくらいいろいろなことがありました。もう少し日を足すと、見えてくるかもしれません。',
-  insightNoneValuesTitle: '今回は、出来事ごとに違う「大事なこと」が出てきました。',
-  insightNoneValuesBody: 'どれも、大事にしていることの候補です。出来事を足すと、重なりが見えてくるかもしれません。',
-  nearMissTitle: '少しだけ多かったもの：',
-  bandGood: '調子がよかった日に多かったこと',
-  bandBad: '調子が悪かった日に多かったこと',
-  bandGoodA: 'よかった日にあって、悪かった日にはなかったこと',
-  bandBadA: '悪かった日にあって、よかった日にはなかったこと',
-  lineupOneDay: (n) => `1日だけ出たこと（${n}）`,
-  compareLine: (nG, nB) => `よかった日${nG}日と、悪かった日${nB}日を比べました。`,
-  extraEnergy: 'ほかに見えたこと：',
+  scenesSpread: (labels) => `出来事は、${labels.join('、')}と、バラバラでした。でも、奥にはくり返し出てくるものがありました。`,
+  bandCross: 'しんどい時もうれしい時も',
+  bandLink: '表の気持ちの奥',
+  bandHard: 'しんどいときの奥',
+  bandHappy: 'うれしかったとき',
+  bandVoice: 'くり返していた声',
+  bandValues: '心が動く裏にあること',
+  insightNoneTitle: '今回の答えでは、くり返し出てくるものは、まだはっきりしません。',
+  insightNoneBody: '出来事ごとに、奥にある気持ちや願いがちがっていました。',
+  nearTitle: '少しだけ重なっていたもの：',
+  deepListHard: '出てきた奥の気持ち：',
+  deepListHappy: '出てきた満たされたもの：',
+  extraHead: 'ほかに見えたこと：',
+  extraValues: 'ほかに：',
   insightFootShort: '決まりではありません。',
-  bandNeg: 'イラッと・がっかりの裏にあること',
-  bandPos: 'うれしさの裏にあること',
-  bandOthersOnly: '自分では選ばなかったけれど、人から頼りにされていたこと',
-  bandBoth: '自分でも思っていて、人からも',
-  bandSelfOnly: '今回の出来事には出てこなかった得意',
+  insightAddMore: '出来事を足すと、もっとはっきりするかもしれません。',
+  voiceNoneTitle: '今回は、場面ごとにちがう声がしていました。',
+  voiceNoneBody: 'どの声も、しんどいときに出てきやすい声の候補です。場面を足すと、重なりが見えてくるかもしれません。',
+  voiceAddMore: '場面を足すと、もっとはっきりするかもしれません。',
+  valuesNoneTitle: '今回は、出来事ごとにちがう『大事なこと』が出てきました。',
+  valuesNoneBody: 'どれも、大事にしていることの候補です。出来事を足すと、重なりが見えてくるかもしれません。',
+  heavyNote: 'しんどさが続いているときは、ひとりで抱えずに、話せる人や相談先を頼ってみてね。',
   compareGap: '予想と比べる',
   nextButton: '次へ',
-  fixDays: '日を直す・足す',
   fixEpisodes: '出来事を直す・足す',
-  addGood: '調子がよかった日を足す',
-  addBad: '調子が悪かった日を足す',
+  fixScenes: '場面を直す・足す',
+  addHappy: 'うれしかった出来事を足す',
+  addHard: 'しんどかった出来事を足す',
+  addScene: '場面を足す',
   addNeg: 'イラッとした出来事を足す',
-  addPos: 'うれしかった出来事を足す',
+  addPos: 'じーんとした出来事を足す',
   goOn: 'このまま進む',
   gapTitle: '予想と比べてみよう',
   gapThought: (label) => `思っていた：${label}`,
-  daysTitleEnergy: '思い出した日',
+  protectTitle: 'その声は、何を守ろうとしていると思う？',
+  protectLead: 'きびしい声も、じつは自分を守ろうとしていることがあります。',
+  protectVoiceHead: (labels) => `${labels.map((label) => `『${label}』`).join('')}という声`,
+  otherVoice: 'ほかの声にする',
+  otherVoiceTitle: 'どの声について考える？',
+  protectNext: '次へ',
+  replyTitle: '大事な友だちが同じことを言っていたら、何て返す？',
+  replyLead: (labels) => `${labels.map((label) => `「${label}」`).join('')}と、友だちが言っていたら。`,
+  replyHint: '1つ選んでね',
+  replyClosing: 'その言葉を、自分にもかけてみよう。',
+  replyPlaceholder: '例：気にしすぎだよ、大丈夫',
+  replyNext: '次へ',
+  daysTitleNeeds: '思い出した出来事',
+  daysTitleVoice: '思い出した場面',
   daysTitleValues: '思い出した出来事',
-  daysTitleOthers: '思い出した出来事',
   fixOne: '直す',
-  addOneDay: '＋ もう1日足す',
   addOneEpisode: '＋ もう1つ足す',
+  addOneAdmire: '＋ いいなと思った人を足す',
   backToInsight: '見つけたことに戻る',
   surpriseTitle: 'いちばん意外だったことは？',
   surpriseHint: '1つ選んでね',
   surpriseNone: '特になし（思ったとおり）',
   surpriseGap: '予想と違ったこと',
-  surpriseSpread: '出来事ごとに違ったこと',
-  surpriseSelf: '自分だけの得意があったこと',
+  surpriseSpreadNeeds: '出来事ごとに、奥のものがちがったこと',
+  surpriseSpreadVoice: '場面ごとに、ちがう声がしていたこと',
+  surpriseSpreadValues: '出来事ごとに違ったこと',
   surprisePlaceholder: '例：話すだけで変わるなんて',
   tryTitle: '来週ためしてみること',
   tryHint: '見つけたことから、1つだけ選んでみよう',
@@ -340,9 +447,7 @@ export const COPY = {
   freeWrite: '自分で書く',
   freeCount: (n) => `${n}/30字`,
   toContents: '目次に戻る',
-  doneCheck: (title) => `${title}`,
   doneNext: (label) => `次は「${label}」へ`,
-  doneManualLead: 'この章で書き込まれた部分',
   saveCardTitle: 'この端末に残す？',
   saveCardBody1: '残さなければ、この画面を閉じたときに消えます。',
   saveCardBody2: '残すと、次に開いたときも見られます（この端末の中だけ）。',
@@ -360,7 +465,7 @@ export const COPY = {
   noName: 'わたしの取扱説明書',
   todoBox: 'まだ調べていません',
   todoButton: '調べる',
-  noneBox: '今回はまだ見えませんでした。日を足すと、ここに書き込まれます。',
+  noneBox: '今回はまだ見えませんでした。出来事を足すと、ここに書き込まれます。',
   noneButton: '足す',
   editSection: '直す',
   shareNote: 'スクリーンショットで残しておくと、いつでも見返せます。',
@@ -383,30 +488,32 @@ export const COPY = {
 
 // トリセツの欄（番号と順番は固定）
 export const MANUAL_SECTIONS = [
-  { id: 'power', chapterId: 'energy', title: '電源の入れ方', icon: 'power' },
-  { id: 'warning', chapterId: 'energy', title: '警告ランプ', icon: 'lamp' },
+  { id: 'fuel', chapterId: 'needs', title: '満たされると元気になるもの', icon: 'power' },
+  { id: 'shaky', chapterId: 'needs', title: '揺れやすいところ', icon: 'lamp' },
+  { id: 'request', chapterId: 'needs', title: '周りの人へのお願い', icon: 'bubble' },
+  { id: 'voice', chapterId: 'voice', title: '頭の中の声と、かけたい言葉', icon: 'voice' },
   { id: 'values', chapterId: 'values', title: '大事にしていること', icon: 'star' },
-  { id: 'request', chapterId: 'values', title: '周りの人へのお願い', icon: 'bubble' },
-  { id: 'strengths', chapterId: 'others', title: '本製品の特長', icon: 'hand' },
   { id: 'try', chapterId: null, title: '来週ためしてみること', icon: 'wrench' },
   { id: 'surprise', chapterId: null, title: 'いちばん意外だったこと', icon: 'drop' },
 ];
 
 // 組み立ての固定文
 export const MANUAL_COPY = {
-  powerOutro: '今回の答えでは、調子がよかった日にこれがありました。',
-  powerNoPower: (tag) => `今回の答えでは、調子がよかった日は『${tag}』でした。`,
-  noneLine: '今回はまだ見えませんでした。',
-  warningIntro: 'こんな日は、調子が下がりやすいようです。',
-  warningOutro: 'そんな日は、早めに休ませてあげてください。',
+  suffixCross: '（足りないとしんどく、満たされるとうれしい）',
+  suffixHard: '（しんどかったときに足りなかった）',
+  suffixHappy: '（うれしかったときに満たされていた）',
+  fuelCandidates: 'まだはっきりしませんが、候補です。',
+  shakyIntro: '表に出ている気持ちの奥に、別の気持ちがあるようです。',
+  shakyOutro: '表の気持ちの奥にあるものに、気づいてもらえると助かります。',
+  requestOutro: 'いつも、ありがとう。',
+  voiceNone: 'しんどいときに、こんな声がしていました。',
+  voiceReplyHead: 'そんなときに、自分にかけたい言葉',
+  voiceSoft: 'きびしい声も、自分を守ろうとしていることがあります。',
   valuesCandidates: '大事にしていることの候補です。',
   valuesBoth: 'これが守られないと心が波立ち、守られるとうれしくなるようです。',
   valuesNeg: 'これが守られないと、心が波立ちやすいようです。',
   valuesPos: 'これがあると、うれしくなるようです。',
-  requestOutro: 'いつも、ありがとう。',
-  strengthsAndSelf: (label) => `${label}（自分でも人からも）`,
-  strengthsOthers: (label, phrase = '頼りにされています') => `${label}（人から${phrase}）`,
-  strengthsWaiting: 'まだ出番を待っている特長',
+  admireHead: '本当は、こうありたい',
   tryOutro: '合わなければ、やめてOKです。',
   surpriseNone: '思ったとおりだった',
 };

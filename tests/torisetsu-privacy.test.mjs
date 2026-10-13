@@ -14,9 +14,9 @@ const { default: track } = await import('../api/track.js');
 const { PAGE_IDS } = await import('../server-side/config.mjs');
 const ts = await import('../dist/torisetsu.js');
 const flow = await import('./helpers/torisetsu-flow.mjs');
-const ex1 = await import('./fixtures/torisetsu/example1-office-worker.mjs');
-const ex2 = await import('./fixtures/torisetsu/example2-retired.mjs');
-const ex3 = await import('./fixtures/torisetsu/example3-student.mjs');
+const A = await import('./fixtures/torisetsu/v3-a-office.mjs');
+const B = await import('./fixtures/torisetsu/v3-b-student.mjs');
+const Cx = await import('./fixtures/torisetsu/v3-c-retired.mjs');
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const code = (path) => read(path).replace(/\/\*[\S\s]*?\*\//g, "").split(/\r?\n/).map((line) => line.replace(/^\s*\/\/.*$/, "")).join("\n");
@@ -68,7 +68,7 @@ test('saveAuthReturnIntent writes nothing for the torisetsu screen', () => {
   assert.match(body, /if \(state\.screen !== "decks" && state\.screen !== "participants"\) return;/);
 });
 
-test('using every part of the builder (3 chapters, save, delete, undo, image text) triggers no fetch/beacon/XHR', () => {
+test('using every part of the builder (3 chapters, copy, save, delete, undo, image text) triggers no fetch/beacon/XHR', () => {
   const calls = [];
   const original = { fetch: globalThis.fetch, XMLHttpRequest: globalThis.XMLHttpRequest };
   globalThis.fetch = (...args) => { calls.push(args); return Promise.reject(new Error('blocked')); };
@@ -78,9 +78,10 @@ test('using every part of the builder (3 chapters, save, delete, undo, image tex
     const storage = flow.spyStorage();
     const ctx = flow.makeCtx(storage);
     const state = ts.createTorisetsuState();
-    flow.runChapter(state, ctx, 'energy', ex1.input, { surprise: 'g:do_talk', experimentText: '秘密のメモ' });
-    flow.runChapter(state, ctx, 'values', ex2.input, { surpriseText: '秘密のメモ', experiment: 'try:v_honest' });
-    flow.runChapter(state, ctx, 'others', ex3.input, { surprise: 'o:s_listen' });
+    flow.runChapter(state, ctx, 'needs', A.data, { surprise: 'x:nd_understood', experimentText: '秘密のメモ' });
+    flow.runChapter(state, ctx, 'voice', B.data, { surpriseText: '秘密のメモ', experiment: 'try:pt_read' });
+    flow.runChapter(state, ctx, 'values', Cx.data, { surprise: 'v:vl_respect' });
+    ts.applyAction(state, 'torisetsu-copy-hard', {}, ctx);
     ts.composeManual(state.data, { today: '2026-10-13' });
     ts.applyAction(state, 'torisetsu-manual', {}, ctx);
     ts.applyAction(state, 'torisetsu-save', {}, ctx);

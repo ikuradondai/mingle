@@ -43,7 +43,7 @@ function layout(ctx, manual) {
     if (section.state !== 'filled') { skipped += 1; continue; } // 空欄・未調査の欄は画像に出さない
     ops.push({ type: 'dash', y });
     y += 38;
-    ops.push({ type: 'heading', y: y + 20, number: section.number, text: section.title, lamp: section.id === 'warning' });
+    ops.push({ type: 'heading', y: y + 20, number: section.number, text: section.title, lamp: section.id === 'shaky' });
     y += 70;
     ctx.font = `500 31px ${FONT}`;
     for (const line of section.lines) {
