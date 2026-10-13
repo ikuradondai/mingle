@@ -368,19 +368,28 @@ test('prediction is only in chapters 1 and 3; the voice chapter has no gap scree
 test('all texts are escaped, in text and in attributes', () => {
   const { ts, ctx } = setup();
   const evil = '<img src=x onerror=alert(1)>"\'&';
+  const fixedArtSrcs = new Set([
+    './assets/manual-refresh/manual-open-book-cards-v3-neutral.png',
+    './assets/manual-refresh/manual-discovery-cards-v3-neutral.png',
+  ]);
+  const assertSafeImages = (markup) => {
+    const images = [...markup.matchAll(/<img\b[^>]*\bsrc="([^"]+)"[^>]*>/g)].map(([, src]) => src);
+    assert.ok(images.every((src) => fixedArtSrcs.has(src)), 'unexpected image srcs: ' + images.join(','));
+    assert.doesNotMatch(markup, /<img\s+src=x\s+onerror=/);
+  };
   runChapter(ts, ctx, 'needs', { ...A.data, happy: A.data.happy.map((ep) => ({ ...ep, memo: evil })), hard: A.data.hard.map((ep) => ({ ...ep, memo: evil })) }, { stopAt: 'lineup' });
   const lineup = html(ts);
-  assert.ok(!lineup.includes('<img')); assert.ok(lineup.includes('&lt;img src=x onerror=alert(1)&gt;'));
+  assertSafeImages(lineup); assert.ok(lineup.includes('&lt;img src=x onerror=alert(1)&gt;'));
   act(ts, ctx, 'torisetsu-days');
-  assert.ok(!html(ts).includes('<img'));
+  assertSafeImages(html(ts));
   act(ts, ctx, 'torisetsu-edit-item', { side: 'hard', index: '0' });
   const edit = html(ts);
-  assert.ok(!edit.includes('<img')); assert.match(edit, /value="&lt;img src=x onerror=alert\(1\)&gt;&quot;/);
+  assertSafeImages(edit); assert.match(edit, /value="&lt;img src=x onerror=alert\(1\)&gt;&quot;/);
   act(ts, ctx, 'torisetsu-name-open'); setDraftText(ts, '"><b>x</b>', 'name', ctx);
   ts.data.name = '"><b>x</b>';
   act(ts, ctx, 'torisetsu-manual');
   const manual = html(ts);
-  assert.ok(!manual.includes('<b>x</b>'));
+  assertSafeImages(manual); assert.ok(!manual.includes('<b>x</b>'));
   const voice = setup();
   runChapter(voice.ts, voice.ctx, 'voice', { ...B.data, reply: '', replyText: '<script>alert(1)</script>' }, { stopAt: 'done' });
   const done = html(voice.ts);

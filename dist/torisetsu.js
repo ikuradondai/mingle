@@ -939,7 +939,19 @@ function sectionMarkup(section, { esc, editable }) {
   }
   const edit = editable && section.chapterId
     ? `<button type="button" class="ts-edit" data-action="torisetsu-chapter-insight" data-chapter="${esc(section.chapterId)}" aria-label="${esc(section.title)}を直す" title="${esc(COPY.editSection)}">${iconSvg('pencil', 16)}<span>${esc(COPY.editSection)}</span></button>` : '';
-  return `<section class="ts-sec" data-ts-sec="${esc(section.id)}">${head}${edit}<div class="ts-sec-body">${linesMarkup(section.lines, esc)}</div></section>`;
+  const lines = section.lines || [];
+  // Only the voice chapter has a useful primary/reply split. Other chapters
+  // stay in source order so bullets and sub-heads retain their meaning.
+  const voiceIndex = section.chapterId === 'voice' ? lines.findIndex((line) => line.kind === 'sub') : -1;
+  const body = section.chapterId === 'voice'
+    ? (() => {
+      const intro = lines.slice(0, 1);
+      const supplemental = lines.slice(1, voiceIndex >= 0 ? voiceIndex : lines.length);
+      const reply = voiceIndex >= 0 ? lines.slice(voiceIndex) : [];
+      return `${linesMarkup(intro, esc)}${reply.length ? `<div class="ts-sec-key">${linesMarkup(reply, esc)}</div>` : ''}${supplemental.length ? `<details class="ts-sec-details"><summary>補足・根拠</summary><div class="ts-sec-body">${linesMarkup(supplemental, esc)}</div></details>` : ''}`;
+    })()
+    : `<div class="ts-sec-body">${linesMarkup(lines, esc)}</div>`;
+  return `<section class="ts-sec" data-ts-sec="${esc(section.id)}">${head}${edit}${body}</section>`;
 }
 
 function nameBlock(ts, manual, esc, editable) {
@@ -954,7 +966,7 @@ function manualPaper(ts, { esc, today }, { sections = null, editable = true, cov
   const manual = composeManual(ts.data, { today });
   const shown = sections ? sections(manual) : manual.sections;
   if (!cover && !shown.length) return '';
-  const coverMarkup = cover ? `<div class="ts-cover"><div class="ts-cover-text"><small>取扱説明書</small><strong>${esc(manual.title)}</strong></div><svg class="ts-cover-icon" aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${COVER_ICON}</svg></div><p class="ts-cover-meta">${esc(manual.version)}</p>${nameBlock(ts, manual, esc, editable)}` : '';
+  const coverMarkup = cover ? `<div class="ts-cover"><div class="ts-cover-text"><small>取扱説明書</small><strong>${esc(manual.title)}</strong></div><img class="ts-cover-icon" src="./assets/manual-refresh/manual-open-book-cards-v3-neutral.png" alt="" aria-hidden="true" width="72" height="72" /></div><p class="ts-cover-meta">${esc(manual.version)}</p>${nameBlock(ts, manual, esc, editable)}` : '';
   const warranty = cover ? `<p class="ts-warranty">${esc(manual.warranty)}</p>` : '';
   return `<article class="ts-paper" aria-label="${esc(manual.title)}">${coverMarkup}${shown.map((section) => sectionMarkup(section, { esc, editable })).join('')}${warranty}</article>`;
 }
@@ -1057,7 +1069,7 @@ function layerView(ts, h) {
     <p class="ts-chapter-name${ts.side === 'hard' ? ' is-bad' : ''}">${esc(episodeHeadingText(ts))}</p>
     ${depth}
     ${crumb}
-    <h1 class="ts-q" tabindex="-1" data-focus>${esc(title)}</h1>
+    <div class="ts-step-heading"><h1 class="ts-q" tabindex="-1" data-focus>${esc(title)}</h1><img class="ts-step-art" src="./assets/manual-refresh/manual-discovery-cards-v3-neutral.png" alt="" aria-hidden="true" width="88" height="56" loading="lazy" /></div>
     ${lead}
     ${memo}
     ${chips}
@@ -1223,6 +1235,10 @@ function countRowMarkup(parts, esc) {
   return `<span class="ts-count-row" aria-hidden="true">${parts.map((part, i) => `${i ? '<span class="ts-count-bar">｜</span>' : ''}<span class="${i === 0 ? 'ts-count-own' : 'ts-count-other'}">${esc(part.label)} <span class="ts-dots">${dotsOf(part.cells)}</span> ${esc(part.count)}</span>`).join('')}</span>`;
 }
 
+function insightEvidence(sentence, details) {
+  return `<details class="ts-evidence"><summary>根拠を見る</summary><div class="ts-evidence-detail"><p class="ts-find-sentence">${sentence}</p>${details}</div></details>`;
+}
+
 function insightView(ts, h) {
   const { esc, support } = h; const d = ts.data[ts.chapterId];
   let body = ''; let actions = '';
@@ -1238,7 +1254,7 @@ function insightView(ts, h) {
       body = `<p class="ts-insight-headline">${esc(COPY.insightNoneTitle)}</p><p class="ts-lead">${esc(COPY.insightNoneBody)}</p>${near}${list}${heavy}`;
       actions = `${d.happy.length < cfgOf(ts).maxes.happy ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="happy" data-return-to="insight">${esc(COPY.addHappy)}</button>` : ''}${d.hard.length < cfgOf(ts).maxes.hard ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="hard" data-return-to="insight">${esc(COPY.addHard)}</button>` : ''}<button type="button" class="primary-button" data-action="torisetsu-compare">${esc(COPY.goOn)}</button><button type="button" class="text-button" data-action="torisetsu-days">${esc(COPY.fixEpisodes)}</button>`;
     } else {
-      const bands = ins.rows.map((item, i) => `<section class="ts-band ${BAND_CLASS[item.band]}"><h2>${esc(BAND_LABEL[item.band])}</h2><ul class="ts-finds"><li class="ts-find" style="--i:${i}"><span class="ts-find-tag">${esc(item.heading)}</span>${countRowMarkup(item.parts, esc)}<span class="ts-find-sentence">${esc(item.sentence)}</span></li></ul></section>`).join('');
+      const bands = ins.rows.map((item, i) => `<section class="ts-band ${BAND_CLASS[item.band]}"><h2>${esc(BAND_LABEL[item.band])}</h2><ul class="ts-finds"><li class="ts-find" style="--i:${i}"><span class="ts-find-tag">${esc(item.heading)}</span>${insightEvidence(esc(item.sentence), countRowMarkup(item.parts, esc))}</li></ul></section>`).join('');
       const extra = ins.extra.length ? extraLine(`${COPY.extraHead}${ins.extra.map((item) => item.short).join('')}`) : '';
       body = `<p class="ts-insight-lead">${esc(COPY.insightIntro)}</p>${ins.sceneLine ? `<p class="ts-compare-line">${esc(ins.sceneLine)}</p>` : ''}${bands}${extra}<p class="ts-note">${esc(ins.footer)}${esc(ins.footerAdd)}</p>${heavy}`;
       actions = `${primary}<button type="button" class="secondary-button" data-action="torisetsu-days">${esc(COPY.fixEpisodes)}</button>`;
@@ -1249,7 +1265,7 @@ function insightView(ts, h) {
       body = `<p class="ts-insight-headline">${esc(COPY.voiceNoneTitle)}</p><ul class="ts-list ts-cands">${ins.candidates.map((item) => `<li>『${esc(item.label)}』</li>`).join('')}</ul><p class="ts-lead">${esc(COPY.voiceNoneBody)}</p>${heavy}`;
       actions = `${d.episodes.length < cfgOf(ts).maxes.voice ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="voice" data-return-to="insight">${esc(COPY.addScene)}</button>` : ''}<button type="button" class="primary-button" data-action="torisetsu-compare">${esc(COPY.goOn)}</button><button type="button" class="text-button" data-action="torisetsu-days">${esc(COPY.fixScenes)}</button>`;
     } else {
-      const bands = ins.items.map((item, i) => `<section class="ts-band ts-side-bad"><h2>${esc(COPY.bandVoice)}</h2><ul class="ts-finds"><li class="ts-find" style="--i:${i}"><span class="ts-find-tag">${esc(item.heading)}</span><span class="ts-count-row" aria-hidden="true"><span class="ts-count-own"><span class="ts-dots">${dotsOf(item.cells)}</span> ${esc(item.count)}${esc(item.paren)}</span></span><span class="ts-find-sentence">${esc(item.sentence)}</span></li></ul></section>`).join('');
+      const bands = ins.items.map((item, i) => `<section class="ts-band ts-side-bad"><h2>${esc(COPY.bandVoice)}</h2><ul class="ts-finds"><li class="ts-find" style="--i:${i}"><span class="ts-find-tag">${esc(item.heading)}</span>${insightEvidence(esc(item.sentence), `<span class="ts-count-row" aria-hidden="true"><span class="ts-count-own"><span class="ts-dots">${dotsOf(item.cells)}</span> ${esc(item.count)}${esc(item.paren)}</span></span>`)}</li></ul></section>`).join('');
       const extra = ins.extra.length ? extraLine(`${COPY.extraHead}${ins.extra.map((item) => item.heading).join('')}`) : '';
       body = `<p class="ts-insight-lead">${esc(COPY.insightIntro)}</p>${bands}${extra}<p class="ts-note">${esc(ins.footer)}${esc(ins.footerAdd)}</p>${heavy}`;
       actions = `<button type="button" class="primary-button" data-action="torisetsu-compare">${esc(COPY.nextButton)}</button><button type="button" class="secondary-button" data-action="torisetsu-days">${esc(COPY.fixScenes)}</button>`;
@@ -1262,7 +1278,7 @@ function insightView(ts, h) {
     } else {
       const lis = ins.items.map((item, i) => {
         const row = [item.a > 0 ? `イラッと ${dotsOf(d.neg.map((ep) => ep.value === item.id))}` : '', item.p > 0 ? `じーんと ${dotsOf(d.pos.map((ep) => ep.value === item.id))}` : '', item.m > 0 ? `いいなと思った人 ●` : ''].filter(Boolean).join('｜');
-        return `<li class="ts-find" style="--i:${i}"><span class="ts-find-tag">『${esc(item.label)}』</span><span class="ts-count-row" aria-hidden="true"><span class="ts-count-own"><span class="ts-dots">${esc(row)}</span></span></span><span class="ts-find-sentence">${esc(item.sentence)}</span></li>`;
+        return `<li class="ts-find" style="--i:${i}"><span class="ts-find-tag">『${esc(item.label)}』</span>${insightEvidence(esc(item.sentence), `<span class="ts-count-row" aria-hidden="true"><span class="ts-count-own"><span class="ts-dots">${esc(row)}</span></span></span>`)}</li>`;
       }).join('');
       const extra = ins.extra.length ? extraLine(`${COPY.extraValues}${ins.extra.map((item) => `『${item.label}』`).join('')}`) : '';
       body = `<p class="ts-insight-lead">${esc(COPY.insightIntro)}</p><section class="ts-band ts-side-good"><ul class="ts-finds">${lis}</ul></section>${extra}<p class="ts-insight-summary">${esc(ins.summary)}</p><p class="ts-note">${esc(ins.footer)}</p>`;
@@ -1271,7 +1287,7 @@ function insightView(ts, h) {
   }
   return `<div class="ts-step ts-insight" data-ts-key="insight">
     ${stepperMarkup(ts, esc)}
-    <h1 class="ts-q" tabindex="-1" data-focus>${esc(COPY.insightTitle)}</h1>
+    <div class="ts-step-heading"><h1 class="ts-q" tabindex="-1" data-focus>${esc(COPY.insightTitle)}</h1><img class="ts-step-art" src="./assets/manual-refresh/manual-discovery-cards-v3-neutral.png" alt="" aria-hidden="true" width="88" height="56" loading="lazy" /></div>
     ${body}
     <div class="ts-actions">${actions}</div>
   </div>`;
