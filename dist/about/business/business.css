@@ -127,3 +127,7 @@ summary{font-size:14px}
 
 .logo img{transform:scale(1.75)}
 
+a:focus-visible,summary:focus-visible{outline:3px solid var(--navy);outline-offset:4px}
+section[id]{scroll-margin-top:24px}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
