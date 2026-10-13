@@ -40,3 +40,14 @@ npm run check
 ```
 
 実行済み結果は `artifacts/solo-db-qa.log` に保存しています。notes検証は2回のmigration、2回の同一slot upsert、snapshot不変、owner隔離、authenticated匿名JWT/anon拒否、cascadeを確認します。metadata検証は6枚solo/fixed作成、既存set編集、失敗rollback、authenticated RPC拒否、service role実行、solo-only共有拒否、both/fixed共有snapshot順を確認します。
+
+
+## 自分のトリセツ（ビルダー）
+
+ソロテーマ `self-values`（自分のトリセツ）は、一覧の「はじめる」で 12 問セッションではなく専用ビルダー（`dist/torisetsu.js`、データは `dist/data/torisetsu-content.js`）を開きます。`solo-decks.js` の `builder: 'torisetsu'` がその印です。
+
+- **カード id を残す理由**: `self-values-01..12` と deck id は、マイセット・マーケット・保存メモ・共有セット・再開中セッションが参照するため削除しません（12 問の文言も変更しない）。
+- **中身は端末の外に出さない**: ビルダーのモジュールは `fetch` / XHR / `sendBeacon` / WebSocket / EventSource を使わず、`analytics.js`・`account*.js`・`session-storage.js` を読み込みません（`tests/torisetsu-privacy.test.mjs` で静的・実行時に検査）。送るのは既存の `theme_start`（`self-values`）と `page_view`（`torisetsu`）だけで、`server-side/config.mjs` の `PAGE_IDS` に `torisetsu` を追加しています。
+- **保存**: 既定はメモリのみ。利用者が「この端末に残す」を選んだときだけ localStorage の `mingle.torisetsu.v1` に、チップ id と自由文だけを書きます（組み立て後の文は保存しない）。アカウントとは結びつけません。消すと即座に削除し、5 秒間の「元に戻す」はメモリだけで復元します（端末には書きません）。
+- **画像にする**: `dist/torisetsu-image.js` が canvas でその場で PNG を作り、共有シートまたはダウンロードで渡します。サーバーには送りません。
+- **Service Worker を足すとき**: トリセツの画面・データはキャッシュ対象に含めても中身（利用者の入力）は含まれませんが、入力内容を通信やログに載せる変更は入れないでください。

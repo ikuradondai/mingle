@@ -22,6 +22,7 @@ import { CREATOR_PRESET_IDS, normalizeCreatorDesign, effectiveCreatorAdult } fro
 import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, rankThemeRecommendations, themeExplorerBookmarks, toggleThemeExplorerBookmark, themeExplorerExperienced, toggleThemeExplorerExperienced } from "./theme-explorer.js";
 import { loadRecommendationLabels, recommendationLabel } from "./recommendation-labels.js";
 import { themeExampleForDeck } from "./theme-examples.js";
+import { createTorisetsuState, torisetsuView, applyAction as applyTorisetsuAction, loadTorisetsu, expireUndo as expireTorisetsuUndo, torisetsuViewKey, setDraftText as setTorisetsuText, previewMarkup as torisetsuPreview, draftComplete as torisetsuDraftComplete, chipCapacity as torisetsuChipCapacity, sectionById as torisetsuSection, composeManual as composeTorisetsuManual } from "./torisetsu.js";
 import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText } from "./participant-rule.js";
 import { consumeMinorityAuthIntent, clearMinorityAuthIntent } from "./minority-auth-intent.js";
@@ -35,6 +36,7 @@ import { gameParticipantGate } from "./game-participant-gate.js";
 import { consumeSocialGameIntent, saveSocialGameIntent } from "./social-game-intent.js";
 const root = document.querySelector("#app");
 const state = {
+  torisetsu: null,
   shared: null,
   venue: null,
   selectedVenueSetId: null,
@@ -457,7 +459,11 @@ function render() {
     state.account.status = state.error;
   }
   const accountScroll = accountScrollSnapshot();
-  root.innerHTML = state.shared ? sharedView() : state.screen === "participants" ? participantsView() : state.screen === "decks" ? decksView() : playView();
+  const torisetsuKeyBefore = state.screen === "torisetsu" && state.torisetsu ? torisetsuViewKey(state.torisetsu) : null;
+  const torisetsuScrollBefore = state.screen === "torisetsu" ? window.scrollY : 0;
+  if (state.screen === "torisetsu" && !state.torisetsu) state.screen = "decks";
+  root.innerHTML = state.shared ? sharedView() : state.screen === "torisetsu" ? torisetsuScreenView() : state.screen === "participants" ? participantsView() : state.screen === "decks" ? decksView() : playView();
+  if (state.screen === "torisetsu") { const sameView = torisetsuKeyBefore === torisetsuViewKey(state.torisetsu) && !state.torisetsuScrollTop; window.scrollTo({ left: 0, top: sameView ? torisetsuScrollBefore : 0, behavior: "auto" }); state.torisetsuScrollTop = false; bindTorisetsu(); }
   const restoreExplorerRails = () => { for (const [id, left] of explorerScrollSnapshot) { const rail = root.querySelector(`[data-theme-rail]#${CSS.escape(id)}`); if (rail) rail.scrollLeft = left; } };
   restoreExplorerRails();
   restoreAccountScroll(accountScroll);
@@ -709,7 +715,7 @@ function render() {
   updateAdultButton();
   const shareDialog = root.querySelector("[data-share-overlay]");
   const background = root.querySelectorAll(".topbar, .round-break");
-  background.forEach((element) => { element.inert = Boolean(state.shareDialogOpen); });
+  background.forEach((element) => { element.inert = Boolean(state.shareDialogOpen) || Boolean(root.querySelector("[data-ts-modal]") && element.matches(".ts-topbar")); });
   const pendingFocusSelector = state.focusSelector;
   const focusTarget = pendingFocusSelector ? (root.querySelector(pendingFocusSelector) || (pendingFocusSelector.includes('theme-bookmark') || pendingFocusSelector.includes('theme-experienced') ? root.querySelector('[data-theme-tag-filter]') : null)) : state.focusAction ? root.querySelector(`[data-action="${state.focusAction}"]`) : null;
   const shouldScrollToInput = Boolean(pendingFocusSelector?.includes("participant") || pendingFocusSelector?.includes("data-index"));
@@ -1153,7 +1159,7 @@ function themeExplorerCard(deck, { solo = false, mixed = false, selectedMySet = 
   const control = '';
   const image = sponsor ? cardDesignForSession({ sponsorSet: true, sponsor, mode: solo ? 'solo' : 'group' }).thumbnail : set ? cardDesignForSession({ mode: solo ? 'solo' : 'group', customSet: true, deckId: set.deckId || (solo ? 'self-values' : 'date'), design: set.design }).back : themeExplorerImage(deck.id) || themeExplorerImage('friends');
   const title = sponsor?.title || set?.name || deck.title;
-  const subtitle = sponsor ? (sponsor.description || '公式提供のテーマ') : set?.description || themeExampleForDeck(deck);
+  const subtitle = sponsor ? (sponsor.description || '公式提供のテーマ') : set?.description || (deck.builder ? deck.subtitle : themeExampleForDeck(deck));
   const count = sponsor?.cardCount || set?.cardCount || (Array.isArray(deck.questions) ? deck.questions.length : 40);
   const action = sponsor ? (mixed ? 'theme-select' : 'sponsor-select') : set ? 'choose-myset' : 'theme-select';
   const bookmarkId = set ? `set:${set.id}` : deck.id;
@@ -1170,7 +1176,7 @@ function themeExplorerCard(deck, { solo = false, mixed = false, selectedMySet = 
   const experiencedToggle = `<button type="button" class="theme-explorer-experienced ${experienced ? 'is-active' : ''}" data-action="theme-experienced" data-experienced-id="${esc(bookmarkId)}" aria-pressed="${experienced}" aria-label="${experienced ? '体験済みを外す' : '体験済みにする'}：${esc(title)}">${experienced ? '✓ 体験済み' : '体験済みにする'}</button>`;
   const settings = startsOnSelect && !solo && !locked ? `<button type="button" class="theme-explorer-card-settings" data-action="theme-card-settings" data-theme-id="${esc(deck.id)}" data-theme-key="${esc(shelfId)}:${esc(deck.id)}" aria-label="${esc(title)}の詳細設定" title="詳細設定">${actionIcon('settings')}</button>` : '';
   const sponsorLabel = sponsor ? `<small class="theme-explorer-sponsor-label">スポンサー · ${esc(sponsor.providerName || '公式提供')}の公式カード</small>` : '';
-  return `<div class="theme-explorer-card-wrap">${bookmark}${settings}<button type="button" class="theme-explorer-card ${cardSelected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}" data-action="${action}" data-theme-card data-theme-id="${esc(deck.id)}" ${sponsor ? `data-sponsor-id="${esc(sponsor.id)}"` : ''} ${set ? `data-set-id="${esc(set.id)}"` : ''} data-theme-key="${esc(shelfId)}:${esc(deck.id)}" ${startsOnSelect ? '' : `aria-pressed="${selected}"`} aria-disabled="${locked}" ${locked ? 'disabled' : ''}>${imageMarkup}<span class="theme-explorer-card-body">${control}${sponsorLabel}<strong>${esc(title)}</strong><small>${esc(subtitle)}</small><span class="theme-explorer-meta">${locked ? '🔒 登録で解放' : `${count}枚${startsOnSelect ? ' ・ はじめる' : ''}`}</span></span></button>${experiencedToggle}</div>`;
+  return `<div class="theme-explorer-card-wrap">${bookmark}${settings}<button type="button" class="theme-explorer-card ${cardSelected ? 'is-selected' : ''} ${locked ? 'is-locked' : ''}" data-action="${action}" data-theme-card data-theme-id="${esc(deck.id)}" ${sponsor ? `data-sponsor-id="${esc(sponsor.id)}"` : ''} ${set ? `data-set-id="${esc(set.id)}"` : ''} data-theme-key="${esc(shelfId)}:${esc(deck.id)}" ${startsOnSelect ? '' : `aria-pressed="${selected}"`} aria-disabled="${locked}" ${locked ? 'disabled' : ''}>${imageMarkup}<span class="theme-explorer-card-body">${control}${sponsorLabel}<strong>${esc(title)}</strong><small>${esc(subtitle)}</small><span class="theme-explorer-meta">${locked ? '🔒 登録で解放' : `${deck.builder === 'torisetsu' ? '8つの欄' : `${count}枚`}${startsOnSelect ? ' ・ はじめる' : ''}`}</span></span></button>${experiencedToggle}</div>`;
 }
 function themeExplorerShelf(id, title, decksForShelf, options = {}) {
   const cards = decksForShelf.map((deck) => themeExplorerCard(deck, { ...options, shelfId: id })).join('');
@@ -1259,7 +1265,10 @@ function soloDecksView() {
     isAvailable: () => true,
     categoryOf: (deck) => deck?.category ? [deck.category] : [],
   });
-  const recommendedWithSponsors = [...sponsorEntries('solo', 'all', query), ...recommended];
+  // 自分のトリセツ（self-values）は、おすすめ棚の先頭に固定する。残りは従来の順序のまま。
+  const torisetsuDeck = all.find((deck) => deck.id === 'self-values') || null;
+  const recommendedRest = recommended.filter((deck) => deck.id !== 'self-values');
+  const recommendedWithSponsors = [...(torisetsuDeck ? [torisetsuDeck] : []), ...sponsorEntries('solo', 'all', query), ...(torisetsuDeck ? recommendedRest.slice(0, 7) : recommended)];
   const visibleMySetEntries = query.length || state.themeExplorerView === 'list'
     ? mySetEntries.filter((entry) => state.themeExplorerShelf === 'all' || entry.__mySet?.category === state.themeExplorerShelf)
     : [];
@@ -2215,13 +2224,98 @@ function startSelectedGroupDeck(deckId = state.selectedDeckId) {
     saveCurrentSession(state.session); state.screen = "play"; state.error = ""; render();
   } catch (error) { state.error = error.message; render(); }
 }
+// ---------- 自分のトリセツ（中身は端末の外に出さない。通信は theme_start と page_view のみ） ----------
+let torisetsuUndoTimer = 0;
+let torisetsuCommitting = false;
+function localIsoDate() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
+function torisetsuContext() { return { storage: () => window.localStorage, today: localIsoDate(), now: () => Date.now() }; }
+function openTorisetsu() {
+  state.torisetsu = createTorisetsuState({ stored: loadTorisetsu(() => window.localStorage) });
+  state.account.open = false; state.error = "";
+  trackThemeStart("self-values");
+  recordThemeExplorerStart({ ownerId: state.account.user?.id, mode: "solo", themeIds: ["self-values"] });
+  state.screen = "torisetsu"; state.torisetsuScrollTop = true; render();
+}
+function leaveTorisetsu() {
+  clearTimeout(torisetsuUndoTimer);
+  state.torisetsu = null; state.screen = "decks"; state.themeMode = "solo"; state.error = ""; state.torisetsuScrollTop = false;
+  render(); window.scrollTo({ left: 0, top: 0, behavior: "auto" });
+}
+function torisetsuScreenView() {
+  return torisetsuView(state.torisetsu, { esc, today: localIsoDate(), support: () => soloSupportView({ general: true, youth: true }), imageEnabled: true });
+}
+function refreshTorisetsuItem() {
+  const ts = state.torisetsu; if (!ts || ts.view !== "item") return;
+  const preview = root.querySelector("[data-ts-preview]"); if (preview) preview.innerHTML = torisetsuPreview(ts, esc);
+  const commit = root.querySelector('[data-action="torisetsu-commit"]'); if (commit) commit.disabled = !torisetsuDraftComplete(ts);
+  const section = torisetsuSection(ts.sectionId);
+  if (section) { const full = ts.draft.chips.length >= torisetsuChipCapacity(section, ts.draft); root.querySelectorAll(".ts-chip").forEach((chip) => chip.classList.toggle("is-dim", full && chip.getAttribute("aria-pressed") !== "true")); }
+  const count = root.querySelector("[data-ts-count]"); const text = root.querySelector("[data-ts-text]");
+  if (count && text) count.textContent = `${Array.from(ts.draft.text).length}/${text.maxLength}字`;
+}
+function bindTorisetsu() {
+  const modal = root.querySelector("[data-ts-modal]");
+  root.querySelectorAll(".ts-topbar, .ts-content").forEach((element) => { element.inert = Boolean(modal); });
+  modal?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { event.preventDefault(); modal.querySelector("[data-ts-default]")?.click(); return; }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(modal.querySelectorAll("button:not([disabled])"));
+    if (!focusable.length) return;
+    const first = focusable[0]; const last = focusable[focusable.length - 1];
+    if (!modal.contains(document.activeElement)) { event.preventDefault(); first.focus(); }
+    else if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
+  root.querySelector("[data-ts-text]")?.addEventListener("input", (event) => { if (!state.torisetsu) return; setTorisetsuText(state.torisetsu, event.target.value, "text"); state.torisetsu.limitMessage = ""; const limit = root.querySelector(".ts-limit"); if (limit) limit.textContent = ""; refreshTorisetsuItem(); });
+  root.querySelector("[data-ts-name]")?.addEventListener("input", (event) => { if (!state.torisetsu) return; setTorisetsuText(state.torisetsu, event.target.value, "name"); refreshTorisetsuItem(); });
+  root.querySelectorAll("[data-ts-text],[data-ts-name]").forEach((input) => input.addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.isComposing) event.preventDefault(); }));
+}
+function handleTorisetsuAction(event) {
+  const ts = state.torisetsu; if (!ts) return;
+  const button = event.currentTarget; const action = button.dataset.action;
+  if (torisetsuCommitting) return; // 「書く」の動きの間は、ほかの操作を受け付けない
+  const sectionAtClick = ts.sectionId;
+  const run = () => {
+    torisetsuCommitting = false;
+    if (state.torisetsu !== ts) return;
+    if (action === "torisetsu-commit" && (ts.view !== "item" || ts.sectionId !== sectionAtClick)) return;
+    const result = applyTorisetsuAction(ts, action, { chip: button.dataset.chip, section: button.dataset.section, chapter: button.dataset.chapter }, torisetsuContext());
+    if (result.leave) { leaveTorisetsu(); return; }
+    if (result.image) { makeTorisetsuImage(); return; }
+    if (result.undoTimer) { clearTimeout(torisetsuUndoTimer); torisetsuUndoTimer = setTimeout(() => { if (state.torisetsu === ts && state.screen === "torisetsu" && expireTorisetsuUndo(ts)) root.querySelector(".ts-toast")?.remove(); }, result.undoTimer + 30); }
+    if (action === "torisetsu-undo") clearTimeout(torisetsuUndoTimer);
+    if (result.focus) state.focusSelector = result.focus;
+    if (result.scrollTop) state.torisetsuScrollTop = true;
+    if (result.render) render();
+  };
+  if (action === "torisetsu-commit") {
+    const preview = root.querySelector(".ts-preview-card");
+    if (preview && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { torisetsuCommitting = true; preview.classList.add("is-absorbing"); setTimeout(run, 250); return; }
+  }
+  run();
+}
+async function makeTorisetsuImage() {
+  const ts = state.torisetsu; if (!ts || ts.imageBusy) return;
+  ts.imageBusy = true; ts.imageStatus = ""; render();
+  try {
+    const { exportTorisetsuImage } = await import("./torisetsu-image.js");
+    const result = await exportTorisetsuImage(composeTorisetsuManual(ts.answers, { today: localIsoDate() }));
+    ts.imageStatus = result === "downloaded" ? "画像を保存しました。" : "";
+  } catch (error) {
+    ts.imageStatus = error?.name === "AbortError" ? "" : "画像を作れませんでした。スクリーンショットで残してね。";
+  }
+  ts.imageBusy = false;
+  if (state.torisetsu === ts && state.screen === "torisetsu") { state.focusSelector = '[data-action="torisetsu-image"]'; render(); }
+}
 function startSelectedSoloDeck() {
   if (state.selectedMySetId) { const set = playableSavedSets(state.account.sets, state.account.customCards).find((item) => item.id === state.selectedMySetId && ['solo', 'both'].includes(item.audience)); if (!set) { state.error = "このマイセットは一人用では利用できません。"; render(); return; } try { playSavedSet(set); } catch (error) { state.error = error.message; render(); } return; }
   const deck = soloDecks.find((item) => item.id === state.selectedDeckId) || soloDecks[0];
+  if (deck.builder === 'torisetsu') { openTorisetsu(); return; }
   try { state.session = createSoloSession({ deck, participant: state.participants[0] || "自分" }); state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null; state.soloMemoOpen = false; state.soloNoteDraft = ""; state.soloNoteStatus = ""; state.soloNoteError = ""; state.soloSummaryDraft = ""; trackThemeStart(state.session.deckId); recordThemeExplorerStart({ ownerId: state.account.user?.id, mode: "solo", themeIds: [state.session.deckId] }); saveCurrentSession(state.session); state.screen = "play"; state.error = ""; render(); } catch (error) { state.error = error.message; render(); }
 }
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
+  if (typeof action === "string" && action.startsWith("torisetsu-")) { handleTorisetsuAction(event); return; }
   if (action === "completion-reply-skip") {
     const section = event.currentTarget.closest("[data-completion-reply]"); const key = section?.dataset.replyKey;
     if (!key) return;

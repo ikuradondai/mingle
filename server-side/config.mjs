@@ -1,5 +1,5 @@
-export const PAGE_IDS = ['participants', 'decks', 'play'];
-export const PAGE_LABELS = { participants: 'トップ（参加者入力）', decks: '質問テーマ選択', play: 'カード' };
+export const PAGE_IDS = ['participants', 'decks', 'play', 'torisetsu'];
+export const PAGE_LABELS = { participants: 'トップ（参加者入力）', decks: '質問テーマ選択', play: 'カード', torisetsu: '自分のトリセツ' };
 import { decks } from '../dist/data/decks.js';
 import { soloDecks } from '../dist/data/solo-decks.js';
 export const ALLOWED_THEME_IDS = [...decks.map((deck) => deck.id), ...soloDecks.map((deck) => deck.id), 'mix', 'my-set', 'shared-set'];

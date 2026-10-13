@@ -14,16 +14,7 @@ const DISTRESS_IDS = [
 ];
 const LOVE_CARE_IDS = ['self-love-now'];
 
-const BANNED_QUESTION_STYLE = [
-  /なぜ/u, /どうして/u, /べき/u, /戻れる/u, /戻りたい/u, /本当によかった/u, /SNSを見/u,
-  /相手の本音/u, /相手はどう思/u, /自分の悪い/u, /何がいけなかった/u, /最悪/u, /うらやまし/u, /あなた/u,
-];
-const BANNED_DIAGNOSIS = [
-  /うつ/u, /病気/u, /症状/u, /診断/u, /障害/u, /トラウマ/u, /PTSD/u, /依存/u, /メンヘラ/u, /HSP/u,
-  /愛着スタイル/u, /自己肯定感が低い/u, /ネガティブ思考/u, /認知の歪み/u, /共依存/u, /毒親/u,
-  /モラハラ/u, /ストレス度/u, /レベル判定/u,
-];
-const BANNED = [...BANNED_QUESTION_STYLE, ...BANNED_DIAGNOSIS];
+import { BANNED } from './helpers/banned-words.mjs';
 
 test('solo catalog has 16 fixed-order non-adult solo themes with 12 questions each', () => {
   assert.equal(soloDecks.length, 16);
@@ -89,7 +80,9 @@ test('titles, subtitles and descriptions avoid banned and diagnostic expressions
       assert.ok(deck[field].trim().length > 0, `${deck.id}.${field}`);
       for (const pattern of BANNED) assert.doesNotMatch(deck[field], pattern, `${deck.id}.${field}: ${pattern}`);
     }
-    assert.ok(deck.description.includes('12問'), `${deck.id}: description must mention 12問`);
+    // builder を持つデッキ（自分のトリセツ）は専用ビルダーを開くので、12問ではなく「8つの欄」を説明する。
+    if (deck.builder) assert.ok(deck.description.includes('8つの欄'), `${deck.id}: builder description must mention 8つの欄`);
+    else assert.ok(deck.description.includes('12問'), `${deck.id}: description must mention 12問`);
     assert.ok(Array.from(deck.description).length <= 100, `${deck.id}: description too long`);
   }
 });
