@@ -34,6 +34,8 @@ export function completionReplyCopy(context, { participantCount = 3 } = {}) {
   const image = participantCount === 2 ? "/assets/completion-reply-pair.webp" : "/assets/completion-reply-group.webp";
   if (context === "solo") return {
     title: "自分に、声で届けよう。",
+    lead: "今日の自分に伝えたいことを、声に出してみよう。",
+    example: "小さな声でも、大丈夫。",
     prompt: "今日の答えから、自分に覚えておいてほしいことをひとつ。小さな声でもいいので、自分に向けて声に出してみよう。",
     action: "声に出した",
     doneLabel: "声に出しました",
@@ -42,7 +44,9 @@ export function completionReplyCopy(context, { participantCount = 3 } = {}) {
     image: "/assets/completion-reply-solo.webp",
   };
   if (context === "friend") return {
-    title: "この時間に、ひとこと伝えよう。",
+    title: "最後に、ひとこと。",
+    lead: "聞けてよかったことを、声に出して伝えよう。",
+    example: "「○○の話、聞けてよかった」",
     prompt: "今日の話で、聞けてよかったことをひとつ。「○○の話、聞けてよかった」と、一人ずつ声に出して伝えよう。",
     action: "伝え合った",
     doneLabel: "伝え合いました",
@@ -51,49 +55,65 @@ export function completionReplyCopy(context, { participantCount = 3 } = {}) {
     image,
   };
   if (context === "candidate") return {
-    title: "この時間に、ひとこと伝えよう。",
+    title: "最後に、ひとこと。",
+    lead: "相手の素敵なところを、声に出して伝えよう。",
+    example: "「○○なところ、いいなと思った」",
     prompt: "今日知れた、相手の素敵なところをひとつ。「○○なところ、いいなと思った」と、声に出して伝え合おう。",
     action: "伝え合った", doneLabel: "伝え合いました", completeTitle: "そのひとことが、今日のしめくくり。",
     complete: "知れてよかった気持ちを、言葉にして伝えました。", image,
   };
   if (context === "partner") return {
-    title: "この時間に、ひとこと伝えよう。",
+    title: "最後に、ひとこと。",
+    lead: "あらためて素敵だと思ったところを、伝えよう。",
+    example: "「○○なところが好き」",
     prompt: "今日の話で、あらためて素敵だなと思ったところをひとつ。「○○なところが好き」と、声に出して伝え合おう。",
     action: "伝え合った", doneLabel: "伝え合いました", completeTitle: "そのひとことが、今日のしめくくり。",
     complete: "相手の素敵なところを、言葉にして伝えました。", image,
   };
   if (context === "married") return {
-    title: "この時間に、ひとこと伝えよう。",
+    title: "最後に、ひとこと。",
+    lead: "今日あらためて伝えたくなった感謝を、伝えよう。",
+    example: "「○○してくれて、ありがとう」",
     prompt: "今日の話を聞いて、あらためて伝えたくなった感謝をひとつ。「○○してくれて、ありがとう」と、声に出して伝え合おう。",
     action: "伝え合った", doneLabel: "伝え合いました", completeTitle: "そのひとことが、今日のしめくくり。",
     complete: "あらためて感謝を、言葉にして伝えました。", image,
   };
   if (context === "family") return {
-    title: "この時間に、ひとこと伝えよう。",
+    title: "最後に、ひとこと。",
+    lead: "家族に、今日の気持ちを伝えよう。",
+    example: "「○○、ありがとう」",
     prompt: "今日、家族に伝えておきたい気持ちをひとつ。「○○と聞けてうれしかった」「○○、ありがとう」と、声に出して伝えよう。",
     action: "伝えた", doneLabel: "伝えました", completeTitle: "そのひとことが、今日のしめくくり。",
     complete: "家族に伝えたい気持ちを、声に出して届けました。", image,
   };
   if (context === "first") return {
-    title: "この時間に、ひとこと伝えよう。",
+    title: "最後に、ひとこと。",
+    lead: "知れてよかったことを、声に出して伝えよう。",
+    example: "「○○のお話、聞けてよかったです」",
     prompt: "今日の話で、知れてよかったことをひとつ。「○○のお話、聞けてよかったです」と、一人ずつ声に出して伝えよう。",
     action: "伝え合った", doneLabel: "伝え合いました", completeTitle: "そのひとことが、今日のしめくくり。",
     complete: "知れてよかった気持ちを、言葉にして伝えました。", image,
   };
   if (context === "business") return {
-    title: "この時間に、ひとこと伝えよう。",
+    title: "最後に、ひとこと。",
+    lead: "参考になった視点を、声に出して伝えよう。",
+    example: "「○○という考えが参考になりました」",
     prompt: "今日、参考になった視点をひとつ。「○○という考えが参考になりました」と、その人に声に出して伝えよう。",
     action: "伝え合った", doneLabel: "伝え合いました", completeTitle: "そのひとことが、今日のしめくくり。",
     complete: "参考になった視点を、言葉にして伝えました。", image,
   };
   if (context === "pair" || context === "romance") return {
-    title: "この時間に、ひとこと伝えよう。",
+    title: "最後に、ひとこと。",
+    lead: "聞けてよかった話を、声に出して伝えよう。",
+    example: "「○○の話をしてくれて、ありがとう」",
     prompt: "相手の答えで、聞けてよかった話をひとつ。「○○の話をしてくれて、ありがとう」と、交代して声に出して伝えよう。",
     action: "伝え合った", doneLabel: "伝え合いました", completeTitle: "そのひとことが、今日のしめくくり。",
     complete: "聞けてよかった話を、言葉にして伝えました。", image,
   };
   return {
-    title: "この時間に、ひとこと伝えよう。",
+    title: "最後に、ひとこと。",
+    lead: "ひとりずつ、聞けてよかった話を伝えよう。",
+    example: "「その話、聞けてよかった」",
     prompt: "今日の会話で、聞けてよかった話をひとつ。一人ずつ声に出して伝え、言葉を渡して受け取ろう。",
     action: "伝え合った",
     doneLabel: "伝え合いました",

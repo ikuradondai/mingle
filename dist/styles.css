@@ -943,6 +943,88 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .round-break .round-favorite-mark.is-unavailable { color:var(--muted); font-size:16px; cursor:default; }
 .round-break .round-favorites-inline .secondary-button { margin-top:10px; }
 .theme-explorer-sponsor-label { display:block; color:#6b5a24; font-size:.78rem; letter-spacing:.02em; }
+
+/* Session completion: compact six-card fan and practical closing action. */
+.round-break:has(.round-completion) { width:100%; max-width:1180px !important; margin:0 auto; padding:24px clamp(16px,4vw,40px) 40px; box-sizing:border-box; background:transparent; color:var(--ink); }
+.round-break:has(.round-completion) .round-completion { width:100%; max-width:none; margin:0; padding:0 0 28px; text-align:left; }
+.round-break:has(.round-completion) .round-completion-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.9fr); align-items:center; gap:clamp(32px,5vw,64px); min-width:0; }
+.round-break:has(.round-completion) .round-completion-cards { position:relative; min-width:0; min-height:300px; }
+.round-break:has(.round-completion) .round-completion-card-fan { position:relative; width:min(100%,480px); height:300px; margin:0 auto; transform:translateX(-64px); }
+.round-break:has(.round-completion) .round-completion-card { position:absolute; top:36px; left:50%; display:flex; align-items:flex-end; justify-content:center; width:126px; height:200px; padding:20px 14px; box-sizing:border-box; border:1px solid #d6d2c8; border-top:1px solid #d6d2c8; border-radius:5px; background:#fffdf8; box-shadow:0 5px 12px rgba(16,33,61,.10); transform:translateX(-50%) rotate(var(--card-rotate,0deg)); transform-origin:50% 100%; }
+.round-break:has(.round-completion) .round-completion-card { margin-left:calc(var(--completion-card-offset) * 70px); }
+.round-break:has(.round-completion) .round-completion-card { transform:translateX(-50%) rotate(calc(var(--completion-card-offset) * 6deg)); }
+.round-break:has(.round-completion) .round-completion-card:nth-child(2) { background:#2e6fd8; border-color:#2e6fd8; }
+.round-break:has(.round-completion) .round-completion-card:nth-child(3) { background:#e87567; border-color:#e87567; }
+.round-break:has(.round-completion) .round-completion-card:nth-child(4) { background:#fffdf8; }
+.round-break:has(.round-completion) .round-completion-card:nth-child(5) { background:#173454; border-color:#173454; }
+.round-break:has(.round-completion) .round-completion-card:nth-child(6) { background:#e87567; border-color:#e87567; }
+.round-break:has(.round-completion) .round-completion-card.is-front { z-index:6; background:#fffdf8; border-color:#d6d2c8; color:var(--ink); }
+.round-break:has(.round-completion) .round-completion-card.is-front .round-completion-cover { display:block; position:absolute; left:7px; top:8px; width:calc(100% - 14px); height:184px; transform:none; object-fit:cover; opacity:1; filter:none; z-index:2; }
+.round-break:has(.round-completion) .round-completion-card-number { position:absolute; top:12px; left:14px; color:var(--ink); font-size:12px; font-variant-numeric:tabular-nums; }
+.round-break:has(.round-completion) .round-completion-card-excerpt { display:none; }
+.round-break:has(.round-completion) .round-completion-copy { min-width:0; padding:12px 0; }
+.round-break:has(.round-completion) .round-completion-kicker { margin:0 0 14px; color:var(--muted); font-size:11px; font-weight:900; letter-spacing:.16em; text-transform:uppercase; }
+.round-break:has(.round-completion) .round-completion-title { max-width:12ch; margin:0; color:var(--ink); font-size:clamp(40px,5.6vw,56px); line-height:1.06; letter-spacing:-.055em; text-wrap:balance; }
+.round-break:has(.round-completion) .round-completion-lead { max-width:34ch; margin:20px 0 0; color:var(--muted); font-size:16px; line-height:1.65; }
+.round-break:has(.round-completion) .round-completion-main { min-width:0; }
+.round-break:has(.round-completion) .round-completion-main { margin-top:16px; }
+.round-break:has(.round-completion) .round-completion-main .completion-reply { margin-top:16px; }
+.round-break:has(.round-completion) .completion-reply { width:100%; max-width:none; margin:0; padding:20px 0 0; border-top:1px solid color-mix(in srgb,var(--ink) 16%,transparent); text-align:left; }
+.round-break:has(.round-completion) .completion-reply-stage { min-height:0; }
+.round-break:has(.round-completion) .completion-reply-view { align-items:flex-start; min-height:0; text-align:left; }
+.round-break:has(.round-completion) .completion-reply-view h2 { min-height:0; justify-content:flex-start; margin:0 0 6px; color:var(--ink); font-size:18px; }
+.round-break:has(.round-completion) .completion-reply-image { display:none; }
+.round-break:has(.round-completion) .completion-reply-prompt-view { display:grid; grid-template-columns:minmax(0,1fr) auto; column-gap:12px; align-items:center; }
+.round-break:has(.round-completion) .completion-reply-prompt-view h2,
+.round-break:has(.round-completion) .completion-reply-prompt-view .completion-reply-lead,
+.round-break:has(.round-completion) .completion-reply-prompt-view .completion-reply-example { grid-column:1 / -1; }
+.round-break:has(.round-completion) .completion-reply-prompt-view h2 { margin:0 0 6px; }
+.round-break:has(.round-completion) .completion-reply-lead { max-width:42ch; margin:8px 0; font-size:15px; line-height:1.5; }
+.round-break:has(.round-completion) .completion-reply-example { max-width:42ch; margin:8px 0; color:var(--ink); font-size:18px; line-height:1.45; }
+.round-break:has(.round-completion) .completion-reply-action { grid-column:1; width:100%; max-width:320px; min-width:0; min-height:50px; margin-top:4px; padding:10px 22px; border:1px solid var(--blue); border-radius:6px; background:var(--blue); color:#fff; font-weight:800; text-decoration:none; }
+.round-break:has(.round-completion) .completion-reply-skip { grid-column:2; min-height:44px; margin:4px 0 0; white-space:nowrap; }
+.round-break:has(.round-completion) .completion-reply-done-view { gap:8px; }
+.round-break:has(.round-completion) .completion-reply-actions { justify-content:flex-start; min-height:0; margin-top:8px; }
+.round-break:has(.round-completion) .round-favorites-compact { margin-top:16px; padding-top:14px; border-top:1px solid color-mix(in srgb,var(--ink) 16%,transparent); }
+.round-break:has(.round-completion) .theme-likes { margin-top:8px; padding-top:14px; border-top:1px solid color-mix(in srgb,var(--ink) 16%,transparent); }
+@media (min-width:760px) and (max-width:959px) {
+  .round-break:has(.round-completion) .round-completion-layout { grid-template-columns:1fr; gap:20px; }
+  .round-break:has(.round-completion) .round-completion-card-fan { transform:none; }
+  .round-break:has(.round-completion) .round-completion-main { margin-top:0; }
+}
+@media (min-width:960px) {
+  .round-break:has(.round-completion) { padding-bottom:16px; }
+  .round-break:has(.round-completion) .round-completion { padding-bottom:8px; }
+  .round-break:has(.round-completion) .round-completion-main { margin-top:0; }
+  .round-break:has(.round-completion) .round-favorites-compact,
+  .round-break:has(.round-completion) .theme-likes { display:inline-block; width:calc(50% - 10px); box-sizing:border-box; vertical-align:top; margin-top:8px; }
+  .round-break:has(.round-completion) .theme-likes { margin-left:16px; }
+}
+@media (max-width:759px) {
+  .round-break:has(.round-completion) { padding:16px 16px 0; }
+  .round-break:has(.round-completion) .round-completion { padding-bottom:0; }
+  .round-break:has(.round-completion) .round-completion-layout { grid-template-columns:1fr; gap:8px; }
+  .round-break:has(.round-completion) .round-completion-cards { min-height:156px; }
+  .round-break:has(.round-completion) .round-completion-card-fan { width:180px; height:156px; }
+  .round-break:has(.round-completion) .round-completion-card-fan { transform:none; }
+  .round-break:has(.round-completion) .round-completion-card.is-front .round-completion-cover { left:5px; top:9px; width:calc(100% - 10px); height:94px; }
+  .round-break:has(.round-completion) .round-completion-card { top:18px; width:68px; height:112px; padding:11px 7px; border-top-width:1px; }
+  .round-break:has(.round-completion) .round-completion-card { margin-left:calc(var(--completion-card-offset) * 29px); }
+  .round-break:has(.round-completion) .round-completion-card-number { top:7px; left:7px; font-size:9px; }
+  .round-break:has(.round-completion) .round-completion-card-excerpt { font-size:8px; line-height:1.35; }
+  .round-break:has(.round-completion) .round-completion-copy { padding:0; }
+  .round-break:has(.round-completion) .round-completion-kicker { margin-bottom:8px; }
+  .round-break:has(.round-completion) .round-completion-title { max-width:14ch; font-size:clamp(30px,9vw,38px); line-height:1.08; }
+  .round-break:has(.round-completion) .round-completion-lead { margin-top:10px; font-size:14px; }
+  .round-break:has(.round-completion) .completion-reply { padding-top:16px; }
+  .round-break:has(.round-completion) .completion-reply-prompt-view h2 { font-size:20px; }
+  .round-break:has(.round-completion) .completion-reply-action { width:auto; min-width:0; padding-inline:18px; }
+}
+@media (max-width:359px) {
+  .round-break:has(.round-completion) .round-completion-cards,
+  .round-break:has(.round-completion) .round-completion-card-fan { min-height:140px; height:140px; }
+}
+@media (prefers-reduced-motion:reduce) { .round-break:has(.round-completion) .round-completion-card { transition:none; } }
 .sponsor-completion-note { margin:12px auto 16px; max-width:36rem; text-align:center; color:#33445f; }
 .sponsor-completion-note small { display:block; color:#6b5a24; }
 .sponsor-completion-note p { margin:4px 0; }

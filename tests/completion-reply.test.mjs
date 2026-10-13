@@ -37,7 +37,7 @@ test('reply key separates rounds and sessions', () => {
 test('copy supplies complete spoken instructions for every context', () => {
   for (const context of ['solo', 'group', 'business', 'pair', 'romance', 'friend', 'candidate', 'partner', 'married', 'first', 'family']) {
     const copy = completionReplyCopy(context);
-    assert.ok(copy.prompt && copy.action && copy.doneLabel && copy.complete);
+    assert.ok(copy.prompt && copy.lead && copy.example && copy.action && copy.doneLabel && copy.complete);
     assert.ok(copy.title && copy.completeTitle && copy.image);
   }
   assert.match(completionReplyCopy('solo').prompt, /声に出/u);
@@ -53,4 +53,10 @@ test('copy supplies complete spoken instructions for every context', () => {
   assert.equal(completionReplyCopy('friend', { participantCount: 2 }).image, '/assets/completion-reply-pair.webp');
   assert.equal(completionReplyCopy('friend', { participantCount: 3 }).image, '/assets/completion-reply-group.webp');
   assert.match(completionReplyCopy('solo').complete, /伝えたい言葉/u);
+  assert.match(completionReplyCopy('solo').lead, /自分に伝えたい/u);
+  assert.match(completionReplyCopy('family').example, /ありがとう/u);
+  assert.match(completionReplyCopy('friend').example, /聞けてよかった/u);
+  assert.equal(completionReplyCopy('friend').title, '最後に、ひとこと。');
+  assert.equal(completionReplyCopy('solo').title, '自分に、声で届けよう。');
+  assert.match(completionReplyCopy('family').lead, /家族に/u);
 });
