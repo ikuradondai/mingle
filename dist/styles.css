@@ -987,7 +987,12 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 /* ===== 自分のトリセツ（ビルダー） ===== */
 .ts-topbar { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:8px; max-width:620px; padding-left:12px; padding-right:12px; }
 .ts-back { display:inline-flex; align-items:center; gap:2px; justify-self:start; min-height:48px; padding:0 10px 0 4px; border:0; border-radius:12px; background:none; color:var(--blue); font-weight:900; font-size:15px; }
-.ts-topbar-title { justify-self:center; font-size:15px; white-space:nowrap; }
+.ts-topbar-title { justify-self:center; min-width:0; max-width:100%; font-size:15px; white-space:nowrap; }
+.ts-topbar-by { font-size:.72em; font-weight:700; letter-spacing:-.01em; }
+@media (max-width:379px) {
+  .ts-topbar-title { white-space:normal; line-height:1.15; text-align:center; }
+  .ts-topbar-by { display:block; }
+}
 .ts-icon { flex:0 0 auto; vertical-align:-3px; }
 .ts-content { max-width:620px; padding-left:16px; padding-right:16px; }
 .ts-screen { display:grid; gap:14px; min-width:0; animation:ts-fade .22s ease both; }

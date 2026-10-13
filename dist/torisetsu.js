@@ -1653,7 +1653,7 @@ export function torisetsuView(ts, helpers) {
     ? `<div class="ts-modal" data-ts-modal role="alertdialog" aria-modal="true" aria-labelledby="ts-leave-title"><div class="ts-modal-card"><p id="ts-leave-title">${esc(canKeep ? COPY.leaveTitle : COPY.leaveTitleLoss)}</p><div class="ts-save-actions">${leaveButtons}</div></div></div>`
     : '';
   const toast = ts.undo ? `<div class="ts-toast" role="status"><span>${esc(COPY.deletedToast)}</span><button type="button" class="ts-toast-button" data-action="torisetsu-undo">${esc(COPY.undo)}</button></div>` : '';
-  return `<header class="topbar ts-topbar"><button type="button" class="ts-back" data-action="torisetsu-back" aria-label="${esc(COPY.back)}">${iconSvg('left', 20)}<span>${esc(COPY.back)}</span></button><strong class="ts-topbar-title">${esc(COPY.appTitle)}</strong><span class="ts-topbar-space" aria-hidden="true"></span></header><section class="content ts-content ts-gallery-content"><div class="ts-screen" data-ts-view="${esc(ts.view)}" data-ts-view-key="${esc(torisetsuViewKey(ts))}">${body}</div></section>${leave}${toast}`;
+  return `<header class="topbar ts-topbar"><button type="button" class="ts-back" data-action="torisetsu-back" aria-label="${esc(COPY.back)}">${iconSvg('left', 20)}<span>${esc(COPY.back)}</span></button><strong class="ts-topbar-title"><span class="ts-topbar-name">${esc(COPY.appTitle)}</span><span class="ts-topbar-by"> by Mingle.cards</span></strong><span class="ts-topbar-space" aria-hidden="true"></span></header><section class="content ts-content ts-gallery-content"><div class="ts-screen" data-ts-view="${esc(ts.view)}" data-ts-view-key="${esc(torisetsuViewKey(ts))}">${body}</div></section>${leave}${toast}`;
 }
 
 export function torisetsuViewKey(ts) {
