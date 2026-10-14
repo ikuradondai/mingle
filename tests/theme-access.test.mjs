@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decks } from '../dist/data/decks.js';
 import { groupLabels } from '../dist/data/theme-groups.js';
-import { GUEST_THEME_IDS, canGuestUseTheme, canUseTheme, sessionNeedsThemeAccess, isAgeConfirmed, isAdultTheme, canSeeTheme, canOfferR18Option, visibleFilterIds, cardsHaveR18, sessionHasR18, canAccessSessionContent, isActiveVenueSession, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible, R18_DISPLAY_KEY } from '../dist/theme-access.js';
+import { GUEST_THEME_IDS, canGuestUseTheme, countGuestThemes, countRegistrationThemes, canUseTheme, sessionNeedsThemeAccess, isAgeConfirmed, isAdultTheme, canSeeTheme, canOfferR18Option, visibleFilterIds, cardsHaveR18, sessionHasR18, canAccessSessionContent, isActiveVenueSession, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible, R18_DISPLAY_KEY } from '../dist/theme-access.js';
 
 const pick = (id) => decks.find((deck) => deck.id === id);
 const ADULT_ONLY_IDS = ['intimacy', 'first-intimacy', 'intimacy-refresh', 'intimacy-distance'];
@@ -17,6 +17,21 @@ test('guest access is limited to six non-adult themes', () => {
   for (const deck of decks) assert.equal(canUseTheme(deck, guest), GUEST_THEME_IDS.has(deck.id));
   assert.equal(canUseTheme(undefined, member), false);
   assert.equal(canUseTheme(undefined, confirmed), false);
+});
+
+test('guest theme count follows the authoritative catalog and current participant eligibility', () => {
+  assert.equal(countGuestThemes(decks), 6);
+  assert.equal(countGuestThemes(decks, { isEligible: (deck) => deck.id !== 'date' }), 5);
+  const withoutFriends = decks.filter((deck) => deck.id !== 'friends');
+  assert.equal(countGuestThemes(withoutFriends), 5);
+  assert.equal(countGuestThemes([...decks, { id: 'custom-public', questions: [] }]), 6, 'unregistered custom catalog entries are never counted');
+  assert.equal(countRegistrationThemes(decks), 36, 'adult-only themes are excluded from the registration total');
+  assert.equal(countRegistrationThemes(decks, { isEligible: (deck) => deck.id !== 'date' }), 35);
+  const added = [...decks, { id: 'new-public', adultOnly: false, questions: [] }];
+  assert.equal(countRegistrationThemes(added), 37, 'a new ordinary catalog theme increases the registration total');
+  assert.equal(countRegistrationThemes(added.filter((deck) => deck.id !== 'new-public')), 36, 'removing it decreases the total');
+  assert.equal(countRegistrationThemes([...decks, { id: 'new-adult', adultOnly: true, questions: [] }]), 36, 'adult additions stay excluded');
+  assert.equal(countRegistrationThemes([null, undefined, ...decks]), 36, 'invalid catalog entries stay excluded');
 });
 
 test('adult-only themes need an age-confirmed account; unconfirmed members keep every regular theme', () => {

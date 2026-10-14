@@ -23,7 +23,7 @@ import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, ran
 import { loadRecommendationLabels, recommendationLabel } from "./recommendation-labels.js";
 import { themeExampleForDeck } from "./theme-examples.js";
 import { createTorisetsuState, torisetsuView, applyAction as applyTorisetsuAction, loadTorisetsu, expireUndo as expireTorisetsuUndo, torisetsuViewKey, setDraftText as setTorisetsuText, draftComplete as torisetsuDraftComplete, isPicked as torisetsuIsPicked, finishLabel as torisetsuFinishLabel, composeManual as composeTorisetsuManual, canSendImage } from "./torisetsu.js";
-import { GUEST_THEME_IDS, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
+import { GUEST_THEME_IDS, countGuestThemes, countRegistrationThemes, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText } from "./participant-rule.js";
 import { consumeMinorityAuthIntent, clearMinorityAuthIntent } from "./minority-auth-intent.js";
 import { consumeQuestionWolfAuthIntent, saveQuestionWolfAuthIntent } from "./question-wolf-auth-intent.js";
@@ -1106,6 +1106,12 @@ function participantRuleVisibleForParticipants(rule) {
   if (count === 2) return rule === 'pair' || rule === 'group';
   return rule === 'group';
 }
+function registrationThemeCount() {
+  return countRegistrationThemes(decks, { isEligible: (deck) => participantRuleVisibleForParticipants(participantRuleForDeck(deck)) });
+}
+function guestThemeCount() {
+  return countGuestThemes(decks, { isEligible: (deck) => participantRuleVisibleForParticipants(participantRuleForDeck(deck)) });
+}
 function themeExplorerText(deck, categoryLabels = {}) {
   const categories = (themeGroups[deck.id] || []).map((id) => categoryLabels[id] || id).join('・');
   const soloCategory = soloCategories.find((category) => category.id === deck.category)?.label || deck.category || '';
@@ -1391,7 +1397,10 @@ function decksView() {
     ? `${groupFlat.length ? themeExplorerShelf('group-filtered', categoryId === 'all' ? 'テーマ一覧' : categoryId === 'adult' ? 'R18のテーマ' : 'カテゴリ別', groupFlat, { mixed, selectedMySet }) : (categoryId === 'all' && state.themeExplorerTagFilter === 'all' && visibleGames.length ? '' : themeExplorerEmpty())}${categoryId === 'all' && state.themeExplorerTagFilter === 'all' && (visibleGames.length || sponsorEntries('group', 'game', query).length) ? `${sponsorEntries('group', 'game', query).length ? themeExplorerShelf('group-game-sponsors', 'スポンサー提供', sponsorEntries('group', 'game', query), { mixed }) : ''}${visibleGames.length ? themeGameShelf(visibleGames) : ''}` : ''}`
     : `${themeExplorerShelf('recommended', 'おすすめ', recommendedWithSponsors.filter((entry) => entry.__sponsor || matches(entry)), { mixed, selectedMySet })}${historyEntries.length ? themeExplorerShelf('history', '最近遊んだテーマ', historyEntries, { mixed, selectedMySet }) : ''}${mySetEntries.length ? themeExplorerShelf('group-mysets', 'マイセット', mySetEntries, { mixed, selectedMySet }) : ''}${groupCategoryShelves}${adultShelf}${state.themeExplorerTagFilter === 'all' && (visibleGames.length || sponsorEntries('group', 'game', query).length) ? `${sponsorEntries('group', 'game', query).length ? themeExplorerShelf('group-game-sponsors', 'スポンサー提供', sponsorEntries('group', 'game', query), { mixed }) : ''}${visibleGames.length ? themeGameShelf(visibleGames) : ''}` : ''}`;
   const gameCategory = categoryId === 'game';
-  return frame(`<div class="theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>質問テーマを選ぶ</h1></div>${!isRegisteredUser() ? `<p class="guest-theme-note">無料登録で、さらに多くのテーマが使えます。</p>` : ''}${themeExplorerToolbar({ filters, mix: !gameCategory, hideTag: gameCategory })}${state.error ? `<p class="form-error" role="alert">${esc(state.error)}</p>` : ''}${groupBrowse}${gameCategory ? '' : controls}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'Mingle.Cards', true);
+  const guestNotice = !isRegisteredUser() && !gameCategory
+    ? `<p class="guest-theme-note"><strong>${guestThemeCount()}</strong>テーマ解放中！アカウント登録で全<strong>${registrationThemeCount()}</strong>テーマを楽しめます！</p>`
+    : '';
+  return frame(`<div class="theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>質問テーマを選ぶ</h1></div>${guestNotice}${themeExplorerToolbar({ filters, mix: !gameCategory, hideTag: gameCategory })}${state.error ? `<p class="form-error" role="alert">${esc(state.error)}</p>` : ''}${groupBrowse}${gameCategory ? '' : controls}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'Mingle.Cards', true);
 }
 
 function participantChips(session) { return session.participants.map((name, index) => { const initial = Array.from(name.trim())[0] ?? '・'; return `<span class="participant-chip participant-color-${index} ${index === currentParticipantIndex(session) ? "is-current" : ""}"><i aria-hidden="true">${esc(initial)}</i>${esc(name)}</span>`;

@@ -48,6 +48,15 @@ export function canGuestUseTheme(deck) {
   return Boolean(deck && !deck.adultOnly && GUEST_THEME_IDS.has(deck.id) && !deck.questions?.some((card) => card.r18));
 }
 
+export function countGuestThemes(catalog = decks, { isEligible = () => true } = {}) {
+  return (Array.isArray(catalog) ? catalog : []).filter((deck) => canGuestUseTheme(deck) && isEligible(deck)).length;
+}
+
+export function countRegistrationThemes(catalog = decks, { isEligible = () => true } = {}) {
+  const registeredAccount = { enabled: true, authReady: true, user: { id: '__theme-count__' } };
+  return (Array.isArray(catalog) ? catalog : []).filter((deck) => canUseTheme(deck, registeredAccount) && isEligible(deck)).length;
+}
+
 export function canSeeTheme(deck, account) {
   return Boolean(deck) && (!isAdultTheme(deck) || (isAgeConfirmed(account) && r18Visible(account)));
 }
