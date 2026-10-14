@@ -30,6 +30,7 @@ import { consumeQuestionWolfAuthIntent, saveQuestionWolfAuthIntent } from "./que
 import { consumeOchiAuthIntent, saveOchiAuthIntent } from "./ochi-auth-intent.js";
 import { consumeOneCutAuthIntent, saveOneCutAuthIntent } from "./one-cut-auth-intent.js";
 import { consumeMissionAuthIntent, saveMissionAuthIntent } from "./mission-mingle-auth-intent.js";
+import { consumeQuickQuizAuthIntent, saveQuickQuizAuthIntent } from "./quick-quiz-auth-intent.js";
 import { gameCardImage } from "./game-card-images.js";
 import { groupGames } from "./data/game-registry.js";
 import { gameParticipantGate } from "./game-participant-gate.js";
@@ -102,6 +103,7 @@ const questionWolfAuthQuery = new URLSearchParams(location.search).get('question
 const ochiAuthQuery = new URLSearchParams(location.search).get('ochiAuth') === '1';
 const oneCutAuthQuery = new URLSearchParams(location.search).get('oneCutAuth') === '1';
 const missionAuthQuery = new URLSearchParams(location.search).get('missionAuth') === '1';
+const quickQuizAuthQuery = new URLSearchParams(location.search).get('quickQuizAuth') === '1';
 const socialGameReturnQuery = new URLSearchParams(location.search).get('socialGameReturn') === '1';
 if (libraryQuery) { saveLibraryReturnIntent(); state.account.libraryReturn = true; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (venueOnboardingQuery) { clearLibraryReturnIntent(); saveVenueOnboardingIntent(); state.account.venueOnboarding = true; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
@@ -110,6 +112,7 @@ if (minorityAuthQuery) { state.account.open = true; state.account.status = 'ロ�
 if (ochiAuthQuery) { state.account.open = true; state.account.status = 'ログイン後にオチから話してのルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (oneCutAuthQuery) { state.account.open = true; state.account.status = 'ログイン後にワンカットのルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (missionAuthQuery) { state.account.open = true; state.account.status = 'ログイン後にミッション・ミングルのルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
+if (quickQuizAuthQuery) { state.account.open = true; state.account.status = 'ログイン後に早押しクイズのルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (questionWolfAuthQuery) { state.account.open = true; state.account.status = 'ログイン後に質問ウルフのルーム作成へ戻ります。'; state.focusSelector = '[data-account-email]'; history.replaceState({}, '', `${location.pathname}${location.hash}`); }
 if (socialGameReturnQuery) {
   const returned = consumeSocialGameIntent();
@@ -773,7 +776,7 @@ function frame(content, eyebrow = "Mingle.Cards", withHeader = true) { const sol
     if (!gate.valid) return '';
     return `<button type="button" class="text-button" data-action="game-launch" data-game-id="${esc(id)}">${esc(game.title)}</button>`;
   };
-  const venueGames = state.venue ? `<section aria-labelledby="venue-games-heading"><p class="eyebrow" id="venue-games-heading">ゲーム</p><div class="inline-actions">${venueGameButton('match')}${venueGameButton('choice')}${venueGameButton('minority-topic')}${venueGameButton('question-wolf')}${venueGameButton('ochi-kara')}${venueGameButton('one-cut')}${venueGameButton('mission-mingle')}</div></section>` : '';
+  const venueGames = state.venue ? `<section aria-labelledby="venue-games-heading"><p class="eyebrow" id="venue-games-heading">ゲーム</p><div class="inline-actions">${venueGameButton('match')}${venueGameButton('choice')}${venueGameButton('quick-quiz')}${venueGameButton('minority-topic')}${venueGameButton('question-wolf')}${venueGameButton('ochi-kara')}${venueGameButton('one-cut')}${venueGameButton('mission-mingle')}</div></section>` : '';
   return frame(`<div class="shared-landing${state.venue ? ' venue-landing' : ''}"><div class="shared-brand">${state.venue?.venue.logoUrl ? `<img src="${esc(state.venue.venue.logoUrl)}" alt="${esc(title)}" width="160" height="60" />` : '<img src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" width="160" height="113" />'}</div><p class="eyebrow">${state.venue ? '店舗のおすすめカード' : '共有されたマイセット'}</p><h1 tabindex="-1" data-focus>${esc(state.venue ? (venueSet?.adultOnly && !displayAllowed ? "R18を含むテーマ" : title) : (blocked || (shared.adultOnly && !displayAllowed) ? "共有セット" : (shared.name || "共有セット")))}</h1><p class="shared-meta">${state.venue ? esc(state.venue.table.label) : ''} ${!blocked && Number.isFinite(shared.cardCount) ? `${shared.cardCount}枚` : ""}${consent ? " · R18を含みます" : ""}</p>${welcome}${blocked ? "" : `<p class="account-hint">${landingHint}</p>`}${blockedPanel}${blocked ? "" : `<form class="panel form-panel" data-form="shared-participants">${venuePicker}${participantInput}${sharedDisplaySettings}${venueAgeTap}${consentControl}<p class="form-error" role="alert">${esc(state.error)}</p><button type="submit" class="primary-button" ${sharedSubmitDisabled() ? "disabled" : ""}>${state.busy ? "開始中…" : "このセットで遊ぶ"}</button>${state.venue ? venueGames : ''}</form>`}${footer}${state.account.open ? accountView({ overlayOnly: true }) : ""}</div>`, state.venue ? "店舗カード" : "共有セット", false); }
 
 function participantsView() {
@@ -1732,6 +1735,8 @@ async function loadAccount() {
     if (state.account.user) {
       const minorityIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeMinorityAuthIntent();
       if (minorityIntent) { state.account.open = false; location.replace(`/minority-room.html?create=1${minorityIntent.venueToken ? `&venue=${encodeURIComponent(minorityIntent.venueToken)}` : ''}`); return; }
+      const quickQuizIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeQuickQuizAuthIntent();
+      if (quickQuizIntent) { if (!saveQuickQuizAuthIntent(quickQuizIntent)) { state.account.status = '早押しクイズの復帰情報を保存できませんでした。'; } else { state.account.open = false; location.replace(`/quick-quiz-room.html?create=1${quickQuizIntent.venueToken ? `&venue=${encodeURIComponent(quickQuizIntent.venueToken)}` : ''}`); return; } }
       const questionWolfIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeQuestionWolfAuthIntent();
       if (questionWolfIntent) { if (!saveQuestionWolfAuthIntent(questionWolfIntent)) { state.account.status = '質問ウルフの復帰情報を保存できませんでした。'; } else { state.account.open = false; location.replace(`/question-wolf.html?create=1${questionWolfIntent.venueToken ? `&venue=${encodeURIComponent(questionWolfIntent.venueToken)}` : ''}`); return; } }
       intentFailed = await applyAdultIntent();

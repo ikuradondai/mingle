@@ -12,6 +12,7 @@ import { questionWolfTopics } from '../dist/data/question-wolf-topics.js';
 import { OCHI_ERROR_CODES, ochiAction, ochiCreatePayload, ochiInput, ochiSource, ochiState } from './ochi-kara.mjs';
 import { ONE_CUT_ERROR_CODES, oneCutAction, oneCutCreatePayload, oneCutInput, oneCutSource, oneCutState } from './one-cut.mjs';
 import { MISSION_ERROR_STATUS, missionAction, missionCreatePayload, missionInput, missionSource, missionState } from './mission-mingle.mjs';
+import { QUIZ_BUZZ_ERROR_STATUS, quizBuzzAction, quizBuzzCreatePayload, quizBuzzInput, quizBuzzSource, quizBuzzState } from './quiz-buzz.mjs';
 
 const MIN = 2;
 const MAX = 8;
@@ -68,6 +69,10 @@ const GAME_TYPES = {
     allowed: true, revisionExempt: true, stateKey: 'mission', createRpc: 'mission_create_room', venueToken: true, cardCountCheck: false,
     errors: MISSION_ERROR_STATUS, // MISSION_NOT_OWNER is the one 403; rest() reads the status straight from this table
     input: missionInput, source: missionSource, createPayload: missionCreatePayload
+  },
+  quiz_buzz: {
+    allowed: true, revisionExempt: true, stateKey: 'quizBuzz', createRpc: 'quiz_buzz_create_room', venueToken: true, cardCountCheck: false,
+    errors: QUIZ_BUZZ_ERROR_STATUS, input: quizBuzzInput, source: quizBuzzSource, createPayload: quizBuzzCreatePayload
   }
 };
 const gameEntry = (gameType) => (typeof gameType === 'string' && Object.hasOwn(GAME_TYPES, gameType) && GAME_TYPES[gameType].allowed ? GAME_TYPES[gameType] : null);
@@ -216,7 +221,8 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
   const ochiCtx = { rest: (path, options = {}) => rest(service, path, options, fetchImpl), getRoom, members, now };
   const oneCutCtx = { ...ochiCtx };
   const missionCtx = { ...ochiCtx };
-  const gameProjectors = { minority_topic: minorityState, question_wolf: questionWolfState, ochi_kara: (room, member) => ochiState(ochiCtx, room, member), one_cut: (room, member, list, receivedAt) => oneCutState(oneCutCtx, room, member, receivedAt), mission_mingle: (room, member, list) => missionState(missionCtx, room, member, list) };
+  const quizBuzzCtx = { ...ochiCtx };
+  const gameProjectors = { minority_topic: minorityState, question_wolf: questionWolfState, ochi_kara: (room, member) => ochiState(ochiCtx, room, member), one_cut: (room, member, list, receivedAt) => oneCutState(oneCutCtx, room, member, receivedAt), mission_mingle: (room, member, list) => missionState(missionCtx, room, member, list), quiz_buzz: (room, member, list, receivedAt) => quizBuzzState(quizBuzzCtx, room, member, receivedAt) };
   async function projected(room, member, includeCard, receivedAt = now()) { const list = await members(room.id); return publicRoom(room, member, includeCard, list, gameProjectors[room.game_type] ? await gameProjectors[room.game_type](room, member, list, receivedAt) : null); }
   async function resolveSet(ownerId, setId) {
     if (!setId || !/^[0-9a-f-]{16,64}$/i.test(setId)) throw fail(400, 'INVALID_REQUEST');
@@ -271,7 +277,9 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
     const hostSecret = token();
     const expiresAt = new Date(now() + TTL_MS).toISOString();
     const common = { p_host_user_id: owner.id, p_invite_hash: hash(invite), p_host_secret_hash: hash(hostSecret), p_host_name: hostName, p_expires_at: expiresAt };
-    const created = await rest(service, `/rest/v1/rpc/${entry.createRpc}`, { method: 'POST', body: JSON.stringify(entry.createPayload({ common, gi, source, input })) }, fetchImpl);
+    let created;
+    try { created = await rest(service, `/rest/v1/rpc/${entry.createRpc}`, { method: 'POST', body: JSON.stringify(entry.createPayload({ common, gi, source, input })) }, fetchImpl); }
+    catch (error) { if (gi?.type === 'quiz_buzz' && ['NOT_FOUND', 'GROUP_UNAVAILABLE'].includes(error.code)) throw fail(503, 'QUIZ_BUZZ_UNAVAILABLE'); throw error; }
     const pair = Array.isArray(created) ? created[0] : created;
     const room = await getRoom(pair?.room_id); const hostRows = await rest(service, `/rest/v1/group_members?id=eq.${encodeURIComponent(pair?.host_member_id)}&select=*`, {}, fetchImpl);
     if (!room || !hostRows?.[0]) throw fail(502, 'GROUP_UNAVAILABLE');
@@ -338,6 +346,12 @@ export function createGroupRoomService({ env = process.env, fetchImpl = fetch, n
       const actor = initial.member || (await members(room.id)).find((item) => item.role === 'host');
       if (!actor) throw fail(403, 'FORBIDDEN');
       await missionAction(missionCtx, { room, actor, input });
+      const fresh = await getRoom(room.id); return { ...(await projected(fresh, actor, false)), host: actor.role === 'host' };
+    }
+    if (room.game_type === 'quiz_buzz') {
+      const actor = initial.member || (await members(room.id)).find((item) => item.role === 'host');
+      if (!actor) throw fail(403, 'FORBIDDEN');
+      await quizBuzzAction(quizBuzzCtx, { room, actor, input });
       const fresh = await getRoom(room.id); return { ...(await projected(fresh, actor, false)), host: actor.role === 'host' };
     }
     if (room.game_type === 'question_wolf') {

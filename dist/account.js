@@ -126,6 +126,7 @@ export const accountApi = {
   createOchiRoom: (hostName, venueToken, laps) => groupRequest('/rooms', { method: 'POST', body: { gameType: 'ochi_kara', hostName, ...(laps === 2 ? { laps } : {}), ...(venueToken ? { venueToken } : {}) } }),
   createOneCutRoom: (hostName, venueToken, lapsTotal) => groupRequest('/rooms', { method: 'POST', body: { gameType: 'one_cut', hostName, ...([1, 2, 3].includes(lapsTotal) ? { lapsTotal } : {}), ...(venueToken ? { venueToken } : {}) } }),
   createMissionRoom: (hostName, venueToken, settings) => groupRequest('/rooms', { method: 'POST', body: { gameType: 'mission_mingle', hostName, ...(settings && typeof settings === 'object' ? { settings } : {}), ...(venueToken ? { venueToken } : {}) } }),
+  createQuickQuizRoom: (hostName, difficulty, venueToken) => groupRequest('/rooms', { method: 'POST', body: { gameType: 'quiz_buzz', hostName, ...(difficulty ? { difficulty } : {}), ...(venueToken ? { venueToken } : {}) } }),
   groupState: (id, memberToken) => groupRequest(`/rooms/${encodeURIComponent(id)}`, memberToken ? { headers: { 'x-group-member-token': memberToken } } : {}),
   joinGroupRoom: (id, inviteToken, name, adultConfirmed, memberSecret, ageConfirmed) => groupRequest(`/rooms/${encodeURIComponent(id)}/join`, { method: 'POST', body: { inviteToken, name, ageConfirmed: ageConfirmed === true, adultConfirmed: adultConfirmed === true, ...(memberSecret ? { memberSecret } : {}) } }),
   previewGroupRoom: (id, inviteToken) => groupRequest(`/rooms/${encodeURIComponent(id)}/preview`, { method: 'POST', body: { inviteToken } }),
@@ -135,6 +136,7 @@ export const accountApi = {
   oneCutAction: (id, memberToken, action, revision, payload = {}) => groupRequest(`/rooms/${encodeURIComponent(id)}/action`, { method: 'POST', body: { action, revision, ...payload }, headers: memberToken ? { 'x-group-member-token': memberToken } : {} }),
   ochiAction: (id, memberToken, action, revision, payload = {}) => groupRequest(`/rooms/${encodeURIComponent(id)}/action`, { method: 'POST', body: { action, revision, ...payload }, headers: memberToken ? { 'x-group-member-token': memberToken } : {} }),
   missionAction: (id, memberToken, action, revision, payload = {}) => groupRequest(`/rooms/${encodeURIComponent(id)}/action`, { method: 'POST', body: { action, revision, ...payload }, headers: memberToken ? { 'x-group-member-token': memberToken } : {} }),
+  quickQuizAction: (id, memberToken, action, revision, payload = {}) => groupRequest(`/rooms/${encodeURIComponent(id)}/action`, { method: 'POST', body: { action, revision, ...payload }, headers: memberToken ? { 'x-group-member-token': memberToken } : {} }),
 };
 export function cardPayload(card, deckId) { return { id: card.id, deckId: deckId || card.sourceDeckId || null }; }
 export function createAccountClientForTest({ fetchImpl, sdk, locationRef = { origin: 'http://localhost:5180', pathname: '/' } }) { sdkLoader = async () => sdk; fetcher = fetchImpl; globalThis.location ||= locationRef; return { config: accountConfig, discover: () => discoverAccountConfig({ fetchImpl }), api: accountApi }; }

@@ -3,6 +3,15 @@
 // never attempts to create a card session for a game.
 export const groupGames = [
   {
+    id: 'quick-quiz',
+    title: 'みんなで早押しクイズ！',
+    subtitle: '問題を見て、わかった人から答えるクイズ',
+    meta: '2〜8人 · 全6問 · 4段階',
+    href: '/quick-quiz-room.html?create=1',
+    minParticipants: 2,
+    maxParticipants: 8,
+  },
+  {
     id: 'quiz',
     title: '一般クイズ',
     subtitle: '問題と解説をみんなで楽しむクイズ',

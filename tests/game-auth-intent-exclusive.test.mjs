@@ -5,6 +5,7 @@ import { saveQuestionWolfAuthIntent, consumeQuestionWolfAuthIntent } from "../di
 import { saveOchiAuthIntent, consumeOchiAuthIntent } from "../dist/ochi-auth-intent.js";
 import { saveOneCutAuthIntent, consumeOneCutAuthIntent } from "../dist/one-cut-auth-intent.js";
 import { saveMissionAuthIntent, consumeMissionAuthIntent } from "../dist/mission-mingle-auth-intent.js";
+import { saveQuickQuizAuthIntent, consumeQuickQuizAuthIntent } from "../dist/quick-quiz-auth-intent.js";
 import { gameAuthIntentKeys } from "../dist/game-auth-intent-keys.js";
 
 function storage() {
@@ -17,10 +18,11 @@ const games = {
   ochi: { save: saveOchiAuthIntent, consume: consumeOchiAuthIntent },
   oneCut: { save: saveOneCutAuthIntent, consume: consumeOneCutAuthIntent },
   mission: { save: saveMissionAuthIntent, consume: consumeMissionAuthIntent },
+  quickQuiz: { save: saveQuickQuizAuthIntent, consume: consumeQuickQuizAuthIntent },
 };
 
-test("the five games use five distinct keys", () => {
-  assert.equal(new Set(Object.values(gameAuthIntentKeys)).size, 5);
+test("the six games use six distinct keys", () => {
+  assert.equal(new Set(Object.values(gameAuthIntentKeys)).size, 6);
   assert.deepEqual(Object.keys(gameAuthIntentKeys).sort(), Object.keys(games).sort());
 });
 

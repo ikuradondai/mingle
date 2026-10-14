@@ -23,6 +23,8 @@ function harness(room, rpcError) {
     if (u.pathname.includes('minority_rounds')) return json([{ id: 'r', status: 'talk', assignments: { [hostId]: { word: 'w', role: 'majority' } }, confirmed: {} }]);
     if (u.pathname.includes('question_wolf_games')) return json([{ room_id: roomId, round_no: 1, phase: 'answer', pairs: [], used_pairs: [] }]);
     if (u.pathname.includes('question_wolf_rounds')) return json([{ id: 'r', status: 'answer', assignments: { [hostId]: { question: 'Q', role: 'majority' } }, confirmed: {}, answer_order: [hostId], answer_index: 0 }]);
+    if (u.pathname.includes('quiz_buzz_games')) return json([{ phase: 'lobby', difficulty: 'beginner', round_no: 0, question_index: 0, total_questions: 6, scores: {}, revision: 2 }]);
+    if (u.pathname.includes('quiz_buzz_rounds')) return json([]);
     return json([]);
   };
   return { service: createGroupRoomService({ env, fetchImpl }), calls };
@@ -34,15 +36,17 @@ test('state response keeps the per-game key name and top-level shape', async () 
   const cards = await harness({ ...baseRoom, status: 'playing' }).service.state(req({}), roomId);
   const minority = await harness({ ...baseRoom, game_type: 'minority_topic', status: 'playing' }).service.state(req({}), roomId);
   const wolf = await harness({ ...baseRoom, game_type: 'question_wolf', status: 'playing' }).service.state(req({}), roomId);
+  const quiz = await harness({ ...baseRoom, game_type: 'quiz_buzz', status: 'lobby' }).service.state(req({}), roomId);
   assert.equal(keys(cards), 'card,host,member,room');
   assert.equal(keys(minority), 'card,host,member,minority,room');
   assert.equal(keys(wolf), 'card,host,member,questionWolf,room');
+  assert.equal(keys(quiz), 'card,host,member,quizBuzz,room');
   assert.equal(minority.room.gameType, 'minority_topic');
   assert.equal(wolf.room.gameType, 'question_wolf');
 });
 
 test('create picks the RPC per game type and rejects unknown or non-string game types', async () => {
-  for (const [gameType, rpc] of [['minority_topic', 'minority_create_room'], ['question_wolf', 'question_wolf_create_room'], ['ochi_kara', 'ochi_create_room'], ['one_cut', 'one_cut_create_room'], ['mission_mingle', 'mission_create_room']]) {
+  for (const [gameType, rpc] of [['minority_topic', 'minority_create_room'], ['question_wolf', 'question_wolf_create_room'], ['ochi_kara', 'ochi_create_room'], ['one_cut', 'one_cut_create_room'], ['mission_mingle', 'mission_create_room'], ['quiz_buzz', 'quiz_buzz_create_room']]) {
     const { service, calls } = harness({ ...baseRoom, game_type: gameType });
     await service.create(req({ gameType, hostName: 'H' }));
     assert.equal(calls.some((p) => p.endsWith(`/rpc/${rpc}`)), true, rpc);
@@ -72,11 +76,15 @@ test('revision is required for cards rooms and exempt for minority/question wolf
   assert.notEqual(await code({ ...baseRoom, game_type: 'minority_topic', status: 'playing' }), 'GROUP_STALE');
   assert.notEqual(await code({ ...baseRoom, game_type: 'question_wolf', status: 'playing' }), 'GROUP_STALE');
   assert.notEqual(await code({ ...baseRoom, game_type: 'mission_mingle', status: 'playing' }), 'GROUP_STALE');
+  assert.notEqual(await code({ ...baseRoom, game_type: 'quiz_buzz', status: 'playing' }), 'GROUP_STALE');
 });
 
 test('venue token is verified only for games that opt in', async () => {
   const wolf = harness({ ...baseRoom, game_type: 'question_wolf' });
   await wolf.service.create(req({ gameType: 'question_wolf', hostName: 'H', venueToken: 'a'.repeat(32) }));
   assert.equal(wolf.calls.some((p) => p.includes('/venue_tables')), true);
+  const quiz = harness({ ...baseRoom, game_type: 'quiz_buzz' });
+  await quiz.service.create(req({ gameType: 'quiz_buzz', hostName: 'H', venueToken: 'a'.repeat(32) }));
+  assert.equal(quiz.calls.some((p) => p.includes('/venue_tables')), true);
   await assert.rejects(() => harness(baseRoom).service.create(req({ gameType: 'minority_topic', hostName: 'H', venueToken: 'short' })), (e) => e.status === 400);
 });

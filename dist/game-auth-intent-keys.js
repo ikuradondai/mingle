@@ -6,6 +6,7 @@ const KEYS = {
   ochi: "mingle.cards.ochi-auth-return.v1",
   oneCut: "mingle.cards.one-cut-auth-return.v1",
   mission: "mingle.cards.mission-auth-return.v1",
+  quickQuiz: "mingle.cards.quick-quiz-auth-return.v1",
 };
 export const gameAuthIntentKeys = Object.freeze({ ...KEYS });
 export function clearOtherGameAuthIntents(own, storage) {
