@@ -80,3 +80,56 @@ export function displayQuestionText(text, { participants, participantIndex, rule
   if (typeof other !== 'string' || !other.trim() || participants.some((name) => typeof name !== 'string' || !name.trim())) return text;
   return text.replace(/(?<!対戦)(?<!取引)(?<!相談)(?<!理想の)相手(?!役|方|チーム|先)/gu, () => other);
 }
+
+const SOLO_FALLBACK_NAMES = new Set(['自分', 'あなた']);
+const NICKNAME_HONORIFICS = /(?:さん|ちゃん|くん|君|さま|様)$/u;
+
+// Nicknames are display-only. Keep this separate from the session's raw
+// participant value so the latter remains compatible with existing saves.
+export function normalizeSoloNickname(value) {
+  if (typeof value !== 'string') return '';
+  const trimmed = Array.from(value.trim().replace(/[\u0000-\u001f\u007f]/gu, '')).slice(0, 40).join('').trim();
+  return trimmed && !SOLO_FALLBACK_NAMES.has(trimmed) ? trimmed : '';
+}
+
+export function soloNicknameLabel(value) {
+  const nickname = normalizeSoloNickname(value);
+  return nickname ? (NICKNAME_HONORIFICS.test(nickname) ? nickname : `${nickname}さん`) : '';
+}
+
+// Only cards listed here are intentionally rewritten. Matching the original
+// text as well as the stable id keeps custom cards and edited snapshots safe.
+const SOLO_PERSONALIZED_CARDS = Object.freeze({
+  'self-values-02': { source: '機嫌がよくなるスイッチは？', render: (name) => `${name}の機嫌がよくなるスイッチは？` },
+  'self-values-07': { source: '自分の説明書に「こういうときは、そっとしておいて」と書くなら？', render: (name) => `${name}の説明書に「こういうときは、そっとしておいて」と書くなら？` },
+  'self-checkin-07': { source: '今日がんばったことを一つ挙げるなら？', render: (name) => `${name}が今日がんばったことを一つ挙げるなら？` },
+  'self-strengths-08': { source: 'ここまでの答えに共通する自分の強み（例：ていねい）は？', render: (name) => `ここまでの答えに共通する${name}の強み（例：ていねい）は？` },
+  'self-work-08': { source: 'しんどい中でも、ちゃんとできていることは？', render: (name) => `${name}がしんどい中でも、ちゃんとできていることは？` },
+  'self-school-08': { source: 'しんどい中でも、学校でちゃんとできていることは？', render: (name) => `${name}がしんどい中でも、学校でちゃんとできていることは？` },
+  'self-club-08': { source: '始めた頃と比べて、できるようになったことは？', render: (name) => `${name}が始めた頃と比べて、できるようになったことは？` },
+  'self-path-08': { source: '人から「向いてるね」と言われたことは？', render: (name) => `${name}が人から「向いてるね」と言われたことは？` },
+  'self-people-tired-08': { source: '人に合わせられるのは、自分のどんなよさ？', render: (name) => `人に合わせられるのは、${name}のどんなよさ？` },
+  'self-confidence-08': { source: '失敗しても変わらない、自分のいいところは？', render: (name) => `失敗しても変わらない、${name}のいいところは？` },
+  'self-decision-07': { source: '1年後の自分なら、今の自分に何て言いそう？', render: (name) => `1年後の${name}なら、今の${name}に何て言いそう？` },
+  'self-future-08': { source: 'これまでの自分が、ちゃんと積み上げてきたことは？', render: (name) => `これまでの${name}が、ちゃんと積み上げてきたことは？` },
+  'self-love-now-08': { source: '相手といるとき、好きだなと思える自分はどんな自分？', render: (name) => `相手といるとき、${name}が好きだなと思える自分はどんな自分？` },
+  'self-crush-05': { source: 'その人の前で自然体でいられたとき、自分は何をしていた？', render: (name) => `その人の前で自然体でいられたとき、${name}は何をしていた？` },
+  'self-breakup-decided-08': { source: '別れを決めて伝えた自分の、えらかったところは？', render: (name) => `別れを決めて伝えた${name}の、えらかったところは？` },
+  'self-breakup-lingering-08': { source: 'この経験で、自分について新しくわかったことは？', render: (name) => `この経験で、${name}について新しくわかったことは？` },
+  'self-friends-08': { source: '友だち付き合いで、自分のいいところは？', render: (name) => `友だち付き合いで、${name}のいいところは？` },
+});
+
+const SOLO_PERSONALIZED_SOURCE = new Map(Object.entries(SOLO_PERSONALIZED_CARDS).map(([id, item]) => [id, item.source]));
+const SOLO_DECK_IDS = new Set(soloDecks.map((deck) => deck.id));
+
+export function personalizeSoloQuestion(card, nickname) {
+  if (!card || typeof card !== 'object' || typeof card.id !== 'string' || typeof card.text !== 'string') return card?.text || '';
+  const item = SOLO_PERSONALIZED_CARDS[card.id];
+  const name = soloNicknameLabel(nickname);
+  if (!item || !name || (typeof card.sourceDeckId === 'string' && !SOLO_DECK_IDS.has(card.sourceDeckId)) || card.text !== SOLO_PERSONALIZED_SOURCE.get(card.id)) return card.text;
+  return item.render(name);
+}
+
+export function hasSoloQuestionPersonalization(card) {
+  return Boolean(card && SOLO_PERSONALIZED_SOURCE.get(card.id) === card.text && (typeof card.sourceDeckId !== 'string' || SOLO_DECK_IDS.has(card.sourceDeckId)));
+}

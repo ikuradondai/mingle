@@ -719,6 +719,8 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .play-frame-content{display:block!important;grid-template-columns:none!important;grid-template-rows:none!important;gap:0!important}
 .shared-play-shell{width:min(100%,760px);margin-inline:auto}
 .shared-play-head{display:flex;align-items:center;justify-content:space-between;min-height:44px}
+.solo-nickname-context{display:block;margin:6px 0 0;color:var(--muted);font-size:14px;font-weight:700;line-height:1.35}
+.solo-card-address{display:block;margin:0 0 10px;color:var(--muted);font-size:13px;font-weight:800;line-height:1.2;text-align:center}
 .shared-play-head>div{min-width:0}.shared-play-head .play-deck{margin:0;color:var(--ink);font-size:clamp(17px,2.1vw,22px);font-weight:800;line-height:1.2;overflow-wrap:anywhere}.shared-play-head .progress-copy{margin:3px 0 0;color:var(--muted);font-size:14px;font-weight:800}
 .shared-round-progress{height:4px;margin:8px 0 12px}
 .shared-question-card{position:relative;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:1fr;align-items:center;min-height:300px;width:100%;box-sizing:border-box;overflow:visible;border:1px solid rgba(20,33,61,.12);border-radius:24px;background:#fffaf3;box-shadow:0 12px 28px rgba(20,33,61,.1);isolation:isolate}

@@ -13,6 +13,7 @@ import {
   teaser, surpriseOptions, tryOptions, pruneChoices, shortOfSurprise, textOfTry, effectiveFocus, focusVoices, focusChoices, replyOptions,
   needById, valueById, qualityById, patternById, sceneById, surfaceById, deepById, thoughtById, intentById, admireWhoById, dotsOf,
 } from './torisetsu-insight.js';
+import { soloNicknameLabel } from './participant-rule.js';
 
 export { CHAPTERS, COPY };
 export const STORAGE_KEY = 'mingle.torisetsu.v3';
@@ -1044,6 +1045,22 @@ function memoField(ts, esc, label, placeholder) {
   return `<label class="ts-field"><span>${esc(label)}</span><input type="text" inputmode="text" autocomplete="off" maxlength="${TEXT_MAX}" data-ts-text="memo" value="${esc(ts.draft.memo)}" placeholder="${esc(placeholder)}" /><small data-ts-count="memo">${esc(COPY.memoCount(memoLen, TEXT_MAX))}</small></label>`;
 }
 
+// 呼び名は画面表示専用。トリセツの製品名（ts.data.name）や保存データとは分ける。
+function nicknameOf(h) { return soloNicknameLabel(h.nickname); }
+
+function addressWithNickname(h, text) {
+  const name = nicknameOf(h);
+  return name ? `${name}、${text}` : text;
+}
+
+function predictQuestionWithNickname(h, text) {
+  const name = nicknameOf(h);
+  if (!name) return text;
+  if (text.startsWith('自分にとって')) return `${name}にとって${text.slice('自分にとって'.length)}`;
+  if (text.startsWith('自分が')) return `${name}が${text.slice('自分が'.length)}`;
+  return `${name}、${text}`;
+}
+
 function predictView(ts, h) {
   const { esc } = h; const cfg = cfgOf(ts); const d = ts.data[ts.chapterId];
   const choices = ts.chapterId === 'needs' ? NEED_PREDICTIONS : VALUE_PREDICTIONS;
@@ -1052,7 +1069,7 @@ function predictView(ts, h) {
     <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
       <p class="ts-chapter-name">${esc(cfg.label)}</p>
       <h1 class="ts-q" tabindex="-1" data-focus>${esc(cfg.predict.title)}</h1>
-      <p class="ts-lead">${esc(cfg.predict.question)}</p>
+      <p class="ts-lead">${esc(predictQuestionWithNickname(h, cfg.predict.question))}</p>
       ${chipGroupMarkup(ts, esc, { label: cfg.predict.hint, max: cfg.predict.max, chips: choices, selected: d.prediction, groupId: 'prediction', radio: true, limitGroup: 'prediction' })}
       ${cfg.predict.footer ? `<details class="ts-context"><summary>ヒントを見る</summary><p class="ts-note">${esc(cfg.predict.footer)}</p></details>` : ''}
       <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-next">${esc(COPY.predictNext)}</button></div>
@@ -1068,7 +1085,7 @@ function introView(ts, h) {
     ${stepperMarkup(ts, esc)}
     <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
       ${chapter}
-      <h1 class="ts-q" tabindex="-1" data-focus>${esc(intro.title)}</h1>
+      <h1 class="ts-q" tabindex="-1" data-focus>${esc(addressWithNickname(h, intro.title))}</h1>
       <div class="ts-intro ts-side-${SIDE_COPY[ts.side].color}">${intro.lines.map((line) => `<p>${esc(line)}</p>`).join('')}</div>
       <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-recall-start">${esc(intro.button)}</button>${canCopy ? `<button type="button" class="secondary-button" data-action="torisetsu-copy-hard">${esc(COPY.useNeedsHard)}</button>` : ''}</div>
     </div>
@@ -1157,7 +1174,7 @@ function admireView(ts, h) {
   return `<section class="ts-step ts-gallery" data-ts-key="admire" data-ts-scene="gallery" data-gallery-stage="arrival">
     ${stepperMarkup(ts, esc)}
     <figure class="ts-gallery-scene"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="260" loading="lazy" /></figure><div class="ts-gallery-copy">
-    <h1 class="ts-q" tabindex="-1" data-focus>いいなと思った人</h1>
+    <h1 class="ts-q" tabindex="-1" data-focus>${esc(nicknameOf(h) ? `${nicknameOf(h)}が、いいなと思った人` : 'いいなと思った人')}</h1>
     <p class="ts-lead">最近「いいな」「あんなふうになれたら」と思った人はいる？</p>
     <p class="ts-note">身近な人でも、有名な人でも、物語の人でもOKです。</p>
     ${groupMarkup(ts, esc, groups[0])}
@@ -1527,7 +1544,7 @@ function doneView(ts, h) {
     <nav class="ts-done-progress" aria-label="章の進み具合"><ol>${chapterMarkers}</ol><span class="ts-done-progress-count">${esc(chapterProgress)}</span></nav>
     <div class="ts-done-layout"><div class="ts-done-visual">${book}<details class="ts-done-details"><summary>この章の内容</summary>${paper}</details></div><div class="ts-done-content">
       <p class="ts-done-marker"><span aria-hidden="true"></span>CHAPTER ${String(chapterNumber).padStart(2, '0')}　${esc(cfg.short || cfg.label)}</p>
-      <h1 class="ts-title" tabindex="-1" data-focus>${esc(complete ? 'トリセツが、できました。' : 'この章が、できました。')}</h1>
+      <h1 class="ts-title" tabindex="-1" data-focus>${esc(addressWithNickname(h, complete ? 'トリセツが、できました。' : 'この章が、できました。'))}</h1>
       <p class="ts-lead">${esc(cfg.done.body)}</p>
       <div class="ts-done-actions"><div class="ts-actions">${primary}</div><button type="button" class="text-button ts-done-contents" data-action="torisetsu-contents">${esc(COPY.toContents)}</button></div>
       <section class="ts-done-save" aria-label="保存設定">${saveCardMarkup(ts, esc)}</section>
@@ -1554,7 +1571,7 @@ function startView(ts, h) {
   return `<div class="ts-start" data-ts-key="start">
     ${notice}
     <div class="ts-hero"><img class="ts-scene-art ts-scene-art-arrival" src="./assets/torisetsu-gallery/arrival-gallery.png" alt="" aria-hidden="true" width="360" height="220" loading="lazy" /></div>
-    <h1 class="ts-title" tabindex="-1" data-focus>${esc(COPY.startTitle)}</h1>
+    <h1 class="ts-title" tabindex="-1" data-focus>${esc(nicknameOf(h) ? `${nicknameOf(h)}のトリセツを作ろう` : COPY.startTitle)}</h1>
     <p class="ts-lead">${esc(COPY.startLead)}</p>
     <div class="ts-privacy" role="note">${iconSvg('lock', 20)}<div><strong>${esc(COPY.privacyTitle)}</strong><p>${esc(COPY.privacyBody)}</p></div></div>
     <p class="ts-note">${esc(COPY.startGuide)}<br>${esc(COPY.startGuide2)}</p>
@@ -1579,7 +1596,7 @@ function contentsView(ts, h) {
   const label = done >= CHAPTERS.length ? COPY.allDone : COPY.progressLabel(done);
   const view = done > 0 || CHAPTER_IDS.some((id) => chapterReady(id, ts.data)) ? `<button type="button" class="secondary-button ts-view" data-action="torisetsu-manual">${esc(COPY.viewManual)}</button>` : '';
   return `<div class="ts-contents ts-contents-editorial" data-ts-key="contents">
-    <header class="ts-contents-header"><h1 class="ts-title" tabindex="-1" data-focus>${esc(COPY.contentsTitle)}</h1><div class="ts-contents-progress"><p class="ts-progress-label">${esc(label)}</p><div class="ts-progress"><div class="ts-cells" role="img" aria-label="${esc(label)}">${dots}</div><span>${done} / ${CHAPTERS.length}</span></div></div></header>
+    <header class="ts-contents-header"><h1 class="ts-title" tabindex="-1" data-focus>${esc(nicknameOf(h) ? `${nicknameOf(h)}のトリセツ` : COPY.contentsTitle)}</h1><div class="ts-contents-progress"><p class="ts-progress-label">${esc(label)}</p><div class="ts-progress"><div class="ts-cells" role="img" aria-label="${esc(label)}">${dots}</div><span>${done} / ${CHAPTERS.length}</span></div></div></header>
     <ul class="ts-chapters">${rows}</ul>
     ${view ? `<div class="ts-contents-manual">${view}</div>` : ''}
   </div>`;

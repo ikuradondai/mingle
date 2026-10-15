@@ -10,6 +10,7 @@ import * as D from './fixtures/torisetsu/v3-d-nopattern.mjs';
 
 const esc = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const html = (ts) => torisetsuView(ts, { esc, today: '2026-10-13', support: () => '<aside data-support></aside>', imageEnabled: true, canSend: false });
+const htmlWithNickname = (ts, nickname) => torisetsuView(ts, { esc, nickname, today: '2026-10-13', support: () => '<aside data-support></aside>', imageEnabled: true, canSend: false });
 const act = (ts, ctx, action, data = {}) => applyAction(ts, action, data, ctx);
 const setup = () => { const ctx = makeCtx(); const ts = createTorisetsuState(); return { ctx, ts }; };
 const openHard = (ts, ctx) => {
@@ -383,6 +384,36 @@ test('prediction is only in chapters 1 and 3; the voice chapter has no gap scree
 });
 
 // ---------- 全体 ----------
+test('nickname is display-only, appears in natural headings, and is escaped without changing stored product name', () => {
+  const { ts, ctx } = setup();
+  const evil = '<太郎&';
+  const start = htmlWithNickname(ts, evil);
+  assert.match(start, /&lt;太郎&amp;さんのトリセツを作ろう/);
+  assert.equal(ts.data.name, '');
+  act(ts, ctx, 'torisetsu-begin'); act(ts, ctx, 'torisetsu-chapter-start', { chapter: 'needs' });
+  const predict = htmlWithNickname(ts, evil);
+  assert.match(predict, /&lt;太郎&amp;さんにとって、いちばん大事なのはどれだと思う？/);
+  assert.equal((predict.match(/&lt;太郎&amp;/g) || []).length, 1);
+  assert.doesNotMatch(predict, /<太郎/);
+  act(ts, ctx, 'torisetsu-next');
+  assert.match(htmlWithNickname(ts, '太郎'), /太郎さん、うれしかった・ほっとした出来事/);
+  assert.match(html(ts), /うれしかった・ほっとした出来事/);
+  assert.doesNotMatch(html(ts), /太郎さん/);
+  assert.match(htmlWithNickname(ts, '太郎さん'), /太郎さん、うれしかった・ほっとした出来事/);
+  assert.doesNotMatch(htmlWithNickname(ts, '太郎さん'), /太郎さんさん/);
+  const longName = `😀${'あ'.repeat(39)}`;
+  assert.equal(Array.from(longName).length, 40);
+  const longMarkup = htmlWithNickname(ts, longName);
+  assert.ok(longMarkup.includes(`😀${'あ'.repeat(39)}さん`));
+  assert.ok(!longMarkup.includes('undefined'));
+  const manualBefore = JSON.stringify(composeManual(ts.data, { today: '2026-10-13' }));
+  htmlWithNickname(ts, '表示名');
+  assert.equal(JSON.stringify(composeManual(ts.data, { today: '2026-10-13' })), manualBefore);
+  assert.equal(htmlWithNickname(ts, ''), html(ts));
+  assert.equal(htmlWithNickname(ts, '自分'), html(ts));
+  assert.equal(htmlWithNickname(ts, 'あなた'), html(ts));
+});
+
 test('all texts are escaped, in text and in attributes', () => {
   const { ts, ctx } = setup();
   const evil = '<img src=x onerror=alert(1)>"\'&';
