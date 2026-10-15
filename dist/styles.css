@@ -1009,13 +1009,13 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
   .round-break:has(.round-completion) .round-favorites-compact,
   .round-break:has(.round-completion) .theme-likes { display:inline-block; width:calc(50% - 10px); box-sizing:border-box; vertical-align:top; margin-top:8px; }
   .round-break:has(.round-completion) .theme-likes { margin-left:16px; }
-  .round-break:has(.round-completion.is-group) .round-favorites-compact { display:block; width:100%; margin-left:0; }
-  .round-break:has(.round-completion.is-group) .theme-likes { display:block; width:100%; margin-left:0; }
+  .round-break:has(.round-completion) .round-favorites-compact { display:block; width:100%; margin-left:0; }
+  .round-break:has(.round-completion) .theme-likes { display:block; width:100%; margin-left:0; }
 }
-.round-break:has(.round-completion.is-group) .round-favorites-compact .round-favorite-row { display:grid; grid-template-columns:28px minmax(0,1fr) 44px; align-items:center; gap:7px; min-height:48px; padding:7px 0; text-align:left; }
-.round-break:has(.round-completion.is-group) .round-favorites-compact .round-favorite-index { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; text-align:center; }
-.round-break:has(.round-completion.is-group) .round-favorites-compact .round-favorite-text { min-width:0; color:var(--ink); font-size:14px; line-height:1.45; }
-.round-break:has(.round-completion.is-group) .round-favorites-compact .round-favorite-mark { color:var(--blue); font-size:24px; line-height:1; text-align:center; }
+.round-break:has(.round-completion) .round-favorites-compact .round-favorite-row { display:grid; grid-template-columns:28px minmax(0,1fr) 44px; align-items:center; gap:7px; min-height:48px; padding:7px 0; text-align:left; }
+.round-break:has(.round-completion) .round-favorites-compact .round-favorite-index { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; text-align:center; }
+.round-break:has(.round-completion) .round-favorites-compact .round-favorite-text { min-width:0; color:var(--ink); font-size:14px; line-height:1.45; }
+.round-break:has(.round-completion) .round-favorites-compact .round-favorite-mark { color:var(--blue); font-size:24px; line-height:1; text-align:center; }
 
 .completion-celebration { position:fixed; inset:0; z-index:10000; display:grid; place-items:center; overflow:hidden; background:#fffaf3; color:var(--ink); animation:completion-celebration-in .24s ease-out both; }
 .completion-celebration[data-dark="true"] { background:#14213d; color:#fffaf3; }

@@ -1586,7 +1586,7 @@ const completionReplyStates = new Map();
 const completionRecallMemory = new Map();
 function completionRecallKey(session) { return recallMemoryKey(session); }
 function rememberCompletedAnswer(session) {
-  if (!session || session.mode === "solo" || !session.revealed || isTogetherCard(currentCard(session))) return;
+  if (!session || !session.revealed || isTogetherCard(currentCard(session))) return;
   const card = currentCard(session); const participantIndex = currentParticipantIndex(session);
   if (!card || card.kind === "challenge" || !card.id || !session.participants?.[participantIndex]) return;
   const key = completionRecallKey(session); const entries = completionRecallMemory.get(key) || [];
@@ -1635,14 +1635,20 @@ function completionActionIcon(name) {
   const files = { common: "completion-common-pair.png", heart: "completion-nice-heart.png", thanks: "completion-thanks-applause.png", bookmark: "completion-memory-bookmark.png" };
   return `<img class="completion-choice-image" src="/assets/completion/${files[name] || files.bookmark}" alt="" aria-hidden="true" width="80" height="80" loading="lazy" />`;
 }
-function completionRecallPrompt(session, reply) {
+function completionRecallPrompt(session, reply, solo = false) {
   const entries = completionRecallEntries(session); if (!entries.length) return "今回は振り返る回答がありません。";
   const picked = entries.find((entry) => entry.cardId === reply.recallCardId && entry.participantIndex === reply.recallParticipantIndex) || entries[0];
-  return `${esc(picked.name)}の答え、覚えてる？<br><small>${esc(picked.text)}</small>`;
+  return solo ? `この問い、なんて答えた？<br><small>${esc(picked.text)}</small>` : `${esc(picked.name)}の答え、覚えてる？<br><small>${esc(picked.text)}</small>`;
 }
-function completionChoiceView(session, favoriteBusy = false) {
+function completionChoiceView(session, favoriteBusy = false, solo = false) {
   const key = completionReplyKey(session); const info = roundCompletionInfo(session); const reply = completionReplyState(key); const selected = reply.choice || "";
   const recallAvailable = completionRecallEntries(session).length >= 1;
+  const actionsConfig = solo ? {
+    common: { label: "気づき", icon: "common", prompt: "今日、自分について気づいたことをひとつ思い返してみよう。" },
+    like: { label: "いいね！", icon: "heart", prompt: "自分の「いいな！」と思ったところを思い返してみよう。" },
+    thanks: { label: "ありがとう", icon: "thanks", prompt: "今日の自分に、ありがとうと思ったことを思い返してみよう。" },
+    recall: { label: "覚えてる？", icon: "bookmark", prompt: "この問い、なんて答えた？" },
+  } : completionActions;
   const reviewContext = roundFavoriteContext(session);
   const busy = state.busy || favoriteBusy;
   const next = info.final
@@ -1654,11 +1660,11 @@ function completionChoiceView(session, favoriteBusy = false) {
   const reviewPanel = reviewContext?.expanded ? roundFavoriteView(session, { compact: true, omitToggle: true, id: reviewPanelId }) : "";
   if (selected) {
     const entries = completionRecallEntries(session); const alternatives = entries.filter((entry) => !(entry.cardId === reply.recallCardId && entry.participantIndex === reply.recallParticipantIndex));
-    const prompt = selected === "recall" ? completionRecallPrompt(session, reply) : completionActions[selected].prompt;
+    const prompt = selected === "recall" ? completionRecallPrompt(session, reply, solo) : actionsConfig[selected].prompt;
     const nextRecall = selected === "recall" && alternatives.length ? `<button type="button" class="completion-recall-next-button" data-action="completion-recall-next">別の1問</button>` : "";
-    return `<div class="completion-choice-stage is-selected" data-completion-choice-stage><div class="completion-choice-instruction"><button type="button" class="completion-choice-back" data-action="completion-choice-back">他のふりかえりを選ぶ</button>${completionActionIcon(completionActions[selected].icon)}<p class="completion-choice-prompt">${prompt}</p>${nextRecall}</div>${actions}${reviewPanel}</div>`;
+    return `<div class="completion-choice-stage is-selected" data-completion-choice-stage><div class="completion-choice-instruction"><button type="button" class="completion-choice-back" data-action="completion-choice-back">他のふりかえりを選ぶ</button>${completionActionIcon(actionsConfig[selected].icon)}<p class="completion-choice-prompt">${prompt}</p>${nextRecall}</div>${actions}${reviewPanel}</div>`;
   }
-  const cards = Object.entries(completionActions).map(([id, item]) => `<button type="button" class="completion-choice-card${id === "recall" && !recallAvailable ? " is-disabled" : ""}" data-action="completion-choice" data-choice="${id}" ${id === "recall" && !recallAvailable ? "disabled" : ""}>${completionActionIcon(item.icon)}<span>${esc(item.label)}</span>${id === "recall" && !recallAvailable ? `<small>今回は振り返る回答がありません</small>` : ""}</button>`).join("");
+  const cards = Object.entries(actionsConfig).map(([id, item]) => `<button type="button" class="completion-choice-card${id === "recall" && !recallAvailable ? " is-disabled" : ""}" data-action="completion-choice" data-choice="${id}" ${id === "recall" && !recallAvailable ? "disabled" : ""}>${completionActionIcon(item.icon)}<span>${esc(item.label)}</span>${id === "recall" && !recallAvailable ? `<small>今回は振り返る回答がありません</small>` : ""}</button>`).join("");
   return `<div class="completion-choice-stage" data-completion-choice-stage><div class="completion-choice-grid" role="group" aria-label="締めくくりを選ぶ">${cards}</div>${actions}${reviewPanel}</div>`;
 }
 function roundCompletionView(session, { solo = false, favoriteBusy = false } = {}) {
@@ -1668,14 +1674,13 @@ function roundCompletionView(session, { solo = false, favoriteBusy = false } = {
     const count = solo ? `今回${info.completed}枚・ここまで${info.cursor}枚` : `${session.participants.length}人でめぐった、今回${info.completed}枚${info.final ? `・ここまで${info.cursor}枚` : ''}`;
   const cardCount = `${info.completed}枚`;
   const motionClass = info.final ? 'is-final' : '';
-  const body = solo ? completionReplyView(session, true, favoriteBusy) : completionChoiceView(session, favoriteBusy);
+  const body = completionChoiceView(session, favoriteBusy, solo);
   const soloName = solo ? soloDisplayName(session) : "";
   return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><div class="round-completion-layout"><div class="round-completion-main"><div class="round-completion-copy"><p class="round-completion-kicker">${esc(completionThemeLabel(session))}</p><h1 class="round-completion-title" tabindex="-1" data-focus>${solo ? `${soloName ? `${esc(soloName)}、` : `${cardCount}、`}おつかれさま。` : `${cardCount}、おつかれさまでした`}</h1><p class="round-completion-lead">${solo ? count : ""}${info.final ? ` · 全${info.total}枚完了` : ""}</p></div>${body}</div></div></section>`;
 }
 function completionSponsorView(session) {
   if (!session?.sponsorSet || (!session.sponsor?.endMessage && !session.sponsor?.siteUrl)) return "";
-  const reply = completionReplyState(completionReplyKey(session));
-  const visible = session.mode === "solo" ? (reply.completed || reply.skipped) : true;
+  const visible = true;
   return `<aside class="sponsor-completion-note" data-completion-sponsor aria-hidden="${visible ? "false" : "true"}" aria-label="スポンサー情報"><small>スポンサー提供：${esc(session.sponsor.providerName || "公式提供")}</small>${session.sponsor.endMessage ? `<p>${esc(session.sponsor.endMessage)}</p>` : ""}${session.sponsor.siteUrl ? `<a class="completion-link" href="${esc(session.sponsor.siteUrl)}" target="_blank" rel="noopener noreferrer">${esc(session.sponsor.ctaLabel || "詳しく見る")}</a>` : ""}</aside>`;
 }
 
@@ -2159,7 +2164,7 @@ function soloRoundView(session) {
   const completion = roundCompletionView(session, { solo: true, favoriteBusy });
   const legacyActions = `<div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : `${actionIcon("right")}つづける`}</button>` : ""}<button class="secondary-button" data-action="finish" aria-label="プレイを終わる" title="終わる" ${state.busy || favoriteBusy ? "disabled" : ""}>${actionIcon("stop")}終わる</button></div>`;
   const legacyIntro = completion ? '' : `<span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>${isFinal ? "振り返りを終えました" : "ここまでの振り返り"}</h1>`;
-  const soloExtras = completion ? `${roundFavoriteView(session, { compact: true })}${completionSponsorView(session)}${roundThemeLikeView(session)}<p class="form-error" role="alert">${esc(state.error)}</p>` : `${legacyActions}${seenMarkup}${isFinal ? soloSupportView({ general: true, youth: true }) : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更">▦ テーマ</button>`;
+  const soloExtras = completion ? `${completionSponsorView(session)}${roundThemeLikeView(session)}<p class="form-error" role="alert">${esc(state.error)}</p>` : `${legacyActions}${seenMarkup}${isFinal ? soloSupportView({ general: true, youth: true }) : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更">▦ テーマ</button>`;
   return frame(`<div class="round-break solo-round-break">${legacyIntro}${completion || roundThemeLikeView(session)}${soloExtras}</div>${accountOverlay}`);
 }
 function updateAdultButton() { updateGroupLink(); if (state.themeMode === "mixed") return;
