@@ -1000,7 +1000,13 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
   .round-break:has(.round-completion) .round-favorites-compact,
   .round-break:has(.round-completion) .theme-likes { display:inline-block; width:calc(50% - 10px); box-sizing:border-box; vertical-align:top; margin-top:8px; }
   .round-break:has(.round-completion) .theme-likes { margin-left:16px; }
+  .round-break:has(.round-completion.is-group) .round-favorites-compact { display:block; width:100%; margin-left:0; }
+  .round-break:has(.round-completion.is-group) .theme-likes { display:block; width:100%; margin-left:0; }
 }
+.round-break:has(.round-completion.is-group) .round-favorites-compact .round-favorite-row { display:grid; grid-template-columns:28px minmax(0,1fr) 44px; align-items:center; gap:7px; min-height:48px; padding:7px 0; text-align:left; }
+.round-break:has(.round-completion.is-group) .round-favorites-compact .round-favorite-index { color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; text-align:center; }
+.round-break:has(.round-completion.is-group) .round-favorites-compact .round-favorite-text { min-width:0; color:var(--ink); font-size:14px; line-height:1.45; }
+.round-break:has(.round-completion.is-group) .round-favorites-compact .round-favorite-mark { color:var(--blue); font-size:24px; line-height:1; text-align:center; }
 @media (max-width:759px) {
   .round-break:has(.round-completion) { padding:16px 16px 0; }
   .round-break:has(.round-completion) .round-completion { padding-bottom:0; }
@@ -1042,11 +1048,13 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .completion-choice-card.is-disabled { color:var(--muted); cursor:default; opacity:.72; }
 .completion-choice-card small { max-width:14ch; font-size:11px; line-height:1.4; font-weight:600; }
 .completion-choice-image { display:block; width:80px; height:80px; object-fit:contain; }
-.completion-choice-actions { display:flex; justify-content:center; align-items:center; gap:18px; flex-wrap:wrap; }
-.completion-choice-actions .primary-button { width:auto; min-width:210px; }
+.completion-choice-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.completion-choice-actions > button { width:100%; min-width:0; min-height:52px; border-radius:14px; padding:0 14px; font-weight:900; }
+.completion-choice-actions .primary-button { width:100%; }
+.completion-choice-actions .completion-review-button,.completion-choice-actions .completion-finish { border:1.5px solid var(--ink); background:transparent; color:var(--ink); box-shadow:none; }
 .completion-choice-instruction { min-height:170px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:24px; border:1px solid color-mix(in srgb,var(--ink) 14%,transparent); border-radius:14px; background:#fffdf8; }
 .completion-choice-back { align-self:flex-start; border:0; padding:4px 0; background:transparent; color:var(--blue); font:inherit; font-size:13px; text-decoration:underline; cursor:pointer; }
-.completion-choice-eyebrow { margin:0; color:var(--muted); font-size:12px; font-weight:800; letter-spacing:.12em; }
+.completion-choice-instruction .completion-choice-image { width:52px; height:52px; }
 .completion-choice-prompt { margin:0; color:var(--ink); font-size:clamp(18px,2.4vw,24px); font-weight:800; line-height:1.55; text-align:center; }
 .completion-choice-prompt small { display:block; margin-top:10px; font-size:15px; font-weight:600; line-height:1.6; }
 .completion-recall-next-button { border:0; border-bottom:1px solid currentColor; padding:4px 0; background:transparent; color:var(--blue); font:inherit; font-size:13px; cursor:pointer; }
@@ -1054,7 +1062,8 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
   .completion-choice-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
   .completion-choice-card { min-height:138px; padding:14px 8px; font-size:17px; }
   .completion-choice-image { width:72px; height:72px; }
-  .completion-choice-actions { gap:10px; }
+  .completion-choice-instruction .completion-choice-image { width:48px; height:48px; }
+  .completion-choice-actions { grid-template-columns:1fr; gap:10px; }
   .completion-choice-actions .primary-button { width:100%; }
 }
 .sponsor-completion-note { margin:12px auto 16px; max-width:36rem; text-align:center; color:#33445f; }

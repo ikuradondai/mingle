@@ -1503,7 +1503,7 @@ function roundFavoriteContext(session) {
   else state.roundFavorite.cards = cards;
   return state.roundFavorite;
 }
-function roundFavoriteView(session, { inline = false, compact = false } = {}) {
+function roundFavoriteView(session, { inline = false, compact = false, omitToggle = false, id = "" } = {}) {
   const context = roundFavoriteContext(session); if (!context) return "";
   const canSaveCard = (card) => !session.sponsorSet && card.kind !== "challenge" && card.sourceDeckId !== "custom" && card.custom !== true && !(card.r18 === true && !session.adultConfirmed);
   const selectable = context.cards.filter((card) => canSaveCard(card) && !state.account.favorites.has(card.id));
@@ -1520,7 +1520,7 @@ function roundFavoriteView(session, { inline = false, compact = false } = {}) {
   if (inline) return `<section class="round-favorites round-favorites-inline" aria-labelledby="round-favorites-title"><h2 id="round-favorites-title">このラウンドで見た質問</h2><div class="round-favorite-list">${rows}</div>${action}<p class="form-error" role="alert">${esc(context.error || "")}</p></section>`;
   const savedCount = context.cards.filter((card) => canSaveCard(card) && state.account.favorites.has(card.id)).length;
   const list = context.expanded ? `<div class="round-favorite-list">${rows}</div>${action}` : `<p class="round-collapsed-copy">${savedCount}件保存済み</p>`;
-  if (compact) { const compactList = context.expanded ? `<div class="round-favorite-list">${rows}</div>${action}` : ""; return `<section class="round-favorites round-favorites-compact" aria-label="今回の質問"><button type="button" class="round-section-toggle" data-action="round-favorite-toggle" aria-expanded="${context.expanded}">${context.expanded ? "閉じる" : `今回の${context.cards.length}枚を見返す`}</button>${compactList}<p class="form-error" role="alert">${esc(context.error || "")}</p></section>`; }
+  if (compact) { const compactList = context.expanded ? `<div class="round-favorite-list">${rows}</div>${action}` : ""; const toggle = omitToggle ? "" : `<button type="button" class="round-section-toggle" data-action="round-favorite-toggle" aria-expanded="${context.expanded}">${context.expanded ? "閉じる" : `今回の${context.cards.length}枚を見返す`}</button>`; return `<section${id ? ` id="${esc(id)}"` : ""} class="round-favorites round-favorites-compact" aria-label="今回の質問">${toggle}${compactList}<p class="form-error" role="alert">${esc(context.error || "")}</p></section>`; }
   return `<section class="round-favorites" aria-labelledby="round-favorites-title"><div class="round-section-head"><h2 id="round-favorites-title">気に入った質問を保存</h2><span class="round-section-count">${context.cards.length}件</span></div><button type="button" class="round-section-toggle" data-action="round-favorite-toggle" aria-expanded="${context.expanded}">${context.expanded ? "閉じる" : "質問を選ぶ"}</button>${list}<p class="form-error" role="alert">${esc(context.error || "")}</p></section>`;
 }
 
@@ -1624,19 +1624,23 @@ function completionRecallPrompt(session, reply) {
 function completionChoiceView(session, favoriteBusy = false) {
   const key = completionReplyKey(session); const info = roundCompletionInfo(session); const reply = completionReplyState(key); const selected = reply.choice || "";
   const recallAvailable = completionRecallEntries(session).length >= 1;
+  const reviewContext = roundFavoriteContext(session);
   const busy = state.busy || favoriteBusy;
   const next = info.final
     ? `<button type="button" class="primary-button" data-action="decks"${busy ? " disabled" : ""}>次のテーマを選ぶ</button>`
     : `<button type="button" class="primary-button" data-action="continue"${busy ? " disabled" : ""}>もう${info.nextCount}枚、話そう</button>`;
-  const actions = `<div class="completion-choice-actions">${next}<button type="button" class="completion-link completion-finish" data-action="finish"${busy ? " disabled" : ""}>今日はここまで</button></div>`;
+  const reviewPanelId = reviewContext ? `completion-review-${reviewContext.sessionId}-${reviewContext.roundStart}` : "";
+  const reviewAction = reviewContext ? `<button type="button" class="secondary-button completion-review-button" data-action="round-favorite-toggle" aria-expanded="${reviewContext.expanded}" aria-controls="${esc(reviewPanelId)}"${busy ? " disabled" : ""}>今回の${reviewContext.cards.length}枚</button>` : "";
+  const actions = `<div class="completion-choice-actions">${next}<button type="button" class="secondary-button completion-finish" data-action="finish"${busy ? " disabled" : ""}>今日はここまで</button>${reviewAction}</div>`;
+  const reviewPanel = reviewContext?.expanded ? roundFavoriteView(session, { compact: true, omitToggle: true, id: reviewPanelId }) : "";
   if (selected) {
     const entries = completionRecallEntries(session); const alternatives = entries.filter((entry) => !(entry.cardId === reply.recallCardId && entry.participantIndex === reply.recallParticipantIndex));
     const prompt = selected === "recall" ? completionRecallPrompt(session, reply) : completionActions[selected].prompt;
     const nextRecall = selected === "recall" && alternatives.length ? `<button type="button" class="completion-recall-next-button" data-action="completion-recall-next">別の1問</button>` : "";
-    return `<div class="completion-choice-stage is-selected" data-completion-choice-stage><div class="completion-choice-instruction"><button type="button" class="completion-choice-back" data-action="completion-choice-back">4つから選ぶ</button>${selected === "recall" ? "" : `<p class="completion-choice-eyebrow">${esc(completionActions[selected].label)}</p>`}<p class="completion-choice-prompt">${prompt}</p>${nextRecall}</div>${actions}</div>`;
+    return `<div class="completion-choice-stage is-selected" data-completion-choice-stage><div class="completion-choice-instruction"><button type="button" class="completion-choice-back" data-action="completion-choice-back">他のふりかえりを選ぶ</button>${completionActionIcon(completionActions[selected].icon)}<p class="completion-choice-prompt">${prompt}</p>${nextRecall}</div>${actions}${reviewPanel}</div>`;
   }
   const cards = Object.entries(completionActions).map(([id, item]) => `<button type="button" class="completion-choice-card${id === "recall" && !recallAvailable ? " is-disabled" : ""}" data-action="completion-choice" data-choice="${id}" ${id === "recall" && !recallAvailable ? "disabled" : ""}>${completionActionIcon(item.icon)}<span>${esc(item.label)}</span>${id === "recall" && !recallAvailable ? `<small>今回は振り返る回答がありません</small>` : ""}</button>`).join("");
-  return `<div class="completion-choice-stage" data-completion-choice-stage><div class="completion-choice-grid" role="group" aria-label="締めくくりを選ぶ">${cards}</div>${actions}</div>`;
+  return `<div class="completion-choice-stage" data-completion-choice-stage><div class="completion-choice-grid" role="group" aria-label="締めくくりを選ぶ">${cards}</div>${actions}${reviewPanel}</div>`;
 }
 function roundCompletionView(session, { solo = false, favoriteBusy = false } = {}) {
   if (!session || session.sharedGuest || session.venueSession) return '';
@@ -1733,7 +1737,7 @@ function roundView() {
   const legacyIntro = completion ? '' : `${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1>`;
   const completionAd = completion ? renderAd("round") : "";
   const legacyActions = `<div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : `${actionIcon("right")}つづける`}</button>` : ""}<button class="secondary-button" data-action="finish" aria-label="プレイを終わる" title="終わる" ${favoriteBusy ? "disabled" : ""}>${actionIcon("stop")}終わる</button><button class="secondary-button social-share-button" data-action="social-share" aria-label="SNSでシェア" title="シェア" ${favoriteBusy ? "disabled" : ""}>${actionIcon("share")}シェア</button></div>`;
-  const completionExtras = completion ? `${roundFavoriteView(session, { compact: true })}${completionSponsorView(session)}${roundThemeLikeView(session)}${endingLink}<p class="form-error" role="alert">${esc(state.error)}</p>` : `${likeTotalsView(session)}${feedbackForm}${completionAd}${endingLink}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更" ${favoriteBusy ? "disabled" : ""}>${actionIcon("grid")}テーマ</button>`;
+  const completionExtras = completion ? `${session.mode === "solo" ? roundFavoriteView(session, { compact: true }) : ""}${completionSponsorView(session)}${roundThemeLikeView(session)}${endingLink}<p class="form-error" role="alert">${esc(state.error)}</p>` : `${likeTotalsView(session)}${feedbackForm}${completionAd}${endingLink}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更" ${favoriteBusy ? "disabled" : ""}>${actionIcon("grid")}テーマ</button>`;
   return frame(`<div class="round-break">${legacyIntro}${completion || roundThemeLikeView(session)}${completion ? completionExtras : `${legacyActions}${completionExtras}${roundFavoriteView(session)}`}</div>${completion ? "" : state.shareDialogOpen ? roundShareDialogView() : ""}${accountOverlay}`);
 }
 
@@ -2895,7 +2899,7 @@ async function handleAction(event) {
     }
     return;
   }
-  if (action === "round-favorite-toggle") { const context = state.roundFavorite; if (!context || context.saving) return; context.expanded = !context.expanded; render(); return; }
+  if (action === "round-favorite-toggle") { const context = state.roundFavorite; if (!context || context.saving) return; context.expanded = !context.expanded; state.focusSelector = '[data-action="round-favorite-toggle"]'; render(); return; }
   if (action === "round-favorite-login") {
     const context = state.roundFavorite;
     if (!context || context.saving || ![...context.selected].some((id) => !state.account.favorites.has(id)) || !state.account.enabled) return;
