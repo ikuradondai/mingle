@@ -1586,7 +1586,7 @@ const completionReplyStates = new Map();
 const completionRecallMemory = new Map();
 function completionRecallKey(session) { return recallMemoryKey(session); }
 function rememberCompletedAnswer(session) {
-  if (!session || !session.revealed || isTogetherCard(currentCard(session))) return;
+  if (!session || session.mode === "solo" || !session.revealed || isTogetherCard(currentCard(session))) return;
   const card = currentCard(session); const participantIndex = currentParticipantIndex(session);
   if (!card || card.kind === "challenge" || !card.id || !session.participants?.[participantIndex]) return;
   const key = completionRecallKey(session); const entries = completionRecallMemory.get(key) || [];
@@ -1594,8 +1594,8 @@ function rememberCompletedAnswer(session) {
   completionRecallMemory.set(key, entries);
 }
 function completionRecallEntries(session) { return completionRecallCandidates(completionRecallMemory.get(completionRecallKey(session)) || []); }
-function clearCompletionRecall(session) { if (session) completionRecallMemory.delete(completionRecallKey(session)); }
-function clearCompletionRecallSession(session) { if (!session) return; const prefix = `${session.sessionId || "session"}:`; for (const key of completionRecallMemory.keys()) if (key.startsWith(prefix)) completionRecallMemory.delete(key); }
+function clearCompletionRecall(session) { if (session) { completionRecallMemory.delete(completionRecallKey(session)); completionReplyStates.delete(completionReplyKey(session)); } }
+function clearCompletionRecallSession(session) { if (!session) return; const id = session.sessionId || session.session_id || session.id || session.deckId || "session"; const recallPrefix = `${id}:`; const org = session.organizationId || session.orgId || ""; const replyPrefix = org ? `${org}:${id}:` : `${id}:`; for (const key of completionRecallMemory.keys()) if (key.startsWith(recallPrefix)) completionRecallMemory.delete(key); for (const key of completionReplyStates.keys()) if (key.startsWith(replyPrefix)) completionReplyStates.delete(key); }
 function completionReplyState(key) { return completionReplyStates.get(key) || { completed: false }; }
 const completionFeelingMemory = new Map();
 const completionFeelingAnimated = new Set();
@@ -1632,7 +1632,7 @@ const completionActions = Object.freeze({
   recall: { label: "覚えてる？", icon: "bookmark", prompt: "誰の答えだったか、思い出してみよう。" },
 });
 function completionActionIcon(name) {
-  const files = { common: "completion-common-pair.png", heart: "completion-nice-heart.png", thanks: "completion-thanks-applause.png", bookmark: "completion-memory-bookmark.png" };
+  const files = { common: "completion-common-pair.png", heart: "completion-nice-heart.png", thanks: "completion-thanks-applause.png", bookmark: "completion-memory-bookmark.png", selfNote: "completion-self-note.png", smallStep: "completion-small-step.png" };
   return `<img class="completion-choice-image" src="/assets/completion/${files[name] || files.bookmark}" alt="" aria-hidden="true" width="80" height="80" loading="lazy" />`;
 }
 function completionRecallPrompt(session, reply, solo = false) {
@@ -1640,17 +1640,38 @@ function completionRecallPrompt(session, reply, solo = false) {
   const picked = entries.find((entry) => entry.cardId === reply.recallCardId && entry.participantIndex === reply.recallParticipantIndex) || entries[0];
   return solo ? `この問い、なんて答えた？<br><small>${esc(picked.text)}</small>` : `${esc(picked.name)}の答え、覚えてる？<br><small>${esc(picked.text)}</small>`;
 }
+function soloReflectionEntries(session) { return roundSeenQuestionCards(session).filter((card) => card?.id && card?.text).slice(0, 6).map((card) => ({ cardId: card.id, text: card.text })); }
+function soloReflectionCard(session, reply) { return soloReflectionEntries(session).find((entry) => entry.cardId === reply.soloCardId) || null; }
+function soloReflectionPicker(session, reply, action) {
+  const entries = soloReflectionEntries(session); if (!entries.length) return '<p class="completion-choice-note">めくった問いがまだありません。</p>';
+  return `<div class="solo-reflection-picker" role="group" aria-label="問いを選ぶ">${entries.map((entry, index) => `<button type="button" class="solo-reflection-option" data-action="solo-card-select" data-solo-card-id="${esc(entry.cardId)}" aria-pressed="${reply.soloCardId === entry.cardId}"><span>${index + 1}</span><strong>${esc(entry.text)}</strong></button>`).join("")}</div>`;
+}
+function soloReflectionCardView(entry, eyebrow = "心に残った問い") { return entry ? `<article class="solo-reflection-card" data-solo-reflection-card tabindex="-1"><span class="eyebrow">${esc(eyebrow)}</span><p>${esc(entry.text)}</p></article>` : ""; }
+async function shareSoloQuestion(session) {
+  const key = session && completionReplyKey(session); const reply = completionReplyState(key); const entry = soloReflectionCard(session, reply); if (!entry || reply.soloShareBusy) return;
+  const text = `${entry.text}\nhttps://mingle.cards/`; reply.soloShareBusy = true; reply.soloShareStatus = ""; reply.soloShareFallback = ""; completionReplyStates.set(key, reply); render();
+  let copied = false;
+  const current = () => state.session && completionReplyKey(state.session) === key && completionReplyStates.get(key) === reply && reply.choice === "share" && reply.soloCardId === entry.cardId;
+  const setStatus = (message) => { if (current()) reply.soloShareStatus = message; };
+  try {
+    if (navigator.share) await navigator.share({ title: "Mingle.Cards", text });
+    else if (navigator.clipboard) { await navigator.clipboard.writeText(text); copied = true; }
+    else { const textarea = document.createElement("textarea"); textarea.value = text; textarea.setAttribute("readonly", ""); textarea.style.position = "fixed"; textarea.style.opacity = "0"; document.body.appendChild(textarea); textarea.select(); copied = Boolean(document.execCommand?.("copy")); textarea.remove(); if (!copied && current()) { reply.soloShareFallback = text; setStatus("共有機能を利用できません。下の本文をコピーしてください。"); } }
+    if (navigator.share || copied) setStatus(navigator.share ? "共有しました。" : "共有文をコピーしました。");
+  } catch (error) { if (error?.name !== "AbortError" && current()) { reply.soloShareFallback = text; setStatus("共有できませんでした。下の本文をコピーしてください。"); } }
+  if (current()) { reply.soloShareBusy = false; state.focusAction = "solo-share"; render(); }
+}
 function completionChoiceView(session, favoriteBusy = false, solo = false) {
   const key = completionReplyKey(session); const info = roundCompletionInfo(session); const reply = completionReplyState(key); const selected = reply.choice || "";
-  const recallAvailable = completionRecallEntries(session).length >= 1;
+  const recallAvailable = solo ? soloReflectionEntries(session).length >= 1 : completionRecallEntries(session).length >= 1;
   const actionsConfig = solo ? {
-    common: { label: "気づき", icon: "common", prompt: "今日、自分について気づいたことをひとつ思い返してみよう。" },
-    like: { label: "いいね！", icon: "heart", prompt: "自分の「いいな！」と思ったところを思い返してみよう。" },
-    thanks: { label: "ありがとう", icon: "thanks", prompt: "今日の自分に、ありがとうと思ったことを思い返してみよう。" },
-    recall: { label: "覚えてる？", icon: "bookmark", prompt: "この問い、なんて答えた？" },
+    self: { label: "自分にひとこと", icon: "selfNote", prompt: "いまの自分に、どんな言葉をかけたい？" },
+    favorite: { label: "心に残った1枚", icon: "bookmark", prompt: "心に残った1枚は？" },
+    share: { label: "伝えたい人", icon: "common", prompt: "話してみたい問いは？" },
+    step: { label: "小さな一歩", icon: "smallStep", prompt: "今日か明日、ひとつ試すなら？" },
   } : completionActions;
   const reviewContext = roundFavoriteContext(session);
-  const busy = state.busy || favoriteBusy;
+  const busy = state.busy || favoriteBusy || (solo && reply.soloShareBusy);
   const next = info.final
     ? `<button type="button" class="primary-button" data-action="decks"${busy ? " disabled" : ""}>次のテーマを選ぶ</button>`
     : `<button type="button" class="primary-button" data-action="continue"${busy ? " disabled" : ""}>もう${info.nextCount}枚、話そう</button>`;
@@ -1659,12 +1680,21 @@ function completionChoiceView(session, favoriteBusy = false, solo = false) {
   const actions = `<div class="completion-choice-actions">${next}<button type="button" class="secondary-button completion-finish" data-action="finish"${busy ? " disabled" : ""}>今日はここまで</button>${reviewAction}</div>`;
   const reviewPanel = reviewContext?.expanded ? roundFavoriteView(session, { compact: true, omitToggle: true, id: reviewPanelId }) : "";
   if (selected) {
-    const entries = completionRecallEntries(session); const alternatives = entries.filter((entry) => !(entry.cardId === reply.recallCardId && entry.participantIndex === reply.recallParticipantIndex));
-    const prompt = selected === "recall" ? completionRecallPrompt(session, reply, solo) : actionsConfig[selected].prompt;
-    const nextRecall = selected === "recall" && alternatives.length ? `<button type="button" class="completion-recall-next-button" data-action="completion-recall-next">別の1問</button>` : "";
-    return `<div class="completion-choice-stage is-selected" data-completion-choice-stage><div class="completion-choice-instruction"><button type="button" class="completion-choice-back" data-action="completion-choice-back">他のふりかえりを選ぶ</button>${completionActionIcon(actionsConfig[selected].icon)}<p class="completion-choice-prompt">${prompt}</p>${nextRecall}</div>${actions}${reviewPanel}</div>`;
+    if (!solo) {
+      const entries = completionRecallEntries(session); const alternatives = entries.filter((entry) => !(entry.cardId === reply.recallCardId && entry.participantIndex === reply.recallParticipantIndex));
+      const prompt = selected === "recall" ? completionRecallPrompt(session, reply, false) : completionActions[selected].prompt;
+      const nextRecall = selected === "recall" && alternatives.length ? `<button type="button" class="completion-recall-next-button" data-action="completion-recall-next">別の1問</button>` : "";
+      return `<div class="completion-choice-stage is-selected" data-completion-choice-stage><div class="completion-choice-instruction"><button type="button" class="completion-choice-back" data-action="completion-choice-back"${busy ? " disabled" : ""}>他のふりかえりを選ぶ</button>${completionActionIcon(completionActions[selected].icon)}<p class="completion-choice-prompt">${prompt}</p>${nextRecall}</div>${actions}${reviewPanel}</div>`;
+    }
+    if (solo && (selected === "favorite" || selected === "share")) {
+      const picked = soloReflectionCard(session, reply);
+      const body = picked ? `${soloReflectionCardView(picked, selected === "share" ? "話してみたい問い" : "心に残った問い")}${selected === "share" ? `<p class="completion-choice-prompt">この話、誰としたい？</p><button type="button" class="primary-button solo-share-button" data-action="solo-share"${busy ? " disabled" : ""}>${actionIcon("share")}${navigator.share ? "共有する" : "コピーする"}</button><button type="button" class="completion-link" data-action="solo-card-clear"${busy ? " disabled" : ""}>別の1枚を選ぶ</button>${reply.soloShareFallback ? `<textarea class="share-dialog-text" readonly data-solo-share-fallback aria-label="共有する本文">${esc(reply.soloShareFallback)}</textarea>` : ""}` : `<button type="button" class="completion-link" data-action="solo-card-clear"${busy ? " disabled" : ""}>別の1枚を選ぶ</button>`}` : `${actionsConfig[selected].prompt}${soloReflectionPicker(session, reply, selected)}`;
+      return `<div class="completion-choice-stage is-selected" data-completion-choice-stage><div class="completion-choice-instruction"><button type="button" class="completion-choice-back" data-action="completion-choice-back"${busy ? " disabled" : ""}>他のふりかえりを選ぶ</button>${completionActionIcon(actionsConfig[selected].icon)}<div class="completion-choice-prompt">${body}</div>${reply.soloShareStatus ? `<p class="account-status" role="status">${esc(reply.soloShareStatus)}</p>` : ""}</div>${actions}${reviewPanel}</div>`;
+    }
+    const prompt = actionsConfig[selected].prompt;
+    return `<div class="completion-choice-stage is-selected" data-completion-choice-stage><div class="completion-choice-instruction"><button type="button" class="completion-choice-back" data-action="completion-choice-back">他のふりかえりを選ぶ</button>${completionActionIcon(actionsConfig[selected].icon)}<p class="completion-choice-prompt">${prompt}</p></div>${actions}${reviewPanel}</div>`;
   }
-  const cards = Object.entries(actionsConfig).map(([id, item]) => `<button type="button" class="completion-choice-card${id === "recall" && !recallAvailable ? " is-disabled" : ""}" data-action="completion-choice" data-choice="${id}" ${id === "recall" && !recallAvailable ? "disabled" : ""}>${completionActionIcon(item.icon)}<span>${esc(item.label)}</span>${id === "recall" && !recallAvailable ? `<small>今回は振り返る回答がありません</small>` : ""}</button>`).join("");
+  const cards = Object.entries(actionsConfig).map(([id, item]) => { const unavailable = solo ? (["favorite", "share"].includes(id) && !recallAvailable) : (id === "recall" && !recallAvailable); return `<button type="button" class="completion-choice-card${unavailable ? " is-disabled" : ""}" data-action="completion-choice" data-choice="${id}" ${unavailable ? "disabled" : ""}>${completionActionIcon(item.icon)}<span>${esc(item.label)}</span>${unavailable ? `<small>${solo ? "めくった問いがまだありません" : "今回は振り返る回答がありません"}</small>` : ""}</button>`; }).join("");
   return `<div class="completion-choice-stage" data-completion-choice-stage><div class="completion-choice-grid" role="group" aria-label="締めくくりを選ぶ">${cards}</div>${actions}${reviewPanel}</div>`;
 }
 function roundCompletionView(session, { solo = false, favoriteBusy = false } = {}) {
@@ -1676,7 +1706,8 @@ function roundCompletionView(session, { solo = false, favoriteBusy = false } = {
   const motionClass = info.final ? 'is-final' : '';
   const body = completionChoiceView(session, favoriteBusy, solo);
   const soloName = solo ? soloDisplayName(session) : "";
-  return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><div class="round-completion-layout"><div class="round-completion-main"><div class="round-completion-copy"><p class="round-completion-kicker">${esc(completionThemeLabel(session))}</p><h1 class="round-completion-title" tabindex="-1" data-focus>${solo ? `${soloName ? `${esc(soloName)}、` : `${cardCount}、`}おつかれさま。` : `${cardCount}、おつかれさまでした`}</h1><p class="round-completion-lead">${solo ? count : ""}${info.final ? ` · 全${info.total}枚完了` : ""}</p></div>${body}</div></div></section>`;
+  const soloTitle = solo ? (soloName ? `<span class="solo-completion-name">${esc(soloName)}、</span><span class="solo-completion-greeting">おつかれさま。</span>` : `${cardCount}、おつかれさま。`) : `${cardCount}、おつかれさまでした`;
+  return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><div class="round-completion-layout"><div class="round-completion-main"><div class="round-completion-copy"><p class="round-completion-kicker">${esc(completionThemeLabel(session))}</p><h1 class="round-completion-title" tabindex="-1" data-focus>${soloTitle}</h1><p class="round-completion-lead">${solo ? count : ""}${info.final ? ` · 全${info.total}枚完了` : ""}</p></div>${body}</div></div></section>`;
 }
 function completionSponsorView(session) {
   if (!session?.sponsorSet || (!session.sponsor?.endMessage && !session.sponsor?.siteUrl)) return "";
@@ -2475,15 +2506,22 @@ async function handleAction(event) {
   }
   if (action === "completion-choice") {
     const section = event.currentTarget.closest("[data-completion-reply], [data-round-completion]"); const key = section?.dataset.roundKey || (state.session && completionReplyKey(state.session)); const choice = event.currentTarget.dataset.choice;
-    if (!key || !completionActions[choice] || (choice === "recall" && completionRecallEntries(state.session).length < 1)) return;
-    const next = { ...(completionReplyStates.get(key) || {}), choice };
+    const soloChoice = state.session?.mode === "solo" && ["self", "favorite", "share", "step"].includes(choice);
+    if (!key || (!completionActions[choice] && !soloChoice) || ((choice === "recall" && completionRecallEntries(state.session).length < 1) || ((choice === "favorite" || choice === "share") && soloReflectionEntries(state.session).length < 1))) return;
+    const next = { ...(completionReplyStates.get(key) || {}), choice }; delete next.soloCardId; delete next.soloShareStatus; delete next.soloShareFallback; delete next.soloShareBusy;
     if (choice === "recall") { const entry = chooseRecallEntry(completionRecallEntries(state.session)); next.recallCardId = entry?.cardId || ""; next.recallParticipantIndex = entry?.participantIndex ?? -1; }
     state.focusSelector = '[data-action="completion-choice-back"]';
     completionReplyStates.set(key, next); render(); return;
   }
+  if (action === "solo-card-select") {
+    const key = state.session && completionReplyKey(state.session); const entry = soloReflectionEntries(state.session).find((item) => item.cardId === event.currentTarget.dataset.soloCardId);
+    if (!key || !entry) return; const reply = completionReplyStates.get(key) || {}; reply.soloCardId = entry.cardId; delete reply.soloShareStatus; delete reply.soloShareFallback; completionReplyStates.set(key, reply); state.focusSelector = "[data-solo-reflection-card]"; render(); return;
+  }
+  if (action === "solo-card-clear") { const key = state.session && completionReplyKey(state.session); const reply = completionReplyStates.get(key) || {}; delete reply.soloCardId; delete reply.soloShareStatus; delete reply.soloShareFallback; completionReplyStates.set(key, reply); state.focusSelector = '[data-action="solo-card-select"]'; render(); return; }
+  if (action === "solo-share") { shareSoloQuestion(state.session); return; }
   if (action === "completion-choice-back") {
     const key = state.session && completionReplyKey(state.session); const reply = completionReplyStates.get(key) || {}; const previous = reply.choice;
-    delete reply.choice; delete reply.recallCardId; delete reply.recallParticipantIndex; state.focusSelector = previous ? `[data-action="completion-choice"][data-choice="${previous}"]` : '[data-action="completion-choice"]'; completionReplyStates.set(key, reply); render(); return;
+    delete reply.choice; delete reply.recallCardId; delete reply.recallParticipantIndex; delete reply.soloCardId; delete reply.soloShareStatus; delete reply.soloShareFallback; delete reply.soloShareBusy; state.shareStatus = ""; state.shareFallbackText = ""; state.focusSelector = previous ? `[data-action="completion-choice"][data-choice="${previous}"]` : '[data-action="completion-choice"]'; completionReplyStates.set(key, reply); render(); return;
   }
   if (action === "completion-recall-next") {
     const key = state.session && completionReplyKey(state.session); const reply = completionReplyStates.get(key) || {}; const entries = completionRecallEntries(state.session); const choices = entries.filter((entry) => !(entry.cardId === reply.recallCardId && entry.participantIndex === reply.recallParticipantIndex));
