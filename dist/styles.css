@@ -1087,7 +1087,7 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .completion-choice-actions > button { width:100%; min-width:0; min-height:52px; border-radius:14px; padding:0 14px; font-weight:900; }
 .completion-choice-actions .primary-button { width:100%; }
 .completion-choice-actions .completion-review-button,.completion-choice-actions .completion-finish { border:1.5px solid var(--ink); background:transparent; color:var(--ink); box-shadow:none; }
-.completion-choice-instruction { min-height:170px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:24px; border:1px solid color-mix(in srgb,var(--ink) 14%,transparent); border-radius:14px; background:#fffdf8; }
+.completion-choice-instruction { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
 .completion-choice-back { align-self:flex-start; border:0; padding:4px 0; background:transparent; color:var(--blue); font:inherit; font-size:13px; text-decoration:underline; cursor:pointer; }
 .completion-choice-instruction .completion-choice-image { width:52px; height:52px; }
 .completion-choice-prompt { margin:0; color:var(--ink); font-size:clamp(18px,2.4vw,24px); font-weight:800; line-height:1.55; text-align:center; }
