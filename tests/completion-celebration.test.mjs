@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { celebrationVariants, chooseCelebrationVariant } from "../dist/completion-celebration.js";
 import { startCompletionCelebration } from "../dist/completion-celebration.js";
 
-function fakeDom({ transformThrows = false } = {}) {
+function fakeDom({ transformThrows = false, contextThrows = false } = {}) {
   const listeners = new Map();
   const timers = new Set();
   const rafs = new Set();
@@ -14,7 +14,7 @@ function fakeDom({ transformThrows = false } = {}) {
     beginPath() {}, fill() {}, stroke() {}, arc() {}, moveTo() {}, lineTo() {},
     bezierCurveTo() {}, closePath() {}, roundRect() {}, quadraticCurveTo() {},
   };
-  const canvas = { style: {}, width: 0, height: 0, getContext: () => context };
+  const canvas = { style: {}, width: 0, height: 0, getContext: () => { if (contextThrows) throw new Error("context failed"); return context; } };
   const close = { focus() {}, addEventListener(type, fn) { this.listener = fn; } };
   const overlay = {
     dataset: {}, style: {}, inert: false, removed: false,
@@ -55,25 +55,42 @@ test("celebration selection avoids repeating the previous pattern", () => {
   assert.notEqual(second, first);
 });
 
-test("canvas setup failure cleans up without leaving inert UI or pending work", () => {
+test("canvas setup failure keeps the static return affordance and delay", () => {
   const fake = fakeDom({ transformThrows: true });
   let completed = 0;
-  startCompletionCelebration({ ...fake, onComplete: () => { completed += 1; } });
-  assert.equal(fake.overlay.removed, true);
-  assert.equal(fake.body.children.some((child) => child.inert), false);
-  assert.equal(fake.timers.size, 0);
+  const celebration = startCompletionCelebration({ ...fake, onComplete: () => { completed += 1; } });
+  assert.equal(fake.overlay.removed, false);
+  assert.equal(fake.body.children.some((child) => child.inert), true);
+  assert.equal(fake.timers.size, 2);
   assert.equal(fake.rafs.size, 0);
-  assert.equal(completed, 1);
+  celebration.stop();
+  assert.equal(completed, 0);
+  assert.equal(fake.timers.size, 0);
 });
 
 test("re-entry stops the previous instance before starting the next", () => {
   const fake = fakeDom();
-  const first = startCompletionCelebration({ ...fake, duration: 10000 });
+  let firstCompleted = 0;
+  const first = startCompletionCelebration({ ...fake, duration: 10000, onComplete: () => { firstCompleted += 1; } });
+  assert.equal(fake.timers.size, 3);
+  assert.equal(fake.rafs.size, 1);
   const second = startCompletionCelebration({ ...fake, duration: 10000 });
-  assert.equal(fake.timers.size, 1);
+  assert.equal(firstCompleted, 0);
+  assert.equal(fake.timers.size, 3);
   assert.equal(fake.rafs.size, 1);
   second.stop();
   assert.equal(fake.timers.size, 0);
   assert.equal(fake.rafs.size, 0);
   first.stop();
+});
+
+test("canvas context failure keeps the static return affordance and delay", () => {
+  const fake = fakeDom({ contextThrows: true });
+  let completed = 0;
+  const celebration = startCompletionCelebration({ ...fake, onComplete: () => { completed += 1; } });
+  assert.equal(fake.overlay.removed, false);
+  assert.equal(fake.timers.size, 3);
+  celebration.stop();
+  assert.equal(completed, 0);
+  assert.equal(fake.timers.size, 0);
 });

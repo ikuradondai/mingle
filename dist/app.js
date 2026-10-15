@@ -2469,6 +2469,16 @@ function quickQuizRoster() {
   if (state.participants.length < 2 || state.participants.length > MAX_PARTICIPANTS || !state.participants.every((name) => typeof name === 'string' && name.trim() && Array.from(name.trim()).length <= MAX_NAME_LENGTH && !/[\u0000-\u001f\u007f]/u.test(name))) return [];
   return state.participants.map((name) => name.trim());
 }
+function finishToHome() {
+  clearCompletionRecallSession(state.session); state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
+  state.resume = loadResumeForCurrentUser();
+  restoreGroupHomeState();
+  state.screen = "participants";
+  state.venue = null; state.shared = null; state.selectedVenueSetId = null;
+  if (location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
+  state.error = ""; state.includeChallenges = false; state.adultConfirmed = false; render();
+}
+
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
   if (typeof action === "string" && action.startsWith("torisetsu-")) { handleTorisetsuAction(event); return; }
@@ -3185,13 +3195,7 @@ async function handleAction(event) {
     await continueCurrentRound();
     return;
   }
-  if (action === "finish") { const celebrateCandidate = event.currentTarget.classList.contains("completion-finish"); if (celebrateCandidate && completionFinishInFlight) return; if (celebrateCandidate) completionFinishInFlight = true; const celebrate = celebrateCandidate; clearCompletionRecallSession(state.session); state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
-    state.resume = loadResumeForCurrentUser();
-    restoreGroupHomeState();
-    state.screen = "participants";
-    state.venue = null; state.shared = null; state.selectedVenueSetId = null;
-    if (location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
-    state.error = ""; state.includeChallenges = false; state.adultConfirmed = false; render(); if (celebrate) { try { startCompletionCelebration({ onComplete: () => { completionFinishInFlight = false; } }); } catch { completionFinishInFlight = false; } } }
+  if (action === "finish") { const celebrateCandidate = event.currentTarget.classList.contains("completion-finish"); if (celebrateCandidate && completionFinishInFlight) return; if (celebrateCandidate) { completionFinishInFlight = true; try { startCompletionCelebration({ onComplete: () => { completionFinishInFlight = false; finishToHome(); } }); } catch { completionFinishInFlight = false; finishToHome(); } } else finishToHome(); }
 }
 
 let webMcpRegistered = false;
