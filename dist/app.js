@@ -32,7 +32,7 @@ import { consumeQuestionWolfAuthIntent, saveQuestionWolfAuthIntent } from "./que
 import { consumeOchiAuthIntent, saveOchiAuthIntent } from "./ochi-auth-intent.js";
 import { consumeOneCutAuthIntent, saveOneCutAuthIntent } from "./one-cut-auth-intent.js";
 import { consumeMissionAuthIntent, saveMissionAuthIntent } from "./mission-mingle-auth-intent.js";
-import { consumeQuickQuizAuthIntent, saveQuickQuizAuthIntent } from "./quick-quiz-auth-intent.js";
+import { consumeQuickQuizAuthIntent, saveQuickQuizAuthIntent, saveQuickQuizSetupIntent } from "./quick-quiz-auth-intent.js";
 import { gameCardImage } from "./game-card-images.js";
 import { groupGames } from "./data/game-registry.js";
 import { gameParticipantGate } from "./game-participant-gate.js";
@@ -1796,7 +1796,7 @@ async function loadAccount() {
       const minorityIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeMinorityAuthIntent();
       if (minorityIntent) { state.account.open = false; location.replace(`/minority-room.html?create=1${minorityIntent.venueToken ? `&venue=${encodeURIComponent(minorityIntent.venueToken)}` : ''}`); return; }
       const quickQuizIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeQuickQuizAuthIntent();
-      if (quickQuizIntent) { if (!saveQuickQuizAuthIntent(quickQuizIntent)) { state.account.status = '早押しクイズの復帰情報を保存できませんでした。'; } else { state.account.open = false; location.replace(`/quick-quiz-room.html?create=1${quickQuizIntent.venueToken ? `&venue=${encodeURIComponent(quickQuizIntent.venueToken)}` : ''}`); return; } }
+      if (quickQuizIntent) { if (!saveQuickQuizSetupIntent({ venueToken: quickQuizIntent.venueToken, name: quickQuizIntent.name, participants: quickQuizIntent.participants, difficulty: quickQuizIntent.difficulty })) { state.account.status = '早押しクイズの復帰情報を保存できませんでした。'; } else { state.account.open = false; location.replace(`/quick-quiz-room.html?create=1${quickQuizIntent.venueToken ? `&venue=${encodeURIComponent(quickQuizIntent.venueToken)}` : ''}`); return; } }
       const questionWolfIntent = state.account.venueOnboarding || state.account.libraryReturn ? null : consumeQuestionWolfAuthIntent();
       if (questionWolfIntent) { if (!saveQuestionWolfAuthIntent(questionWolfIntent)) { state.account.status = '質問ウルフの復帰情報を保存できませんでした。'; } else { state.account.open = false; location.replace(`/question-wolf.html?create=1${questionWolfIntent.venueToken ? `&venue=${encodeURIComponent(questionWolfIntent.venueToken)}` : ''}`); return; } }
       intentFailed = await applyAdultIntent();
@@ -2415,6 +2415,10 @@ function startSelectedSoloDeck() {
   if (deck.builder === 'torisetsu') { openTorisetsu(); return; }
   try { state.session = createSoloSession({ deck, participant: state.participants[0] || "自分" }); state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null; state.soloMemoOpen = false; state.soloNoteDraft = ""; state.soloNoteStatus = ""; state.soloNoteError = ""; state.soloSummaryDraft = ""; trackThemeStart(state.session.deckId); recordThemeExplorerStart({ ownerId: state.account.user?.id, mode: "solo", themeIds: [state.session.deckId] }); saveCurrentSession(state.session); state.screen = "play"; state.error = ""; render(); } catch (error) { state.error = error.message; render(); }
 }
+function quickQuizRoster() {
+  if (state.participants.length < 2 || state.participants.length > MAX_PARTICIPANTS || !state.participants.every((name) => typeof name === 'string' && name.trim() && Array.from(name.trim()).length <= MAX_NAME_LENGTH && !/[\u0000-\u001f\u007f]/u.test(name))) return [];
+  return state.participants.map((name) => name.trim());
+}
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
   if (typeof action === "string" && action.startsWith("torisetsu-")) { handleTorisetsuAction(event); return; }
@@ -2480,6 +2484,10 @@ async function handleAction(event) {
     if (game?.id === 'match' || game?.id === 'choice') launchSocialGame(game);
     else if (game?.href) {
       const href = new URL(game.href, location.href);
+      if (game.id === 'quick-quiz') {
+        const roster = quickQuizRoster();
+        if (roster.length) saveQuickQuizSetupIntent({ name: roster[0], participants: roster, difficulty: 'beginner', venueToken: state.venue?.token || '' });
+      }
       if (state.venue?.token) href.searchParams.set('venue', state.venue.token);
       location.assign(`${href.pathname}${href.search}${href.hash}`);
     }

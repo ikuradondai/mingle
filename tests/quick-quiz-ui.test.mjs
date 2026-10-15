@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { rankFor, answerDeadline, deadlineForPhase, normalizeQuizPhase } from '../dist/quick-quiz-model.js';
-import { saveQuickQuizAuthIntent, consumeQuickQuizAuthIntent } from '../dist/quick-quiz-auth-intent.js';
+import { saveQuickQuizAuthIntent, consumeQuickQuizAuthIntent, saveQuickQuizSetupIntent, consumeQuickQuizSetupIntent } from '../dist/quick-quiz-auth-intent.js';
 
 const registry = fs.readFileSync('dist/data/game-registry.js', 'utf8');
 const account = fs.readFileSync('dist/account.js', 'utf8');
@@ -39,7 +39,16 @@ test('quick quiz auth return preserves the chosen name and difficulty', () => {
   const app = fs.readFileSync('dist/app.js', 'utf8');
   assert.match(intent, /difficulty/);
   assert.match(app, /quick-quiz-room\.html\?create=1/);
-  assert.match(app, /saveQuickQuizAuthIntent\(quickQuizIntent\)/);
+  assert.match(app, /saveQuickQuizSetupIntent\(\{ venueToken: quickQuizIntent\.venueToken/);
+  assert.match(page, /participants:state\.roster/);
+  assert.match(app, /saveQuickQuizSetupIntent/);
+  assert.match(app, /name: quickQuizIntent\.name/);
+  assert.match(page, /司会者は誰？/);
+  assert.match(page, /司会者の呼び名/);
+  assert.match(page, /あなたの呼び名/);
+  assert.match(page, /query\.get\('create'\) === '1' \? consumeQuickQuizSetupIntent/);
+  assert.match(page, /new FormData\(f\)\.get\('name'\)/);
+  assert.match(page, /state\.roster\.map/);
 });
 
 test('quick quiz normalizes the server buzz phase', () => {
@@ -70,10 +79,30 @@ test('quick quiz auth intent round trips and fails closed on blocked storage', (
   const values = new Map();
   const storage = { getItem: (key) => values.get(key) || null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) };
   assert.equal(saveQuickQuizAuthIntent({ name: '  ゲスト  ', difficulty: 'advanced' }, storage), true);
-  assert.deepEqual(consumeQuickQuizAuthIntent(storage), { venueToken: '', name: 'ゲスト', difficulty: 'advanced' });
+  assert.deepEqual(consumeQuickQuizAuthIntent(storage), { venueToken: '', name: 'ゲスト', difficulty: 'advanced', participants: [] });
+  assert.equal(saveQuickQuizAuthIntent({ name: 'ゆう', participants: ['ゆう', 'あき'] }, storage), true);
+  assert.deepEqual(consumeQuickQuizAuthIntent(storage).participants, ['ゆう', 'あき']);
+  assert.equal(saveQuickQuizAuthIntent({ name: 'ゆう', participants: ['ゆう', ''] }, storage), false);
+  assert.equal(saveQuickQuizAuthIntent({ name: 'ゆう', participants: ['ゆう', 'あき'] }, storage), true);
+  const expired = JSON.parse(values.get('mingle.cards.quick-quiz-auth-return.v1'));
+  expired.expiresAt = expired.createdAt - 1;
+  values.set('mingle.cards.quick-quiz-auth-return.v1', JSON.stringify(expired));
+  assert.equal(consumeQuickQuizAuthIntent(storage, expired.createdAt), null);
   const blocked = { getItem: () => null, setItem: () => { throw new Error('blocked'); }, removeItem: () => {} };
   assert.equal(saveQuickQuizAuthIntent({ name: 'x' }, blocked), false);
   assert.equal(consumeQuickQuizAuthIntent(blocked), null);
+  assert.equal(saveQuickQuizAuthIntent({ name: 'ゆう', participants: null }, storage), false);
+  assert.equal(saveQuickQuizSetupIntent({ participants: ['ゆう', 'あき'], difficulty: 'expert' }, storage), true);
+  assert.deepEqual(consumeQuickQuizSetupIntent(storage), { venueToken: '', name: 'ゆう', participants: ['ゆう', 'あき'], difficulty: 'expert' });
+  assert.equal(saveQuickQuizSetupIntent({ name: 'ひとり', participants: [], difficulty: 'beginner' }, storage), true);
+  assert.deepEqual(consumeQuickQuizSetupIntent(storage), { venueToken: '', name: 'ひとり', participants: [], difficulty: 'beginner' });
+  assert.equal(saveQuickQuizSetupIntent({ name: 'ゆう', participants: ['ゆう', 'あき'], venueToken: 'venue-a' }, storage), true);
+  assert.equal(consumeQuickQuizSetupIntent(storage, Date.now(), 'venue-b'), null);
+  assert.equal(saveQuickQuizSetupIntent({ participants: ['ゆう', 'あき'], difficulty: 'expert' }, storage), true);
+  const setup = JSON.parse(values.get('mingle.cards.quick-quiz-setup.v1'));
+  setup.expiresAt = setup.createdAt - 1;
+  values.set('mingle.cards.quick-quiz-setup.v1', JSON.stringify(setup));
+  assert.equal(consumeQuickQuizSetupIntent(storage, setup.createdAt), null);
 });
 
 test('quick quiz HTML keeps the standalone quiz page separate', () => {
