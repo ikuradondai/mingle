@@ -1628,11 +1628,11 @@ function completionReplyView(session, solo = false, favoriteBusy = false) {
 const completionActions = Object.freeze({
   common: { label: "共通点", icon: "common", prompt: "「自分と同じだ！」と思ったところを伝えてみよう。" },
   like: { label: "いいね！", icon: "heart", prompt: "相手の「いいな！」と思ったところを伝えてみよう。" },
-  thanks: { label: "ありがとう", icon: "thanks", prompt: "今日、ありがとうと思ったことを伝えてみよう。" },
+  more: { label: "もっと聞きたい", icon: "more", prompt: "気になった話を、もう少し聞いてみよう。" },
   recall: { label: "覚えてる？", icon: "bookmark", prompt: "誰の答えだったか、思い出してみよう。" },
 });
 function completionActionIcon(name) {
-  const files = { common: "completion-common-pair.png", heart: "completion-nice-heart.png", thanks: "completion-thanks-applause.png", bookmark: "completion-memory-bookmark.png", selfNote: "completion-self-note.png", smallStep: "completion-small-step.png" };
+  const files = { common: "completion-common-pair.png", heart: "completion-nice-heart.png", more: "completion-listen.png", bookmark: "completion-memory-bookmark.png", selfNote: "completion-self-note.png" };
   return `<img class="completion-choice-image" src="/assets/completion/${files[name] || files.bookmark}" alt="" aria-hidden="true" width="80" height="80" loading="lazy" />`;
 }
 function completionRecallPrompt(session, reply, solo = false) {
@@ -1668,7 +1668,6 @@ function completionChoiceView(session, favoriteBusy = false, solo = false) {
     self: { label: "自分にひとこと", icon: "selfNote", prompt: "いまの自分に、どんな言葉をかけたい？" },
     favorite: { label: "心に残った1枚", icon: "bookmark", prompt: "心に残った1枚は？" },
     share: { label: "伝えたい人", icon: "common", prompt: "話してみたい問いは？" },
-    step: { label: "小さな一歩", icon: "smallStep", prompt: "今日か明日、ひとつ試すなら？" },
   } : completionActions;
   const reviewContext = roundFavoriteContext(session);
   const busy = state.busy || favoriteBusy || (solo && reply.soloShareBusy);
@@ -1695,7 +1694,8 @@ function completionChoiceView(session, favoriteBusy = false, solo = false) {
     return `<div class="completion-choice-stage is-selected" data-completion-choice-stage><div class="completion-choice-instruction"><button type="button" class="completion-choice-back" data-action="completion-choice-back">他のふりかえりを選ぶ</button>${completionActionIcon(actionsConfig[selected].icon)}<p class="completion-choice-prompt">${prompt}</p></div>${actions}${reviewPanel}</div>`;
   }
   const cards = Object.entries(actionsConfig).map(([id, item]) => { const unavailable = solo ? (["favorite", "share"].includes(id) && !recallAvailable) : (id === "recall" && !recallAvailable); return `<button type="button" class="completion-choice-card${unavailable ? " is-disabled" : ""}" data-action="completion-choice" data-choice="${id}" ${unavailable ? "disabled" : ""}>${completionActionIcon(item.icon)}<span>${esc(item.label)}</span>${unavailable ? `<small>${solo ? "めくった問いがまだありません" : "今回は振り返る回答がありません"}</small>` : ""}</button>`; }).join("");
-  return `<div class="completion-choice-stage" data-completion-choice-stage><div class="completion-choice-grid" role="group" aria-label="締めくくりを選ぶ">${cards}</div>${actions}${reviewPanel}</div>`;
+  const gridClass = solo && Object.keys(actionsConfig).length === 3 ? " completion-choice-grid-is-three" : "";
+  return `<div class="completion-choice-stage" data-completion-choice-stage><div class="completion-choice-grid${gridClass}" role="group" aria-label="締めくくりを選ぶ">${cards}</div>${actions}${reviewPanel}</div>`;
 }
 function roundCompletionView(session, { solo = false, favoriteBusy = false } = {}) {
   if (!session || session.sharedGuest || session.venueSession) return '';
@@ -2506,7 +2506,7 @@ async function handleAction(event) {
   }
   if (action === "completion-choice") {
     const section = event.currentTarget.closest("[data-completion-reply], [data-round-completion]"); const key = section?.dataset.roundKey || (state.session && completionReplyKey(state.session)); const choice = event.currentTarget.dataset.choice;
-    const soloChoice = state.session?.mode === "solo" && ["self", "favorite", "share", "step"].includes(choice);
+    const soloChoice = state.session?.mode === "solo" && ["self", "favorite", "share"].includes(choice);
     if (!key || (!completionActions[choice] && !soloChoice) || ((choice === "recall" && completionRecallEntries(state.session).length < 1) || ((choice === "favorite" || choice === "share") && soloReflectionEntries(state.session).length < 1))) return;
     const next = { ...(completionReplyStates.get(key) || {}), choice }; delete next.soloCardId; delete next.soloShareStatus; delete next.soloShareFallback; delete next.soloShareBusy;
     if (choice === "recall") { const entry = chooseRecallEntry(completionRecallEntries(state.session)); next.recallCardId = entry?.cardId || ""; next.recallParticipantIndex = entry?.participantIndex ?? -1; }
