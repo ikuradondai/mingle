@@ -6,6 +6,7 @@ import { canContinue } from "./access-policy.js";
 import { roundCompletionInfo } from "./round-completion.js";
 import { completionFeelingChoices, completionFeelingFor, completionFeelingKey } from "./round-feeling.js";
 import { completionReplyContext, completionReplyKey, completionReplyCopy } from "./completion-reply.js";
+import { completionRecallKey as recallMemoryKey, completionRecallCandidates, chooseRecallEntry } from "./completion-recall.js";
 import { ROUND_SIZE, isTogetherCard, createSession, createMixedSession, createSavedSession, createSharedSession, createSoloSession, createSponsorSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer, previousAnswer, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS, summarizeLikes } from "./engine.js";
 import { themeGroups, groupLabels } from "./data/theme-groups.js";
 import { buildFeedbackPayload, feedbackKey, submitFeedback } from "./feedback.js";
@@ -1561,6 +1562,21 @@ function completionCardSpread(session) {
   return `<div class="round-completion-cards" data-card-count="${visualCount}" aria-hidden="true"><div class="round-completion-card-fan">${fan}</div></div>`;
 }
 const completionReplyStates = new Map();
+// Closing-game recall is deliberately ephemeral. It is never copied into a session
+// snapshot, localStorage, or an API payload.
+const completionRecallMemory = new Map();
+function completionRecallKey(session) { return recallMemoryKey(session); }
+function rememberCompletedAnswer(session) {
+  if (!session || session.mode === "solo" || !session.revealed || isTogetherCard(currentCard(session))) return;
+  const card = currentCard(session); const participantIndex = currentParticipantIndex(session);
+  if (!card || card.kind === "challenge" || !card.id || !session.participants?.[participantIndex]) return;
+  const key = completionRecallKey(session); const entries = completionRecallMemory.get(key) || [];
+  if (!entries.some((entry) => entry.cardId === card.id && entry.participantIndex === participantIndex)) entries.push({ cardId: card.id, participantIndex, name: session.participants[participantIndex], text: card.text });
+  completionRecallMemory.set(key, entries);
+}
+function completionRecallEntries(session) { return completionRecallCandidates(completionRecallMemory.get(completionRecallKey(session)) || []); }
+function clearCompletionRecall(session) { if (session) completionRecallMemory.delete(completionRecallKey(session)); }
+function clearCompletionRecallSession(session) { if (!session) return; const prefix = `${session.sessionId || "session"}:`; for (const key of completionRecallMemory.keys()) if (key.startsWith(prefix)) completionRecallMemory.delete(key); }
 function completionReplyState(key) { return completionReplyStates.get(key) || { completed: false }; }
 const completionFeelingMemory = new Map();
 const completionFeelingAnimated = new Set();
@@ -1590,6 +1606,38 @@ function completionReplyView(session, solo = false, favoriteBusy = false) {
   const doneTitle = skipped ? "今回はここまでで大丈夫です。" : copy.completeTitle;
   return `<section class="completion-reply is-${context}${done ? " is-complete" : skipped ? " is-skipped" : ""}" data-completion-reply data-reply-key="${esc(key)}" data-reply-count="${participantCount}" aria-labelledby="completion-reply-title-${esc(key)}"><div class="completion-reply-stage"><div class="completion-reply-view completion-reply-prompt-view" data-reply-prompt-view aria-hidden="${showAfter}" ${showAfter ? "inert" : ""}><h2 id="completion-reply-title-${esc(key)}">${esc(copy.title)}</h2><p class="completion-reply-lead">${esc(copy.lead || copy.prompt)}</p>${copy.example ? `<p class="completion-reply-example">${esc(copy.example)}</p>` : ""}<button type="button" class="completion-reply-action" data-action="completion-reply-done" aria-pressed="false">${esc(copy.action)}</button><button type="button" class="completion-link completion-reply-skip" data-action="completion-reply-skip" ${busy ? "disabled" : ""}>今回はスキップ</button></div><div class="completion-reply-view completion-reply-done-view" data-reply-done-view aria-hidden="${!showAfter}" ${showAfter ? "" : "inert"}><h2 tabindex="-1">${esc(doneTitle)}</h2><p class="completion-reply-status" data-completion-reply-status role="status" aria-live="polite">${done ? esc(copy.complete) : ""}</p>${actions}</div></div></section>`;
 }
+const completionActions = Object.freeze({
+  common: { label: "共通点", icon: "common", prompt: "「自分と同じだ！」と思ったところを伝えてみよう。" },
+  like: { label: "いいね！", icon: "heart", prompt: "相手の「いいな！」と思ったところを伝えてみよう。" },
+  thanks: { label: "ありがとう", icon: "thanks", prompt: "今日、ありがとうと思ったことを伝えてみよう。" },
+  recall: { label: "覚えてる？", icon: "bookmark", prompt: "誰の答えだったか、思い出してみよう。" },
+});
+function completionActionIcon(name) {
+  const files = { common: "completion-common-pair.png", heart: "completion-nice-heart.png", thanks: "completion-thanks-applause.png", bookmark: "completion-memory-bookmark.png" };
+  return `<img class="completion-choice-image" src="/assets/completion/${files[name] || files.bookmark}" alt="" aria-hidden="true" width="80" height="80" loading="lazy" />`;
+}
+function completionRecallPrompt(session, reply) {
+  const entries = completionRecallEntries(session); if (!entries.length) return "今回は振り返る回答がありません。";
+  const picked = entries.find((entry) => entry.cardId === reply.recallCardId && entry.participantIndex === reply.recallParticipantIndex) || entries[0];
+  return `${esc(picked.name)}の答え、覚えてる？<br><small>${esc(picked.text)}</small>`;
+}
+function completionChoiceView(session, favoriteBusy = false) {
+  const key = completionReplyKey(session); const info = roundCompletionInfo(session); const reply = completionReplyState(key); const selected = reply.choice || "";
+  const recallAvailable = completionRecallEntries(session).length >= 1;
+  const busy = state.busy || favoriteBusy;
+  const next = info.final
+    ? `<button type="button" class="primary-button" data-action="decks"${busy ? " disabled" : ""}>次のテーマを選ぶ</button>`
+    : `<button type="button" class="primary-button" data-action="continue"${busy ? " disabled" : ""}>もう${info.nextCount}枚、話そう</button>`;
+  const actions = `<div class="completion-choice-actions">${next}<button type="button" class="completion-link completion-finish" data-action="finish"${busy ? " disabled" : ""}>今日はここまで</button></div>`;
+  if (selected) {
+    const entries = completionRecallEntries(session); const alternatives = entries.filter((entry) => !(entry.cardId === reply.recallCardId && entry.participantIndex === reply.recallParticipantIndex));
+    const prompt = selected === "recall" ? completionRecallPrompt(session, reply) : completionActions[selected].prompt;
+    const nextRecall = selected === "recall" && alternatives.length ? `<button type="button" class="completion-recall-next-button" data-action="completion-recall-next">別の1問</button>` : "";
+    return `<div class="completion-choice-stage is-selected" data-completion-choice-stage><div class="completion-choice-instruction"><button type="button" class="completion-choice-back" data-action="completion-choice-back">4つから選ぶ</button>${selected === "recall" ? "" : `<p class="completion-choice-eyebrow">${esc(completionActions[selected].label)}</p>`}<p class="completion-choice-prompt">${prompt}</p>${nextRecall}</div>${actions}</div>`;
+  }
+  const cards = Object.entries(completionActions).map(([id, item]) => `<button type="button" class="completion-choice-card${id === "recall" && !recallAvailable ? " is-disabled" : ""}" data-action="completion-choice" data-choice="${id}" ${id === "recall" && !recallAvailable ? "disabled" : ""}>${completionActionIcon(item.icon)}<span>${esc(item.label)}</span>${id === "recall" && !recallAvailable ? `<small>今回は振り返る回答がありません</small>` : ""}</button>`).join("");
+  return `<div class="completion-choice-stage" data-completion-choice-stage><div class="completion-choice-grid" role="group" aria-label="締めくくりを選ぶ">${cards}</div>${actions}</div>`;
+}
 function roundCompletionView(session, { solo = false, favoriteBusy = false } = {}) {
   if (!session || session.sharedGuest || session.venueSession) return '';
   const info = roundCompletionInfo(session); if (!info.completed) return '';
@@ -1597,11 +1645,13 @@ function roundCompletionView(session, { solo = false, favoriteBusy = false } = {
     const count = solo ? `今回${info.completed}枚・ここまで${info.cursor}枚` : `${session.participants.length}人でめぐった、今回${info.completed}枚${info.final ? `・ここまで${info.cursor}枚` : ''}`;
   const cardCount = `${info.completed}枚`;
   const motionClass = info.final ? 'is-final' : '';
-  return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><div class="round-completion-layout">${completionCardSpread(session)}<div class="round-completion-main"><div class="round-completion-copy"><p class="round-completion-kicker">${esc(completionThemeLabel(session))}</p><h1 class="round-completion-title" tabindex="-1" data-focus>${solo ? `${cardCount}、おつかれさま。` : `${cardCount}ぶん、話せた。`}</h1><p class="round-completion-lead">${count}${info.final ? ` · 全${info.total}枚完了` : ""}</p></div>${completionReplyView(session, solo, favoriteBusy)}</div></div></section>`;
+  const body = solo ? completionReplyView(session, true, favoriteBusy) : completionChoiceView(session, favoriteBusy);
+  return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><div class="round-completion-layout"><div class="round-completion-main"><div class="round-completion-copy"><p class="round-completion-kicker">${esc(completionThemeLabel(session))}</p><h1 class="round-completion-title" tabindex="-1" data-focus>${solo ? `${cardCount}、おつかれさま。` : `${cardCount}、おつかれさまでした`}</h1><p class="round-completion-lead">${solo ? count : ""}${info.final ? ` · 全${info.total}枚完了` : ""}</p></div>${body}</div></div></section>`;
 }
 function completionSponsorView(session) {
   if (!session?.sponsorSet || (!session.sponsor?.endMessage && !session.sponsor?.siteUrl)) return "";
-  const visible = completionReplyState(completionReplyKey(session)).completed || completionReplyState(completionReplyKey(session)).skipped;
+  const reply = completionReplyState(completionReplyKey(session));
+  const visible = session.mode === "solo" ? (reply.completed || reply.skipped) : true;
   return `<aside class="sponsor-completion-note" data-completion-sponsor aria-hidden="${visible ? "false" : "true"}" aria-label="スポンサー情報"><small>スポンサー提供：${esc(session.sponsor.providerName || "公式提供")}</small>${session.sponsor.endMessage ? `<p>${esc(session.sponsor.endMessage)}</p>` : ""}${session.sponsor.siteUrl ? `<a class="completion-link" href="${esc(session.sponsor.siteUrl)}" target="_blank" rel="noopener noreferrer">${esc(session.sponsor.ctaLabel || "詳しく見る")}</a>` : ""}</aside>`;
 }
 
@@ -2099,7 +2149,7 @@ function saveCurrentSession(session) {
 function persist(previous = null) { if (!state.session) return; if (previous) trackSessionProgress(previous, state.session); if (state.session.sharedGuest) return;
   if (state.session.cursor >= state.session.questions.length) clearSession();
   else saveCurrentSession(state.session); }
-function advanceGuarded(action) { ensureSession(); const now = Date.now(); if (now - state.lastAdvanceAt < 300) return false; state.lastAdvanceAt = now; const previous = state.session; state.busy = true; render(); state.session = action(state.session); if (previous?.mode === "solo") { state.soloMemoOpen = false; state.soloMemoKey = ""; } state.busy = false; persist(previous); if (isActiveVenueSession() && previous.cursor < state.session.cursor && state.session.cursor > 0 && state.session.cursor % ROUND_SIZE === 0) accountApi.venueEvent(state.venue.token, { eventType: "completed_round", setId: state.session.venueSetId, session: state.session.venueSession, roundIndex: state.session.cursor / ROUND_SIZE }).catch(() => {}); render(); return true; }
+function advanceGuarded(action, onSuccess) { ensureSession(); const now = Date.now(); if (now - state.lastAdvanceAt < 300) return false; state.lastAdvanceAt = now; const previous = state.session; state.busy = true; render(); state.session = action(state.session); if (previous?.mode === "solo") { state.soloMemoOpen = false; state.soloMemoKey = ""; } if (typeof onSuccess === "function") onSuccess(previous); state.busy = false; persist(previous); if (isActiveVenueSession() && previous.cursor < state.session.cursor && state.session.cursor > 0 && state.session.cursor % ROUND_SIZE === 0) accountApi.venueEvent(state.venue.token, { eventType: "completed_round", setId: state.session.venueSetId, session: state.session.venueSession, roundIndex: state.session.cursor / ROUND_SIZE }).catch(() => {}); render(); return true; }
 function resumeSaved(snapshot = null) { const fresh = snapshot || loadResumeForCurrentUser(); if (!fresh) { state.resume = null; state.error = "保存期限が切れています。"; render(); return; } if (!canAccessSessionContent(fresh, state.account, { activeVenue: isActiveVenueSession(fresh), venueDisplay: state.venue?.displayR18 === true })) { state.error = state.account.authReady ? "続きを再開できません。" : "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; } const needsAuth = fresh.cursor >= 6 && fresh.unlockedUntil > 6; const lockedTheme = sessionNeedsRegistration(fresh); if ((needsAuth || lockedTheme) && !state.account.authReady) { state.resume = fresh; state.error = "ログイン状態を確認しています。少し待ってからお試しください。"; render(); return; } if ((needsAuth || lockedTheme) && !state.account.user) { state.resume = fresh; if (!state.account.enabled) { state.error = "ログイン設定を利用できないため、続きを再開できません。"; render(); return; } state.continuePending = { kind: "resume", sessionId: fresh.sessionId, snapshot: fresh }; state.account.open = true; state.account.libraryOpen = false; state.account.settingsOpen = false; state.account.deleteOpen = false; state.account.error = ""; state.account.status = lockedTheme ? "このテーマは無料登録で使えます。ログインまたは新規登録してください。" : "ログインまたは新規登録で、続きを無料で楽しめます。"; state.focusSelector = "[data-account-email]"; render(); return; } state.resume = fresh; state.session = fresh; state.participantNameOrigin = null; state.participantNameAutoValue = ""; state.participantNameUserEdited = true; state.participants = [...state.session.participants]; state.selectedDeckIds = [...(state.session.deckIds || [state.session.deckId])]; state.selectedDeckId = state.session.mixed ? state.selectedDeckIds[0] : state.session.deckId; state.themeMode = state.session.mode === "solo" ? "solo" : state.session.mixed ? "mixed" : "single"; state.includeChallenges = state.session.includeChallenges === true; state.adultConfirmed = state.session.adultConfirmed === true; state.screen = "play";
   state.resume = null;
   state.error = ""; render(); }
@@ -2173,7 +2223,7 @@ async function continueCurrentRound() {
   state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.busy = true; state.error = ""; render();
   try {
     const previous = ensureSession();
-    state.session = continueRound(state.session); persist(previous);
+    clearCompletionRecall(previous); state.session = continueRound(state.session); persist(previous);
   } catch (error) {
     state.error = error.message || "続きを始められませんでした。";
   } finally {
@@ -2390,6 +2440,22 @@ async function handleAction(event) {
     window.setTimeout(() => section.classList.remove("is-celebrating"), 700);
     return;
   }
+  if (action === "completion-choice") {
+    const section = event.currentTarget.closest("[data-completion-reply], [data-round-completion]"); const key = section?.dataset.roundKey || (state.session && completionReplyKey(state.session)); const choice = event.currentTarget.dataset.choice;
+    if (!key || !completionActions[choice] || (choice === "recall" && completionRecallEntries(state.session).length < 1)) return;
+    const next = { ...(completionReplyStates.get(key) || {}), choice };
+    if (choice === "recall") { const entry = chooseRecallEntry(completionRecallEntries(state.session)); next.recallCardId = entry?.cardId || ""; next.recallParticipantIndex = entry?.participantIndex ?? -1; }
+    state.focusSelector = '[data-action="completion-choice-back"]';
+    completionReplyStates.set(key, next); render(); return;
+  }
+  if (action === "completion-choice-back") {
+    const key = state.session && completionReplyKey(state.session); const reply = completionReplyStates.get(key) || {}; const previous = reply.choice;
+    delete reply.choice; delete reply.recallCardId; delete reply.recallParticipantIndex; state.focusSelector = previous ? `[data-action="completion-choice"][data-choice="${previous}"]` : '[data-action="completion-choice"]'; completionReplyStates.set(key, reply); render(); return;
+  }
+  if (action === "completion-recall-next") {
+    const key = state.session && completionReplyKey(state.session); const reply = completionReplyStates.get(key) || {}; const entries = completionRecallEntries(state.session); const choices = entries.filter((entry) => !(entry.cardId === reply.recallCardId && entry.participantIndex === reply.recallParticipantIndex));
+    if (!choices.length) return; const entry = chooseRecallEntry(choices); reply.recallCardId = entry.cardId; reply.recallParticipantIndex = entry.participantIndex; state.focusAction = "completion-recall-next"; completionReplyStates.set(key, reply); render(); return;
+  }
   if (action === "audio-toggle") { event.stopPropagation(); state.focusAction = "audio-toggle"; toggleCardAudio(); render(); return; }
   if (action === "theme-bookmark") { event.stopPropagation(); const id = event.currentTarget.dataset.bookmarkId; toggleThemeExplorerBookmark(id, state.account.user?.id); state.focusSelector = `[data-action="theme-bookmark"][data-bookmark-id="${CSS.escape(id)}"]`; render(); return; }
   if (action === "theme-experienced") { event.stopPropagation(); const id = event.currentTarget.dataset.experiencedId; toggleThemeExplorerExperienced(id, state.account.user?.id); state.focusSelector = `[data-action="theme-experienced"][data-experienced-id="${CSS.escape(id)}"]`; render(); return; }
@@ -2452,6 +2518,7 @@ async function handleAction(event) {
   }
   if (action === "reveal") { playFlipSound(); const previous = ensureSession(); state.session = revealCard(previous); persist(previous); render(); return; }
   if (action === "home") {
+    clearCompletionRecallSession(state.session);
     const keepSoloHome = state.themeMode === "solo" && !state.venue && !state.shared;
     state.continuePending = null;
     state.sharedRequestId += 1;
@@ -2593,6 +2660,7 @@ async function handleAction(event) {
     return;
   }
   if (action === "logout") {
+    clearCompletionRecallSession(state.session);
     try { sessionStorage.removeItem(AUTH_RETURN_KEY); } catch {} clearLibraryReturnIntent();
     state.continuePending = null;
     clearAccountShare({ close: true });
@@ -2886,6 +2954,7 @@ async function handleAction(event) {
   if (action === "solo-mode") { if (state.session && !isFinished(state.session)) saveCurrentSession(state.session); if (state.participants.length >= 2) state.groupParticipants = [...state.participants]; state.session = null; state.participants = ["自分"]; state.themeMode = "solo"; state.participantTab = "solo"; state.themeExplorerShelf = "all"; state.selectedDeckId = "self-values"; state.selectedDeckIds = ["self-values"]; state.selectedMySetId = null; state.screen = "decks"; state.error = ""; render(); return; }
   if (action === "group-mode") { if (state.session && !isFinished(state.session)) saveCurrentSession(state.session); const restoreGroup = state.themeMode === "solo" || state.participants.length < 2; if (restoreGroup) state.participants = state.groupParticipants?.length >= 2 ? [...state.groupParticipants] : ["", ""]; else state.groupParticipants = [...state.participants]; state.session = null; state.themeMode = "single"; state.participantTab = "group"; state.themeExplorerShelf = "all"; state.selectedDeckId = "friends"; state.selectedDeckIds = ["friends"]; state.selectedMySetId = null; state.screen = "participants"; state.error = ""; render(); return; }
   if (action === "decks") {
+    clearCompletionRecallSession(state.session);
     state.continuePending = null;
     state.shareMenuOpen = false;
     state.shareStatus = "";
@@ -2996,7 +3065,7 @@ async function handleAction(event) {
     return;
   }
   if (action === "like") { const previous = ensureSession(); state.session = likeCurrentAnswer(previous); persist(previous); render(); return; }
-  if (action === "next-answer") { try { advanceGuarded(nextAnswer); } catch (error) { state.error = error.message; render(); } return; }
+  if (action === "next-answer") { try { advanceGuarded(nextAnswer, rememberCompletedAnswer); } catch (error) { state.error = error.message; render(); } return; }
   if (action === "previous-answer") { const previous = ensureSession(); state.session = previousAnswer(previous); persist(previous); render(); return; }
   if (action === "pass") { try { advanceGuarded(passAnswer); } catch (error) { state.error = error.message; render(); } return; }
   if (action === "completion-feeling") {
@@ -3040,7 +3109,7 @@ async function handleAction(event) {
     await continueCurrentRound();
     return;
   }
-  if (action === "finish") { state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
+  if (action === "finish") { clearCompletionRecallSession(state.session); state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
     state.resume = loadResumeForCurrentUser();
     restoreGroupHomeState();
     state.screen = "participants";

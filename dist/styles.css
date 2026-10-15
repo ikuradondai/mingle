@@ -1026,6 +1026,37 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
   .round-break:has(.round-completion) .round-completion-card-fan { min-height:140px; height:140px; }
 }
 @media (prefers-reduced-motion:reduce) { .round-break:has(.round-completion) .round-completion-card { transition:none; } }
+
+/* Compact four-choice completion. The old decorative fan is intentionally absent. */
+.round-break:has(.round-completion) .round-completion-layout { display:block; }
+.round-break:has(.round-completion) .round-completion-main { max-width:820px; margin:0 auto; }
+.round-break:has(.round-completion) .round-completion-copy { padding:0; text-align:center; }
+.round-break:has(.round-completion) .round-completion-kicker { margin:0 0 8px; }
+.round-break:has(.round-completion) .round-completion-title { max-width:none; margin:0; font-size:clamp(28px,4vw,38px); letter-spacing:-.04em; }
+.round-break:has(.round-completion) .round-completion-lead { max-width:none; margin:8px 0 20px; font-size:15px; }
+.round-break:has(.round-completion) .completion-reply { border-top:0; margin:0; padding:0; text-align:center; }
+.completion-choice-stage { display:flex; flex-direction:column; gap:18px; }
+.completion-choice-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
+.completion-choice-card { min-height:170px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:18px 10px; border:1px solid color-mix(in srgb,var(--ink) 14%,transparent); border-radius:14px; background:#fffdf8; color:var(--ink); font:inherit; font-size:20px; font-weight:800; cursor:pointer; box-shadow:0 3px 10px rgba(16,33,61,.05); }
+.completion-choice-card:hover,.completion-choice-card:focus-visible { border-color:var(--blue); box-shadow:0 5px 14px rgba(46,111,216,.16); }
+.completion-choice-card.is-disabled { color:var(--muted); cursor:default; opacity:.72; }
+.completion-choice-card small { max-width:14ch; font-size:11px; line-height:1.4; font-weight:600; }
+.completion-choice-image { display:block; width:80px; height:80px; object-fit:contain; }
+.completion-choice-actions { display:flex; justify-content:center; align-items:center; gap:18px; flex-wrap:wrap; }
+.completion-choice-actions .primary-button { width:auto; min-width:210px; }
+.completion-choice-instruction { min-height:170px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:24px; border:1px solid color-mix(in srgb,var(--ink) 14%,transparent); border-radius:14px; background:#fffdf8; }
+.completion-choice-back { align-self:flex-start; border:0; padding:4px 0; background:transparent; color:var(--blue); font:inherit; font-size:13px; text-decoration:underline; cursor:pointer; }
+.completion-choice-eyebrow { margin:0; color:var(--muted); font-size:12px; font-weight:800; letter-spacing:.12em; }
+.completion-choice-prompt { margin:0; color:var(--ink); font-size:clamp(18px,2.4vw,24px); font-weight:800; line-height:1.55; text-align:center; }
+.completion-choice-prompt small { display:block; margin-top:10px; font-size:15px; font-weight:600; line-height:1.6; }
+.completion-recall-next-button { border:0; border-bottom:1px solid currentColor; padding:4px 0; background:transparent; color:var(--blue); font:inherit; font-size:13px; cursor:pointer; }
+@media (max-width:700px) {
+  .completion-choice-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .completion-choice-card { min-height:138px; padding:14px 8px; font-size:17px; }
+  .completion-choice-image { width:72px; height:72px; }
+  .completion-choice-actions { gap:10px; }
+  .completion-choice-actions .primary-button { width:100%; }
+}
 .sponsor-completion-note { margin:12px auto 16px; max-width:36rem; text-align:center; color:#33445f; }
 .sponsor-completion-note small { display:block; color:#6b5a24; }
 .sponsor-completion-note p { margin:4px 0; }
