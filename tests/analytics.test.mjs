@@ -239,7 +239,7 @@ test('client progress helper emits six rounds, six continues, and one final comp
   try {
     const { trackSessionProgress } = await import(`../dist/analytics.js?client-test=${Date.now()}`);
     const id = `client-${Date.now()}`; const base = { sessionId: id, deckId: 'mix' };
-    let current = { ...base, cursor: 0, unlockedUntil: 6 };
+    let current = { ...base, mode: 'solo', roundSize: 6, cursor: 0, unlockedUntil: 6 };
     for (let round = 1; round <= 6; round += 1) {
       const complete = { ...current, cursor: round * 6 };
       trackSessionProgress(current, complete);
@@ -256,5 +256,20 @@ test('client progress helper emits six rounds, six continues, and one final comp
     assert.equal(calls.filter((item) => item.type === 'round_continue').length, 6);
     assert.equal(calls.filter((item) => item.type === 'session_complete').length, 1);
     assert.ok(calls.every((item) => item.themeId === 'mix' && Object.keys(item).length === 3));
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('client progress helper uses three-card group rounds and keeps six-card solo rounds', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (_url, options) => { calls.push(JSON.parse(options.body)); return { ok: true, async json() { return { ok: true }; } }; };
+    const { trackSessionProgress } = await import(`../dist/analytics.js?group-round-test=${Date.now()}`);
+    trackSessionProgress({ sessionId: 'group-3', cursor: 0, unlockedUntil: 3 }, { sessionId: 'group-3', cursor: 3, unlockedUntil: 3, roundSize: 3, questions: Array(40), deckId: 'friends' });
+    trackSessionProgress({ sessionId: 'solo-6', mode: 'solo', cursor: 0, unlockedUntil: 6 }, { sessionId: 'solo-6', mode: 'solo', cursor: 6, unlockedUntil: 6, roundSize: 6, questions: Array(12), deckId: 'self' });
+    trackSessionProgress({ sessionId: 'solo-12', mode: 'solo', cursor: 6, unlockedUntil: 12 }, { sessionId: 'solo-12', mode: 'solo', cursor: 12, unlockedUntil: 12, roundSize: 6, questions: Array(12), deckId: 'self' });
+    assert.ok(calls.some((item) => item.type === 'round_complete' && item.themeId === 'friends'));
+    assert.ok(calls.some((item) => item.type === 'round_complete' && item.themeId === 'self'));
+    assert.ok(calls.filter((item) => item.type === 'round_complete' && item.themeId === 'self').length >= 2);
   } finally { globalThis.fetch = originalFetch; }
 });

@@ -53,8 +53,11 @@ export function trackSessionProgress(previousSession, nextSession) {
   if (!themeId || next <= previous) {
     if (Number(nextSession.unlockedUntil) <= Number(previousSession.unlockedUntil || 0)) return;
   }
-  for (const cursor of [6, 12, 18, 24, 30, 36]) if (previous < cursor && next >= cursor) progressEvent('round_complete', nextSession.sessionId, themeId, `round-complete-${cursor}`);
+  const roundSize = nextSession.mode === 'solo' || nextSession.roundSize === 6 ? 6 : 3;
+  const totalForRound = totalForProgress(nextSession);
+  for (let cursor = roundSize; cursor <= totalForRound; cursor += roundSize) if ((cursor < totalForRound || totalForRound % roundSize === 0) && previous < cursor && next >= cursor) progressEvent('round_complete', nextSession.sessionId, themeId, `round-complete-${cursor}`);
   if (Number(nextSession.unlockedUntil) > Number(previousSession.unlockedUntil || 0) && previous >= Number(previousSession.unlockedUntil || 0)) progressEvent('round_continue', nextSession.sessionId, themeId, `continue-${nextSession.unlockedUntil}`);
   const total = Array.isArray(nextSession.questions) ? nextSession.questions.length : 40;
   if (previous < total && next >= total) progressEvent('session_complete', nextSession.sessionId, themeId, 'session-complete');
 }
+function totalForProgress(session) { return Array.isArray(session?.questions) ? session.questions.length : 40; }

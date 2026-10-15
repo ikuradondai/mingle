@@ -26,7 +26,7 @@ test('feedback post accepts duplicate success and sends exact JSON', async () =>
 });
 
 test('feedbackSubmitted round cursors are compatible with older and resumed records', () => {
-  const storage = memory(); const session = createSession({ participants: ['A', 'B'], deck: pick('friends'), random: () => 0.5 });
+  const storage = memory(); const session = { ...createSession({ participants: ['A', 'B'], deck: pick('friends'), random: () => 0.5 }), roundSize: 6 };
   session.feedbackSubmitted = [6, 6, 99]; session.cursor = 6; session.unlockedUntil = 6; session.roundStart = 0; session.roundCount = 0; session.roundNumber = 2;
   assert.equal(saveSession(session, { storage, now: 1000 }), true);
   const raw = JSON.parse(storage.value); assert.deepEqual(raw.feedbackSubmitted, [6]);

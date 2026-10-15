@@ -75,7 +75,7 @@ function renderThemes(values) {
   if (!Array.isArray(values) || values.length === 0) { setEmpty(themesList, 'データがありません'); return; }
   const table = document.createElement('div'); table.className = 'theme-metric-table';
   const header = document.createElement('div'); header.className = 'theme-metric-row theme-metric-header';
-  ['テーマ', '開始', '6枚', '続行', '全40枚', 'いいね'].forEach((label) => { const cell = document.createElement('span'); cell.textContent = label; header.append(cell); }); table.append(header);
+  ['テーマ', '開始', 'ラウンド完了', '続行', '全40枚', 'いいね'].forEach((label) => { const cell = document.createElement('span'); cell.textContent = label; header.append(cell); }); table.append(header);
   [...values].sort((a, b) => (Number(b?.likeCount) || 0) - (Number(a?.likeCount) || 0)).forEach((item) => {
     const row = document.createElement('div'); row.className = 'theme-metric-row';
     const label = document.createElement('span'); label.className = 'theme-name'; label.textContent = String(item?.label ?? item?.id ?? '名称未設定'); row.append(label);
@@ -90,7 +90,7 @@ function renderDaily(values) {
   if (!Array.isArray(values) || values.length === 0) { setEmpty(dailyList, 'データがありません'); return; }
   const table = document.createElement('div'); table.className = 'daily-metric-table';
   const header = document.createElement('div'); header.className = 'daily-metric-row daily-metric-header';
-  ['日付', 'PV', '開始', '6枚', '続行', '全40枚'].forEach((label) => { const cell = document.createElement('span'); cell.textContent = label; header.append(cell); }); table.append(header);
+  ['日付', 'PV', '開始', 'ラウンド完了', '続行', '全40枚'].forEach((label) => { const cell = document.createElement('span'); cell.textContent = label; header.append(cell); }); table.append(header);
   values.forEach((item) => {
     const row = document.createElement('div'); row.className = 'daily-metric-row';
     const valuesForRow = [item?.date, item?.pageViews, item?.themeStarts, item?.roundCompletes, item?.roundContinues, item?.sessionCompletes];

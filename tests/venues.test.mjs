@@ -47,7 +47,7 @@ test('venue public start rejects a set outside the current venue and adult snaps
   await assert.rejects(() => service.publicInfo(req(`/api/venue/public/${token}/start`, { method: 'POST', headers: {}, body: { setId, participants: ['A', 'B'], ageConfirmed: true, adultConfirmed: false } }), token, true), (e) => e.code === 'ADULT_CONSENT_REQUIRED');
 });
 
-test('venue completion requires the server-issued session, selected snapshot, and a full six-card block', async () => {
+test('venue completion requires the server-issued session, selected snapshot, and a full three-card block', async () => {
   const calls = [];
   let issuedHash = '';
   const fetchImpl = async (url, options = {}) => {
@@ -62,7 +62,7 @@ test('venue completion requires the server-issued session, selected snapshot, an
   const service = createVenueService({ env, fetchImpl });
   const started = await service.publicInfo(req(`/api/venue/public/${token}/start`, { method: 'POST', headers: {}, body: { setId, participants: ['A', 'B'], adultConfirmed: false } }), token, true);
   await assert.rejects(() => service.analytics(req(`/api/venue/public/${token}/events`, { method: 'POST', headers: {}, body: { eventType: 'completed_round', setId, session: 'B'.repeat(32), roundIndex: 1 } }), token), (e) => e.code === 'SESSION_NOT_STARTED');
-  await assert.rejects(() => service.analytics(req(`/api/venue/public/${token}/events`, { method: 'POST', headers: {}, body: { eventType: 'completed_round', setId, session: started.session, roundIndex: 3 } }), token), (e) => e.code === 'ROUND_NOT_COMPLETE');
+  await assert.rejects(() => service.analytics(req(`/api/venue/public/${token}/events`, { method: 'POST', headers: {}, body: { eventType: 'completed_round', setId, session: started.session, roundIndex: 5 } }), token), (e) => e.code === 'ROUND_NOT_COMPLETE');
   const accepted = await service.analytics(req(`/api/venue/public/${token}/events`, { method: 'POST', headers: {}, body: { eventType: 'completed_round', setId, session: started.session, roundIndex: 1 } }), token);
   assert.equal(accepted.accepted, true);
   assert.equal(calls.filter((call) => call.url.endsWith('/venue_usage_events')).length, 2);

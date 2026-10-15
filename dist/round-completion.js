@@ -1,6 +1,7 @@
 export const COMPLETION_ROUND_SIZE = 6;
+const GROUP_ROUND_SIZE = 3;
 
-export function roundCompletionInfo(session, roundSize = COMPLETION_ROUND_SIZE) {
+export function roundCompletionInfo(session, roundSize = session?.roundSize === GROUP_ROUND_SIZE ? GROUP_ROUND_SIZE : COMPLETION_ROUND_SIZE) {
   const total = Array.isArray(session?.questions) ? session.questions.length : 0;
   const cursor = Math.max(0, Math.min(Number(session?.cursor) || 0, total));
   const start = Math.max(0, Math.min(Number(session?.roundStart) || 0, cursor));

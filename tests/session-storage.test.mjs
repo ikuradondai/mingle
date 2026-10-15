@@ -1,12 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMixedSession, createSession, createSavedSession, continueRound, isFinished, isRoundComplete, nextAnswer, revealCard, likeCurrentAnswer, currentSpeaker } from '../dist/engine.js';
+import { createMixedSession as createMixedSessionBase, createSession as createSessionBase, createSavedSession as createSavedSessionBase, continueRound, isFinished, isRoundComplete, nextAnswer, revealCard, likeCurrentAnswer, currentSpeaker } from '../dist/engine.js';
 import { loadSession, saveSession, clearSession } from '../dist/session-storage.js';
 import { decks } from '../dist/data/decks.js';
 import { challenges, commonChallenges, themeChallenges } from '../dist/data/challenges.js';
 
 const memory = () => ({ value: null, getItem() { return this.value; }, setItem(_key, value) { this.value = value; }, removeItem() { this.value = null; } });
 const pick = (id) => decks.find((deck) => deck.id === id);
+// Legacy storage fixtures explicitly retain six-card boundaries; new group behavior is covered separately.
+const legacySix = (session) => ({ ...session, roundSize: 6, unlockedUntil: Math.min(6, session.questions.length) });
+const createSession = (options) => legacySix(createSessionBase(options));
+const createMixedSession = (options) => legacySix(createMixedSessionBase(options));
+const createSavedSession = (options) => legacySix(createSavedSessionBase(options));
 
 test('mixed sessions balance full rounds, keep unique source questions, and reject adult decks', () => {
   const value = createMixedSession({ participants: ['A', 'B'], decks: [pick('friends'), pick('team')], random: () => 0.5 });

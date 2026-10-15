@@ -19,7 +19,8 @@ function seeded(seed) {
 const deckById = (id) => decks.find((item) => item.id === id);
 const challengeCards = (value) => value.questions.filter((card) => card.kind === 'challenge');
 const ADULT_DECK_IDS = ['intimacy', 'first-intimacy', 'intimacy-refresh', 'intimacy-distance'];
-const session = () => createSession({ participants: names, deck, random: () => 0.5 });
+// Legacy six-card fixture: the group default is covered by group-round-size.test.mjs.
+const session = () => ({ ...createSession({ participants: names, deck, random: () => 0.5 }), roundSize: 6, unlockedUntil: 6 });
 
 function answerCurrent(value, step = nextAnswer) {
   value = revealCard(value);
@@ -405,7 +406,7 @@ test('date R18 and challenges share each six-card round without displacing R18',
 test('challenge card follows the normal answer, like, and pass flow', () => {
   const value = createSession({ participants: names, deck, includeChallenges: true, random: () => 0.5 });
   const actionIndex = value.questions.findIndex((card) => card.kind === 'challenge' && card.perform !== 'together');
-  let actionSession = { ...value, cursor: actionIndex, revealed: false, answerIndex: 0 };
+  let actionSession = { ...value, roundSize: 6, unlockedUntil: 6, cursor: actionIndex, revealed: false, answerIndex: 0 };
   actionSession = revealCard(actionSession);
   assert.equal(currentCard(actionSession).kind, 'challenge');
   actionSession = likeCurrentAnswer(actionSession);

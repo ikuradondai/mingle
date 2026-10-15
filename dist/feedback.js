@@ -1,10 +1,11 @@
-const COMPLETED_CURSORS = new Set([6, 12, 18, 24, 30, 36, 40]);
+const COMPLETED_CURSORS = new Set([3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 40]);
 
 export function feedbackKey(sessionId, cursor) { return `${sessionId}:${cursor}`; }
 
 export function buildFeedbackPayload(session, cursor, rating = null, text = '') {
   const total = Array.isArray(session?.questions) ? session.questions.length : 40;
-  if (!session || typeof session.sessionId !== 'string' || cursor < 6 || cursor > total || (cursor < total && cursor % 6 !== 0)) throw new Error('feedback');
+  const roundSize = session?.mode === 'solo' || session?.roundSize === 6 ? 6 : 3;
+  if (!session || typeof session.sessionId !== 'string' || cursor < roundSize || cursor > total || (cursor < total && cursor % roundSize !== 0)) throw new Error('feedback');
   const trimmed = typeof text === 'string' ? text.trim() : '';
   if (trimmed.length > 1000) throw new Error('feedback-text');
   const normalizedRating = rating === 'positive' || rating === 'needs_improvement' ? rating : null;

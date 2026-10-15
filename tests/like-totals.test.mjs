@@ -31,7 +31,7 @@ test('summarizeLikes aggregates only questions in range and preserves duplicate 
 });
 
 test('stored totals survive a resumed session and use participant indexes', () => {
-  const session = createSession({ participants: ['A', 'B'], deck: decks.find((item) => item.id === 'friends'), random: () => 0.5 });
+  const session = { ...createSession({ participants: ['A', 'B'], deck: decks.find((item) => item.id === 'friends'), random: () => 0.5 }), roundSize: 6, unlockedUntil: 6 };
   session.cursor = 12; session.unlockedUntil = 12;
   session.roundStart = 6; session.roundNumber = 3;
   session.likes = { [`${session.questions[6].id}:1`]: 2, [`${session.questions[7].id}:0`]: 1 };

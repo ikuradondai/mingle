@@ -1,6 +1,11 @@
 export const ROUND_SIZE = 6;
+export const GROUP_ROUND_SIZE = 3;
 export const MAX_PARTICIPANTS = 8;
 export const MAX_NAME_LENGTH = 40;
+
+export function roundSizeFor(session) {
+  return session?.mode === 'solo' || session?.roundSize === ROUND_SIZE ? ROUND_SIZE : GROUP_ROUND_SIZE;
+}
 
 function createSessionId() {
   try { if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID(); } catch {}
@@ -37,7 +42,7 @@ export function createSession({ participants, deck, participantRule = 'group', a
   if (includeR18 && (!Array.isArray(deck.r18Questions) || deck.r18Questions.length < 6)) throw new Error('R18質問が不正です');
   const baseQuestions = includeR18 ? composeR18Questions(deck, random) : shuffle(deck.questions, random);
   const questions = includeChallenges ? composeChallenges(baseQuestions, random, includeR18 && !deck.adultOnly, deck.id, names.length, { adultConfirmed: adultConfirmed === true }) : baseQuestions;
-  return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: deck.id, deckIds: [deck.id], mixed: false, questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+  return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: deck.id, deckIds: [deck.id], mixed: false, questions, cursor: 0, unlockedUntil: GROUP_ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, roundSize: GROUP_ROUND_SIZE, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 // One-person fixed-order session for ひとりで. Group participant rules
@@ -46,7 +51,7 @@ export function createSoloSession({ deck, participant = '自分' } = {}) {
   if (!deck || deck.audience !== 'solo' || !Array.isArray(deck.questions) || deck.questions.length !== 12 || deck.questions.some((card) => card.r18 === true)) throw new Error('ソロテーマが不正です');
   const name = typeof participant === 'string' && participant.trim() ? participant.trim() : '自分';
   const questions = deck.questions.map((card) => ({ ...card, sourceDeckId: deck.id, r18: false }));
-  return { sessionId: createSessionId(), mode: 'solo', participants: [name], deckId: deck.id, deckIds: [deck.id], questionOrder: 'fixed', mixed: false, customSet: false, ownerUserId: null, customQuestions: [], questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: false, includeR18: false, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+  return { sessionId: createSessionId(), mode: 'solo', participants: [name], deckId: deck.id, deckIds: [deck.id], questionOrder: 'fixed', mixed: false, customSet: false, ownerUserId: null, customQuestions: [], questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, roundSize: ROUND_SIZE, adultConfirmed: false, includeR18: false, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 // Build a session from a saved account set. Static IDs use the shipped catalog; custom IDs use validated owner snapshots.
@@ -79,7 +84,8 @@ export function createSavedSession({ mode = 'group', participants, participant =
   const hasCustom = questions.some((card) => card.sourceDeckId === 'custom');
   if (hasCustom && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerUserId || '')) throw new Error('マイセットの所有者が不正です');
   const owner = typeof ownerUserId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ownerUserId) ? ownerUserId : null;
-  return { sessionId: createSessionId(), mode, participants: names, participantRule: normalizedRule, deckId: 'my-set', deckIds: ['my-set'], setId: typeof setId === 'string' ? setId : null, setName: typeof setName === 'string' ? setName : null, questionOrder, r18: r18 === true, design: normalizeCreatorDesign(design), customSet: true, ownerUserId: owner, customQuestions: hasCustom ? questions.filter((card) => card.sourceDeckId === 'custom').map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true })) : [], mixed: false, questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+  const roundSize = mode === 'solo' ? ROUND_SIZE : GROUP_ROUND_SIZE;
+  return { sessionId: createSessionId(), mode, participants: names, participantRule: normalizedRule, deckId: 'my-set', deckIds: ['my-set'], setId: typeof setId === 'string' ? setId : null, setName: typeof setName === 'string' ? setName : null, questionOrder, r18: r18 === true, design: normalizeCreatorDesign(design), customSet: true, ownerUserId: owner, customQuestions: hasCustom ? questions.filter((card) => card.sourceDeckId === 'custom').map((card) => ({ id: card.id, text: card.text, r18: card.r18 === true })) : [], mixed: false, questions, cursor: 0, unlockedUntil: Math.min(roundSize, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, roundSize, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 export function createSponsorSession({ mode = 'group', participants, participant = '自分', sponsor, cards, adultConfirmed = false, random = Math.random }) {
@@ -93,7 +99,8 @@ export function createSponsorSession({ mode = 'group', participants, participant
   if (normalized.some((card) => card.r18) && adultConfirmed !== true) throw new Error('成人向け確認が必要です');
   const questions = mode === 'solo' ? normalized : shuffle(normalized, random);
   const deckKey = `sponsor-${sponsor.id}`;
-  return { sessionId: createSessionId(), mode, questionOrder: mode === 'solo' ? 'fixed' : 'shuffle', participants: names, participantRule: rule, deckId: deckKey, deckIds: [deckKey], sponsorSet: true, sponsor: { id: sponsor.id, providerName: sponsor.providerName || '', title: sponsor.title || '', description: sponsor.description || '', categories: Array.isArray(sponsor.categories) ? [...sponsor.categories] : [], audience: sponsor.audience, endMessage: sponsor.endMessage || '', siteUrl: sponsor.siteUrl || '', ctaLabel: sponsor.ctaLabel || '', isR18: sponsor.isR18 === true, status: 'published', cardCount: cards.length, design: sponsor.design || null, thumbnailPath: sponsor.thumbnailPath || '', thumbnailUrl: sponsor.thumbnailUrl || '', cardFrontPath: sponsor.cardFrontPath || '', cardFrontUrl: sponsor.cardFrontUrl || '', cardBackPath: sponsor.cardBackPath || '', cardBackUrl: sponsor.cardBackUrl || '' }, customSet: false, ownerUserId: null, customQuestions: [], questions, cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18: normalized.some((card) => card.r18), includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+  const roundSize = mode === 'solo' ? ROUND_SIZE : GROUP_ROUND_SIZE;
+  return { sessionId: createSessionId(), mode, questionOrder: mode === 'solo' ? 'fixed' : 'shuffle', participants: names, participantRule: rule, deckId: deckKey, deckIds: [deckKey], sponsorSet: true, sponsor: { id: sponsor.id, providerName: sponsor.providerName || '', title: sponsor.title || '', description: sponsor.description || '', categories: Array.isArray(sponsor.categories) ? [...sponsor.categories] : [], audience: sponsor.audience, endMessage: sponsor.endMessage || '', siteUrl: sponsor.siteUrl || '', ctaLabel: sponsor.ctaLabel || '', isR18: sponsor.isR18 === true, status: 'published', cardCount: cards.length, design: sponsor.design || null, thumbnailPath: sponsor.thumbnailPath || '', thumbnailUrl: sponsor.thumbnailUrl || '', cardFrontPath: sponsor.cardFrontPath || '', cardFrontUrl: sponsor.cardFrontUrl || '', cardBackPath: sponsor.cardBackPath || '', cardBackUrl: sponsor.cardBackUrl || '' }, customSet: false, ownerUserId: null, customQuestions: [], questions, cursor: 0, unlockedUntil: Math.min(roundSize, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, roundSize, adultConfirmed: adultConfirmed === true, includeR18: normalized.some((card) => card.r18), includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 export function createSharedSession({ participants, cards, adultConfirmed = false, questionOrder = 'shuffle', r18 = false, design = null, participantRule = 'group', random = Math.random }) {
@@ -109,7 +116,7 @@ export function createSharedSession({ participants, cards, adultConfirmed = fals
   const includeR18 = effectiveCreatorAdult(r18 === true, questions);
   if (includeR18 && adultConfirmed !== true) throw new Error('成人向け確認が必要です');
   if (!['shuffle', 'fixed'].includes(questionOrder)) throw new Error('共有セットの並び順が不正です');
-  return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: 'shared-set', deckIds: ['shared-set'], questionOrder, r18: r18 === true, design: normalizeCreatorDesign(design), mixed: false, customSet: false, sharedGuest: true, ownerUserId: null, customQuestions: [], questions: questionOrder === 'fixed' ? questions : shuffle(questions, random), cursor: 0, unlockedUntil: Math.min(ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+  return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: 'shared-set', deckIds: ['shared-set'], questionOrder, r18: r18 === true, design: normalizeCreatorDesign(design), mixed: false, customSet: false, sharedGuest: true, ownerUserId: null, customQuestions: [], questions: questionOrder === 'fixed' ? questions : shuffle(questions, random), cursor: 0, unlockedUntil: Math.min(GROUP_ROUND_SIZE, questions.length), roundStart: 0, roundCount: 0, roundNumber: 1, roundSize: GROUP_ROUND_SIZE, adultConfirmed: adultConfirmed === true, includeR18, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 // 6 枚のお題を選ぶ。テーマ別を最大 4 枚（ミックスは各デッキに均等）、残りを共通お題で埋める。
@@ -202,7 +209,7 @@ export function createMixedSession({ participants, decks, participantRule = 'gro
   questions.push(...shuffle(tail, random));
   if (questions.length !== 40 || new Set(questions.map((question) => question.id)).size !== 40) throw new Error('ミックス質問が不正です');
   const finalQuestions = includeChallenges ? composeChallenges(questions, random, false, ids, names.length, { adultConfirmed: false }) : questions;
-  return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: 'mix', deckIds: ids, mixed: true, questions: finalQuestions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, adultConfirmed: false, includeR18: false, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+  return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: 'mix', deckIds: ids, mixed: true, questions: finalQuestions, cursor: 0, unlockedUntil: GROUP_ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, roundSize: GROUP_ROUND_SIZE, adultConfirmed: false, includeR18: false, includeChallenges, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
 }
 
 function composeR18Questions(deck, random) {
@@ -292,8 +299,8 @@ function moveToNextAnswer(session) {
   if (!isTogetherCard(currentCard(session)) && session.answerIndex < session.participants.length - 1) {
     return { ...session, answerIndex: session.answerIndex + 1 };
   }
-  const cursor = session.cursor + 1;
-  return { ...session, cursor, revealed: false, answerIndex: 0, roundCount: cursor % ROUND_SIZE, roundNumber: Math.floor(cursor / ROUND_SIZE) + 1 };
+  const cursor = session.cursor + 1; const roundSize = roundSizeFor(session);
+  return { ...session, cursor, revealed: false, answerIndex: 0, roundCount: cursor % roundSize, roundNumber: Math.floor(cursor / roundSize) + 1 };
 }
 
 export function nextAnswer(session) {
@@ -311,22 +318,22 @@ export function previousAnswer(session) {
 
 export function advance(session) {
   if (session.cursor >= session.questions.length || session.cursor >= session.unlockedUntil) return session;
-  const cursor = session.cursor + 1;
-  const next = { ...session, cursor, revealed: false, answerIndex: 0, roundCount: cursor % ROUND_SIZE, roundNumber: Math.floor(cursor / ROUND_SIZE) + 1 };
+  const cursor = session.cursor + 1; const roundSize = roundSizeFor(session);
+  const next = { ...session, cursor, revealed: false, answerIndex: 0, roundCount: cursor % roundSize, roundNumber: Math.floor(cursor / roundSize) + 1 };
   return next;
 }
 
 export function back(session) {
   if (session.cursor <= 0) return session;
   const cursor = session.cursor - 1;
-  const roundNumber = Math.floor(cursor / ROUND_SIZE) + 1;
-  return { ...session, cursor, revealed: false, answerIndex: 0, roundNumber, roundCount: cursor % ROUND_SIZE };
+  const roundSize = roundSizeFor(session); const roundNumber = Math.floor(cursor / roundSize) + 1;
+  return { ...session, cursor, revealed: false, answerIndex: 0, roundNumber, roundCount: cursor % roundSize };
 }
 
 export function continueRound(session) {
   if (!isRoundComplete(session) || isFinished(session)) return session;
-  const unlockedUntil = Math.min(session.unlockedUntil + ROUND_SIZE, session.questions.length);
-  return { ...session, unlockedUntil, roundStart: session.cursor, roundCount: session.cursor % ROUND_SIZE, roundNumber: Math.floor(session.cursor / ROUND_SIZE) + 1 };
+  const roundSize = roundSizeFor(session); const unlockedUntil = Math.min(session.unlockedUntil + roundSize, session.questions.length);
+  return { ...session, unlockedUntil, roundStart: session.cursor, roundCount: session.cursor % roundSize, roundNumber: Math.floor(session.cursor / roundSize) + 1 };
 }
 
 export function completedRoundFavoriteCards(session) {

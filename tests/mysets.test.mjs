@@ -1,13 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decks } from '../dist/data/decks.js';
-import { createSavedSession, createSession, createMixedSession, revealCard, nextAnswer, likeCurrentAnswer, continueRound, advance, completedRoundFavoriteCards } from '../dist/engine.js';
+import { createSavedSession as createSavedSessionBase, createSession as createSessionBase, createMixedSession as createMixedSessionBase, revealCard, nextAnswer, likeCurrentAnswer, continueRound, advance, completedRoundFavoriteCards } from '../dist/engine.js';
 import { loadSession, saveSession, SESSION_STORAGE_KEY } from '../dist/session-storage.js';
 
 const storage = () => { const data = new Map(); return { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, value), removeItem: (key) => data.delete(key) }; };
 const date = decks.find((deck) => deck.id === 'date');
 const ids = date.questions.slice(0, 13).map((card) => card.id);
 const allIds = date.questions.map((card) => card.id);
+// These storage/history fixtures predate the group three-card rollout and explicitly model legacy six-card records.
+const createSavedSession = (options) => ({ ...createSavedSessionBase(options), roundSize: 6, unlockedUntil: Math.min(6, options.cardIds.length) });
+const createSession = (options) => ({ ...createSessionBase(options), roundSize: 6, unlockedUntil: 6 });
+const createMixedSession = (options) => ({ ...createMixedSessionBase(options), roundSize: 6, unlockedUntil: 6 });
 
 test('createSavedSession canonicalizes six-to-forty IDs and excludes raw account data', () => {
   const session = createSavedSession({ participants: ['A', 'B'], cardIds: ids.slice(0, 6), random: () => 0 });

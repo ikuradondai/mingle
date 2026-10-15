@@ -3,7 +3,7 @@ import { bodyWithLimit, clientRateKey, exactKeys, json, sameOrigin } from '../se
 import { consumeRate, persistentStoreAvailable, recordFeedback } from '../server-side/store.mjs';
 import { decks } from '../dist/data/decks.js';
 
-const CURSORS = new Set([6, 12, 18, 24, 30, 36, 40]);
+const CURSORS = new Set([3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 40]);
 const SESSION_ID = /^[A-Za-z0-9-]{8,100}$/;
 const REGULAR_THEME_IDS = new Set(decks.filter((deck) => !deck.adultOnly).map((deck) => deck.id));
 function todayJst(date) { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date); }
@@ -16,7 +16,7 @@ export default async function feedback(req, res) {
   if (!exactKeys(input, ['sessionId', 'cursor', 'themeId', 'themeIds', 'rating', 'text'])) return json(res, 400, { error: 'invalid_feedback' });
   if (typeof input.sessionId !== 'string' || !SESSION_ID.test(input.sessionId)) return json(res, 400, { error: 'invalid_feedback' });
   const customSet = input.themeId === 'my-set' || input.themeId === 'shared-set';
-  if (!Number.isSafeInteger(input.cursor) || (customSet ? input.cursor < 6 || input.cursor > 40 : !CURSORS.has(input.cursor))) return json(res, 400, { error: 'invalid_feedback' });
+  if (!Number.isSafeInteger(input.cursor) || (customSet ? input.cursor < 3 || input.cursor > 40 : !CURSORS.has(input.cursor))) return json(res, 400, { error: 'invalid_feedback' });
   if (typeof input.themeId !== 'string' || !ALLOWED_THEME_IDS.includes(input.themeId)) return json(res, 400, { error: 'invalid_feedback' });
   if (!Array.isArray(input.themeIds) || input.themeIds.some((id) => typeof id !== 'string') || new Set(input.themeIds).size !== input.themeIds.length) return json(res, 400, { error: 'invalid_feedback' });
   if (customSet) {
