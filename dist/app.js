@@ -1706,7 +1706,7 @@ function roundCompletionView(session, { solo = false, favoriteBusy = false } = {
   const motionClass = info.final ? 'is-final' : '';
   const body = completionChoiceView(session, favoriteBusy, solo);
   const soloName = solo ? soloDisplayName(session) : "";
-  const soloTitle = solo ? (soloName ? `<span class="solo-completion-name">${esc(soloName)}、</span><span class="solo-completion-greeting">おつかれさま。</span>` : `${cardCount}、おつかれさま。`) : `${cardCount}、おつかれさまでした`;
+  const soloTitle = solo ? (soloName ? `<span class="solo-completion-name">${esc(soloName)}、</span><span class="solo-completion-greeting">おつかれさま。</span>` : `${cardCount}、おつかれさま。`) : "ふりかえってみよう！";
   return `<section class="round-completion ${solo ? 'is-solo' : 'is-group'} ${motionClass}" data-round-completion data-round-key="${esc(key)}"><div class="round-completion-layout"><div class="round-completion-main"><div class="round-completion-copy"><p class="round-completion-kicker">${esc(completionThemeLabel(session))}</p><h1 class="round-completion-title" tabindex="-1" data-focus>${soloTitle}</h1><p class="round-completion-lead">${solo ? count : ""}${info.final ? ` · 全${info.total}枚完了` : ""}</p></div>${body}</div></div></section>`;
 }
 function completionSponsorView(session) {
