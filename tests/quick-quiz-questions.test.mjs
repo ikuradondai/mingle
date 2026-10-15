@@ -4,14 +4,14 @@ import { QUICK_QUIZ_LEVELS, QUICK_QUIZ_QUESTIONS, getQuickQuizQuestion } from '.
 
 const levelIds = QUICK_QUIZ_LEVELS.map(({ id }) => id);
 
-test('quick quiz preserves four levels and twelve stable IDs per level', () => {
+test('quick quiz preserves four levels and forty stable IDs per level', () => {
   assert.deepEqual(levelIds, ['beginner', 'intermediate', 'advanced', 'expert']);
-  assert.equal(QUICK_QUIZ_QUESTIONS.length, 48);
-  assert.equal(new Set(QUICK_QUIZ_QUESTIONS.map(({ id }) => id)).size, 48);
+  assert.equal(QUICK_QUIZ_QUESTIONS.length, 160);
+  assert.equal(new Set(QUICK_QUIZ_QUESTIONS.map(({ id }) => id)).size, 160);
   for (const level of levelIds) {
     const questions = QUICK_QUIZ_QUESTIONS.filter((question) => question.level === level);
-    assert.equal(questions.length, 12, level);
-    assert.deepEqual(questions.map(({ id }) => id), Array.from({ length: 12 }, (_, i) => `${level}-${String(i + 1).padStart(2, '0')}`));
+    assert.equal(questions.length, 40, level);
+    assert.deepEqual(questions.map(({ id }) => id), Array.from({ length: 40 }, (_, i) => `${level}-${String(i + 1).padStart(2, '0')}`));
   }
 });
 
@@ -53,7 +53,6 @@ test('canonical choice one matches the original answer for every existing item',
     'expert-05': '720年', 'expert-06': '142857', 'expert-07': '273.16K', 'expert-08': '5種類',
     'expert-09': '川の流れ', 'expert-10': '10段階', 'expert-11': '84通り', 'expert-12': '338350',
   };
-  assert.deepEqual(new Set(Object.keys(expected)), new Set(QUICK_QUIZ_QUESTIONS.map(({ id }) => id)));
   for (const [id, answer] of Object.entries(expected)) {
     const question = getQuickQuizQuestion(id);
     const correct = question.choices.find(({ id: choiceId }) => choiceId === question.correctChoiceId);

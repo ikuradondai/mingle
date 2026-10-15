@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { quizBuzzAction, quizBuzzCreatePayload, quizBuzzInput, quizBuzzSource, quizBuzzState } from '../server-side/quiz-buzz.mjs';
+import { quizBuzzAction, quizBuzzCreatePayload, quizBuzzInput, quizBuzzSource, quizBuzzState, selectQuickQuizQuestions } from '../server-side/quiz-buzz.mjs';
 
 const room = { id: '00000000-0000-4000-8000-000000000001', game_type: 'quiz_buzz', revision: 4, status: 'playing', member_count: 2 };
 const member = { id: '00000000-0000-4000-8000-000000000002', role: 'guest' };
@@ -13,6 +13,32 @@ test('create payload preserves six server-selected questions and opaque shuffled
   assert.equal(payload.p_questions.length, 6);
   assert.ok(payload.p_questions.every((q) => q.choices.length === 4 && q.correctChoiceId && q.choices.some((choice) => choice.id === q.correctChoiceId)));
   assert.equal(source.cards.length, 6);
+});
+
+test('default create payload selects six unique questions for every difficulty', () => {
+  for (const difficulty of ['beginner', 'intermediate', 'advanced', 'expert']) {
+    const gi = quizBuzzInput({ difficulty });
+    const payload = quizBuzzCreatePayload({ common: {}, gi, source: quizBuzzSource(gi), input: {} });
+    assert.equal(payload.p_questions.length, 6, difficulty);
+    assert.equal(new Set(payload.p_questions.map(({ id }) => id)).size, 6, difficulty);
+    assert.ok(payload.p_questions.every(({ id }) => id.startsWith(`${difficulty}-`)), difficulty);
+  }
+});
+
+test('server selects six distinct questions from each forty-question level', () => {
+  const levels = ['beginner', 'intermediate', 'advanced', 'expert'];
+  for (const level of levels) {
+    const first = selectQuickQuizQuestions(level, () => 0);
+    const second = selectQuickQuizQuestions(level, (max) => Math.floor(max / 2));
+    for (const questions of [first, second]) {
+      assert.equal(questions.length, 6, level);
+      assert.equal(new Set(questions.map(({ id }) => id)).size, 6, level);
+      assert.ok(questions.every(({ id }) => id.startsWith(`${level}-`)), level);
+      assert.ok(questions.every(({ id }) => Number(id.slice(-2)) >= 1 && Number(id.slice(-2)) <= 40), level);
+    }
+    assert.notDeepEqual(first.map(({ id }) => id).sort(), second.map(({ id }) => id).sort(), `${level} selection must depend on randomness`);
+    assert.ok([...first, ...second].some(({ id }) => Number(id.slice(-2)) >= 13), `${level} extended bank is selectable`);
+  }
 });
 
 test('live projection excludes the correct choice and explanation', async () => {

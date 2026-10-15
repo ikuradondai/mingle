@@ -10,20 +10,20 @@ const ERRORS = ['QUIZ_BUZZ_PHASE', 'QUIZ_BUZZ_PARTICIPANTS', 'QUIZ_BUZZ_STALE_RO
 export const QUIZ_BUZZ_ERROR_STATUS = Object.fromEntries(ERRORS.map((code) => [code, 409]));
 const ACTIONS = new Set(['start', 'claim', 'answer', 'advance', 'finish']);
 
-const shuffle = (items) => {
+const shuffle = (items, random = randomInt) => {
   const out = [...items];
   for (let i = out.length - 1; i > 0; i -= 1) {
-    const n = randomInt(i + 1); [out[i], out[n]] = [out[n], out[i]];
+    const n = random(i + 1); [out[i], out[n]] = [out[n], out[i]];
   }
   return out;
 };
 
-function validateQuestions(level) {
+export function selectQuickQuizQuestions(level, random = randomInt) {
   if (!LEVELS.has(level)) throw fail(400, 'QUIZ_BUZZ_INVALID');
   const source = QUICK_QUIZ_QUESTIONS.filter((item) => item.level === level);
   if (source.length < 6) throw fail(503, 'QUIZ_BUZZ_UNAVAILABLE');
-  return shuffle(source).slice(0, 6).map((item) => {
-    const choices = shuffle(item.choices.map((choice) => ({ id: choice.id, text: choice.text })));
+  return shuffle(source, random).slice(0, 6).map((item) => {
+    const choices = shuffle(item.choices.map((choice) => ({ id: choice.id, text: choice.text })), random);
     return { id: item.id, question: item.question, choices, correctChoiceId: item.correctChoiceId, explanation: item.explanation };
   });
 }
@@ -34,7 +34,7 @@ export const quizBuzzInput = (input = {}) => {
   return { type: 'quiz_buzz', difficulty: level };
 };
 export const quizBuzzSource = (gi) => ({ id: 'quiz_buzz', name: 'みんなで早押しクイズ', cards: Array.from({ length: 6 }, (_, i) => ({ id: `quiz-buzz:${i + 1}`, text: 'クイズ', r18: false, sourceDeckId: 'quiz_buzz', participantRule: 'group' })), adultOnly: false, participantRule: 'group' });
-export const quizBuzzCreatePayload = ({ common, gi }) => ({ ...common, p_difficulty: gi.difficulty, p_questions: validateQuestions(gi.difficulty) });
+export const quizBuzzCreatePayload = ({ common, gi }) => ({ ...common, p_difficulty: gi.difficulty, p_questions: selectQuickQuizQuestions(gi.difficulty) });
 
 const publicRound = (game, round, memberId, attempt = null) => {
   if (!round) return null;
