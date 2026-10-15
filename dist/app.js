@@ -7,6 +7,7 @@ import { roundCompletionInfo } from "./round-completion.js";
 import { completionFeelingChoices, completionFeelingFor, completionFeelingKey } from "./round-feeling.js";
 import { completionReplyContext, completionReplyKey, completionReplyCopy } from "./completion-reply.js";
 import { completionRecallKey as recallMemoryKey, completionRecallCandidates, chooseRecallEntry } from "./completion-recall.js";
+import { startCompletionCelebration } from "./completion-celebration.js";
 import { ROUND_SIZE, isTogetherCard, createSession, createMixedSession, createSavedSession, createSharedSession, createSoloSession, createSponsorSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer, previousAnswer, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS, summarizeLikes } from "./engine.js";
 import { themeGroups, groupLabels } from "./data/theme-groups.js";
 import { buildFeedbackPayload, feedbackKey, submitFeedback } from "./feedback.js";
@@ -37,6 +38,7 @@ import { groupGames } from "./data/game-registry.js";
 import { gameParticipantGate } from "./game-participant-gate.js";
 import { consumeSocialGameIntent, saveSocialGameIntent } from "./social-game-intent.js";
 const root = document.querySelector("#app");
+let completionFinishInFlight = false;
 const state = {
   torisetsu: null,
   shared: null,
@@ -3113,13 +3115,13 @@ async function handleAction(event) {
     await continueCurrentRound();
     return;
   }
-  if (action === "finish") { clearCompletionRecallSession(state.session); state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
+  if (action === "finish") { const celebrateCandidate = event.currentTarget.classList.contains("completion-finish"); if (celebrateCandidate && completionFinishInFlight) return; if (celebrateCandidate) completionFinishInFlight = true; const celebrate = celebrateCandidate; clearCompletionRecallSession(state.session); state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
     state.resume = loadResumeForCurrentUser();
     restoreGroupHomeState();
     state.screen = "participants";
     state.venue = null; state.shared = null; state.selectedVenueSetId = null;
     if (location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
-    state.error = ""; state.includeChallenges = false; state.adultConfirmed = false; render(); }
+    state.error = ""; state.includeChallenges = false; state.adultConfirmed = false; render(); if (celebrate) { try { startCompletionCelebration({ onComplete: () => { completionFinishInFlight = false; } }); } catch { completionFinishInFlight = false; } } }
 }
 
 let webMcpRegistered = false;

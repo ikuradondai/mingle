@@ -14,6 +14,7 @@ The completion screen uses a compact warm-cream summary with four equal actions:
 - `.round-favorites-compact` and `.theme-likes` remain available below the compact action area, along with save, continue, and finish behavior.
 - `覚えてる？` uses only an in-memory map of completed ordinary card answers for the current round: card ID, participant name/index, and question text. It records on the normal next-card action, excludes pass and challenge/together cards, is never serialized or sent to an API, and disables itself when there are no candidates. A second question is offered only when another candidate exists.
 - Solo sessions keep the existing self-directed completion copy and do not show prompts addressed to other people.
+- Clicking the completion-only `今日はここまで` button runs the existing finish transition once, then opens `completion-celebration.js`. It chooses among four non-repeating Canvas scenes (confetti cannon, fireworks, ribbons, or Mingle cards), lasts about three seconds, and can be closed by the button or Escape. The overlay traps focus, marks the background inert, restores participant focus on close, cleans up RAF/resize/key listeners, and falls back to a short static celebration under reduced motion. No session or answer data is used.
 
 ## Image generation
 
