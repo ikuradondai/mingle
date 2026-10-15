@@ -693,7 +693,14 @@ body.solo-play .app-shell[data-screen="play"] .solo-card-back{min-height:var(--s
 body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;grid-template-columns:minmax(0,1fr) 120px}
 @media(max-width:680px){body.solo-play .app-shell[data-screen="play"] .solo-question-card,body.solo-play .app-shell[data-screen="play"] .solo-card-back{padding:28px 22px 62px;border-radius:20px}body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{grid-template-columns:minmax(0,1fr) 92px}}
 /* Shared navigation header for theme screens and compact play controls. */
-.theme-frame-topbar{width:min(100%,900px);margin:0 auto;padding:max(12px,env(safe-area-inset-top)) 24px 10px;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:64px;box-sizing:border-box}
+.theme-frame-topbar{position:relative;width:min(100%,900px);margin:0 auto;padding:max(12px,env(safe-area-inset-top)) 24px 10px;display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:64px;box-sizing:border-box}
+.theme-frame-topbar.has-guest-theme-hint{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,360px) auto}
+.theme-frame-topbar.has-guest-theme-hint .guest-theme-account-hint{grid-column:2;grid-row:1}.theme-frame-topbar.has-guest-theme-hint .account-bar{grid-column:3;grid-row:1}
+.guest-theme-account-hint{position:relative;z-index:6;width:100%;box-sizing:border-box;margin:0;padding:14px 40px 14px 16px;border:2px solid var(--blue);border-radius:18px;color:var(--ink);background:#fff;box-shadow:0 10px 24px rgba(20,33,61,.16);font-size:14px;font-weight:400;line-height:1.5;text-align:left}
+.guest-theme-account-hint::before{content:"";position:absolute;top:50%;right:-9px;width:16px;height:16px;border-top:2px solid var(--blue);border-right:2px solid var(--blue);background:#fff;transform:translateY(-50%) rotate(45deg)}
+.guest-theme-account-hint p{margin:0}.guest-theme-account-hint strong{font-weight:900}
+.guest-theme-account-hint-close{position:absolute;top:5px;right:6px;width:32px;height:32px;padding:0;border:0;border-radius:50%;color:var(--muted);background:transparent;font-size:20px;line-height:1;cursor:pointer}
+.guest-theme-account-hint-close:hover,.guest-theme-account-hint-close:focus-visible{color:var(--ink);background:#eef4ff}
 .app-brand-home{width:112px;height:58px;min-height:44px;padding:0;overflow:hidden;justify-content:flex-start}
 .app-brand-home img{display:block;width:112px;height:58px;object-fit:contain;object-position:left center}
 .topbar .account-bar,.theme-frame-topbar .account-bar{margin:0 0 0 auto;flex:0 0 auto}
@@ -704,7 +711,7 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .solo-memo summary{gap:6px}.solo-memo summary .action-icon{width:17px;height:17px;vertical-align:-3px}
 .answer-actions .secondary-button:has(.action-icon){min-width:44px;padding:0 12px}.answer-actions .like-button{display:inline-flex;align-items:center;justify-content:center;gap:4px}.answer-actions .like-button .action-icon{margin:0;width:18px;height:18px}
 .icon-action:focus-visible,.app-brand-home:focus-visible{outline:3px solid var(--lime);outline-offset:3px}
-@media(max-width:680px){.theme-frame-topbar{padding-left:16px;padding-right:16px}.app-brand-home,.app-brand-home img{width:100px;height:52px}.theme-frame-topbar .account-button{width:44px;height:44px}}
+@media(max-width:680px){.theme-frame-topbar{padding-left:16px;padding-right:16px}.theme-frame-topbar.has-guest-theme-hint{grid-template-columns:minmax(0,1fr) auto;gap:8px 12px}.theme-frame-topbar.has-guest-theme-hint .guest-theme-account-hint{grid-column:1 / -1;grid-row:2}.theme-frame-topbar.has-guest-theme-hint .account-bar{grid-column:2;grid-row:1}.guest-theme-account-hint{font-size:14px}.guest-theme-account-hint::before{top:-9px;right:20px;transform:rotate(45deg)}.app-brand-home,.app-brand-home img{width:100px;height:52px}.theme-frame-topbar .account-button{width:44px;height:44px}}
 @media (orientation:landscape) and (max-height:560px){body.solo-play .app-shell[data-screen="play"] .content{display:block;grid-template-columns:none;grid-template-rows:none;gap:0;padding-left:16px;padding-right:16px}body.solo-play .app-shell[data-screen="play"] .solo-question-card,body.solo-play .app-shell[data-screen="play"] .solo-card-back{grid-column:auto;grid-row:auto}}
 
 /* Shared play shell: one stable geometry for unrevealed and revealed cards. */
