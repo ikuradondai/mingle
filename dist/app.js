@@ -35,6 +35,7 @@ import { consumeMissionAuthIntent, saveMissionAuthIntent } from "./mission-mingl
 import { consumeQuickQuizAuthIntent, saveQuickQuizAuthIntent, saveQuickQuizSetupIntent } from "./quick-quiz-auth-intent.js";
 import { gameCardImage } from "./game-card-images.js";
 import { groupGames } from "./data/game-registry.js";
+import { categoryVisibility, applyCategoryVisibility, applyThemeVisibility } from "./theme-visibility.js";
 import { gameParticipantGate } from "./game-participant-gate.js";
 import { consumeSocialGameIntent, saveSocialGameIntent } from "./social-game-intent.js";
 const root = document.querySelector("#app");
@@ -61,7 +62,7 @@ const state = {
   error: "", busy: false, sponsorItems: [], sponsorOrder: Object.create(null), sponsorLoaded: false, sponsorLoading: false, sponsorError: "", sponsorDetailLoading: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, themeLikePending: new Set(), themeLikeStatus: Object.create(null), lastAdvanceAt: 0, focusAction: null, focusSelector: null, helpOpen: false, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null, soloNoteDraft: "", soloNoteStatus: "", soloNoteError: "", soloSummaryDraft: "", soloSummaryStatus: "", soloDraftOwner: null, soloDraftRevision: 0, soloMemoOpen: false, soloMemoKey: "", soloHistoryOpen: false, soloHistory: [], soloHistoryCursor: null, soloHistoryHasMore: false, soloHistoryLoading: false, soloHistoryError: "", soloHistoryEditing: null, soloNoteDrafts: Object.create(null), soloNoteStatuses: Object.create(null), soloNoteErrors: Object.create(null), soloSummaryDrafts: Object.create(null), soloSummaryStatuses: Object.create(null), soloSummaryErrors: Object.create(null),
   selectedDeckIds: ["friends"],
   themeMode: "single", participantTab: "group", guestThemeHintDismissed: false,
-  filter: "all", adultConfirmed: false, includeChallenges: false, resume: null, themeExplorerView: "cards", themeExplorerQuery: "", themeExplorerShelf: "all", themeExplorerTagFilter: "all", themeOptionsOpen: false, account: { enabled: accountConfig.enabled, authReady: false, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false,
+  filter: "all", adultConfirmed: false, includeChallenges: false, resume: null, themeExplorerView: "cards", themeExplorerQuery: "", themeExplorerShelf: "all", themeExplorerTagFilter: "all", themeOptionsOpen: false, account: { enabled: accountConfig.enabled, authReady: false, google: accountConfig.google, user: null, favorites: new Set(), hiddenThemeIds: new Set(), savedHiddenThemeIds: new Set(), themeVisibilityRevision: 0, themeVisibilityReady: false, themeVisibilityAvailable: false, themeVisibilityError: "", themeVisibilityOpenCategories: new Set(['relationship', 'friends']), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false,
     shareOpen: false,
     shareBusy: false,
     shareRequestId: 0,
@@ -348,7 +349,7 @@ function restoreAuthReturnIntent() {
   if (!Array.isArray(intent.participants) || intent.participants.length < 2 || intent.participants.length > 8 || !intent.participants.every((name) => typeof name === "string" && name.length <= MAX_NAME_LENGTH && !/[\u0000-\u001f\u007f]/u.test(name))) return;
   state.participants = intent.participants;
   if (intent.screen === "participants") { state.screen = "participants"; return; }
-  const validIds = new Set(decks.filter((deck) => canSeeTheme(deck, state.account)).map((deck) => deck.id));
+  const validIds = new Set(decks.filter((deck) => canSeeDeck(deck)).map((deck) => deck.id));
   const ids = Array.isArray(intent.selectedDeckIds) ? intent.selectedDeckIds.filter((id) => validIds.has(id)).slice(0, 3) : [];
   state.selectedDeckIds = ids.length ? ids : ["date"];
   state.selectedDeckId = validIds.has(intent.selectedDeckId) ? intent.selectedDeckId : state.selectedDeckIds[0];
@@ -392,7 +393,9 @@ function setR18DisplayVisible(visible) {
 function r18DisplayToggle() { return ageConfirmed() ? `<label class="r18-display-toggle"><input type="checkbox" data-r18-display ${r18DisplayVisible() ? "checked" : ""}/> <span>R18を表示する</span></label>` : ""; }
 function venueR18Hidden(session = state.session) { return Boolean(state.venue && session?.venueSession && sessionHasR18(session) && !(state.venue.ageTapped === true && state.venue.displayR18 === true)); }
 function venueR18Gate(session) { return `<div class="venue-r18-display-gate"><p>R18を表示するまで、店舗テーマの名前と質問を非表示にしています。</p><label class="adult-consent"><input type="checkbox" data-venue-play-r18 ${state.venue?.displayR18 ? "checked" : ""}/> <span>R18を表示する</span></label></div>${state.account.open || state.helpOpen ? accountView({ overlayOnly: true }) : ""}`; }
-function canSeeDeck(deck) { return canSeeTheme(deck, state.account); }
+function isThemeVisibilityReady() { return !state.account.user || state.account.themeVisibilityReady === true; }
+function isThemeHidden(deck) { return isThemeVisibilityReady() && Boolean(deck?.id && state.account.hiddenThemeIds?.has(deck.id)); }
+function canSeeDeck(deck) { return isThemeVisibilityReady() && canSeeTheme(deck, state.account) && !isThemeHidden(deck); }
 function canOfferR18(deck) { return canOfferR18Option(deck, state.account); }
 const AGE_REQUIRED_MESSAGE = "R18は、アカウント設定で18歳以上の確認をすると利用できます。";
 const ADULT_INTENT_KEY = "mingle.cards.adult-intent.v1";
@@ -757,7 +760,7 @@ function render() {
     state.themeMode = event.target.checked ? "mixed" : "single";
     state.adultConfirmed = false;
     if (state.themeMode === "mixed") {
-      const regular = new Set(decks.filter((deck) => !deck.adultOnly && participantRuleVisibleForParticipants(participantRuleForDeck(deck))).map((deck) => deck.id));
+      const regular = new Set(decks.filter((deck) => !deck.adultOnly && canSeeDeck(deck) && participantRuleVisibleForParticipants(participantRuleForDeck(deck))).map((deck) => deck.id));
       state.selectedDeckIds = state.selectedDeckIds.filter((id) => regular.has(id));
       if (!state.selectedDeckIds.length && regular.has(state.selectedDeckId)) state.selectedDeckIds = [state.selectedDeckId];
       if (state.filter === "adult") state.filter = "all";
@@ -784,6 +787,13 @@ function render() {
   root.querySelector('[data-action="discard-resume"]')?.addEventListener("click", () => { clearSession(); state.resume = null; render(); });
   root.querySelector("[data-account-email]")?.addEventListener("input", (event) => { state.account.email = event.target.value; });
   root.querySelector("[data-profile-name]")?.addEventListener("input", (event) => { state.account.profileDraft = event.target.value; const button = root.querySelector('form[data-form="profile"] button[type="submit"]'); if (button) button.disabled = state.account.busy || !validDisplayName(state.account.profileDraft); });
+  root.querySelectorAll('[data-theme-visibility-category]').forEach((input) => {
+    const stateValue = input.dataset.themeVisibilityState;
+    input.indeterminate = stateValue === 'some';
+     input.addEventListener('change', () => { if (!state.account.themeVisibilityReady || !state.account.themeVisibilityAvailable) return; const categoryId = input.dataset.themeVisibilityCategory; const themes = categoryId.startsWith('solo-') ? soloDecks.filter((deck) => deck.category === categoryId.slice(5)) : categoryId === 'adult' ? decks.filter((deck) => deck.adultOnly || deck.questions?.some((card) => card?.r18 === true)) : categoryId === 'game' ? groupGames : decks.filter((deck) => themeGroups[deck.id]?.includes(categoryId)); const next = applyCategoryVisibility(state.account.hiddenThemeIds || new Set(), themes.map((deck) => deck.id), input.checked); state.account.hiddenThemeIds = next; state.focusSelector = `[data-theme-visibility-category="${CSS.escape(categoryId)}"]`; saveThemeVisibility(); });
+  });
+  root.querySelectorAll('[data-theme-visibility-toggle]').forEach((button) => button.addEventListener('click', () => { const id = button.dataset.themeVisibilityToggle; const open = state.account.themeVisibilityOpenCategories || new Set(); const next = new Set(open); if (next.has(id)) next.delete(id); else next.add(id); state.account.themeVisibilityOpenCategories = next; state.focusSelector = `[data-theme-visibility-toggle="${CSS.escape(id)}"]`; render(); }));
+   root.querySelectorAll('[data-theme-visibility-id]').forEach((input) => input.addEventListener('change', (event) => { if (!state.account.themeVisibilityReady || !state.account.themeVisibilityAvailable) return; const next = applyThemeVisibility(state.account.hiddenThemeIds || new Set(), input.dataset.themeVisibilityId, input.checked); const id = input.dataset.themeVisibilityId; state.account.hiddenThemeIds = next; state.focusSelector = event.currentTarget.id ? `#${CSS.escape(event.currentTarget.id)}` : `[data-theme-visibility-id="${CSS.escape(id)}"]`; root.querySelectorAll(`[data-theme-visibility-id="${CSS.escape(id)}"]`).forEach((other) => { other.checked = input.checked; }); saveThemeVisibility(); }));
   root.querySelector("[data-avatar-file]")?.addEventListener("change", prepareAvatar);
   root.querySelector("[data-share-facebook]")?.addEventListener("click", copyFacebookShareText);
   root.querySelector("[data-share-fallback]")?.addEventListener("focus", (event) => event.currentTarget.select());
@@ -1206,7 +1216,12 @@ function ageSettingsView(a) {
 function accountSettingsView(a) {
   if (a.deleteOpen) return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-settings">戻る</button><strong id="account-dialog-title">退会の確認</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-delete-warning"><p>退会すると、このアカウントの表示名・年齢確認の記録・お気に入り・自作質問カード・非公開マイセットを削除します。</p><p>このアカウントが所有する店舗設定・提供テーマ・卓上QR・利用集計も削除されます。</p><p>このアカウントが所有する企業組織と、そのメンバー登録・テーマや機能の設定も削除されます。所属しているだけの組織では、自分の登録だけが削除されます。</p><p>この端末の呼び名と途中データも削除されます。</p><p>削除後は取り消せません。</p><label class="account-delete-confirm-label"><input type="checkbox" data-delete-confirm ${a.deleteConfirmed ? "checked" : ""} ${a.busy ? "disabled" : ""}/> 内容を確認しました</label></div>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}<div class="account-delete-actions"><button type="button" class="text-button" data-action="account-delete-cancel" ${a.busy ? "disabled" : ""}>キャンセル</button><button type="button" class="danger-button" data-action="account-delete-confirm" ${a.busy || !a.deletionAvailable || !a.deleteConfirmed ? "disabled" : ""}>${a.busy ? "削除中…" : "退会して削除"}</button></div>`, "account-dialog-delete");
   const valid = validDisplayName(a.profileDraft);
-  return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-menu">戻る</button><strong id="account-dialog-title">アカウント設定</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${avatarSettingsView(a)}<form class="account-settings-form" data-form="profile"><label>表示名<input type="text" data-profile-name value="${esc(a.profileDraft)}" maxlength="80" autocomplete="nickname" ${a.busy ? "disabled" : ""}/></label><p class="account-hint">1人目の呼び名に自動入力されます。遊ぶときに変更できます。</p><p class="account-email">${esc(a.user?.email || "")}</p><button type="submit" class="primary-button" ${a.busy || !valid ? "disabled" : ""}>${a.busy ? "保存中…" : "表示名を保存"}</button></form>${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ""}${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}${ageSettingsView(a)}<section class="account-delete-section"><h2>退会</h2>${a.deletionAvailable ? `<button type="button" class="danger-button" data-action="account-delete-open" ${a.avatarBusy ? "disabled" : ""}>アカウントを削除</button>` : '<p class="account-hint">退会手続きは現在利用できません。</p><a class="account-support" href="mailto:inquiry@erudaite.ai">問い合わせる</a>'}</section>`, "account-dialog-settings");
+  const gameThemes = groupGames.map((game) => ({ id: game.id, title: game.title }));
+   const controlsDisabled = a.busy || !a.themeVisibilityReady || !a.themeVisibilityAvailable;
+  const categories = [...Object.entries(groupLabels).filter(([id]) => id !== 'all').map(([id, label]) => ({ id, label, themes: id === 'adult' ? decks.filter((deck) => deck.adultOnly || deck.questions?.some((card) => card?.r18 === true)) : id === 'game' ? gameThemes : decks.filter((deck) => themeGroups[deck.id]?.includes(id)) })), ...soloCategories.map((category) => ({ id: `solo-${category.id}`, label: category.label, themes: soloDecks.filter((deck) => deck.category === category.id) }))].filter(({ themes }) => themes.length);
+   const themeRows = (themes, categoryIndex) => themes.map((deck, themeIndex) => { const inputId = `theme-visibility-${deck.id}-${categoryIndex}-${themeIndex}`; return `<label class="account-theme-visibility-item" for="${esc(inputId)}"><input id="${esc(inputId)}" type="checkbox" data-theme-visibility-id="${esc(deck.id)}" ${a.hiddenThemeIds?.has(deck.id) ? 'checked' : ''} ${controlsDisabled ? 'disabled' : ''}/> <span>${esc(deck.title)}</span></label>`; }).join('');
+   const categoryRows = categories.map(({ id, label, themes }, categoryIndex) => { const stateValue = categoryVisibility(themes.map((deck) => deck.id), a.hiddenThemeIds).state; const open = a.themeVisibilityOpenCategories?.has(id); return `<section class="account-theme-visibility-category"><div class="account-theme-visibility-category-head"><label><input type="checkbox" data-theme-visibility-category="${esc(id)}" data-theme-visibility-state="${stateValue}" ${stateValue === 'all' ? 'checked' : ''} ${controlsDisabled ? 'disabled' : ''}/> <strong>${esc(label)}</strong></label><button type="button" class="text-button" data-theme-visibility-toggle="${esc(id)}" aria-expanded="${open}">${open ? '閉じる' : '開く'}（${themes.length}）</button></div><div class="account-theme-visibility-list" ${open ? '' : 'hidden'}>${themeRows(themes, categoryIndex)}</div></section>`; }).join('');
+   return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-menu">戻る</button><strong id="account-dialog-title">アカウント設定</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${avatarSettingsView(a)}<form class="account-settings-form" data-form="profile"><label>表示名<input type="text" data-profile-name value="${esc(a.profileDraft)}" maxlength="80" autocomplete="nickname" ${a.busy ? "disabled" : ""}/></label><p class="account-hint">1人目の呼び名に自動入力されます。遊ぶときに変更できます。</p><p class="account-email">${esc(a.user?.email || "")}</p><button type="submit" class="primary-button" ${a.busy || !valid ? "disabled" : ""}>${a.busy ? "保存中…" : "表示名を保存"}</button></form>${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ""}${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}<section class="account-theme-visibility" aria-labelledby="theme-visibility-title"><h2 id="theme-visibility-title">テーマの表示設定</h2><p class="account-hint">チェックしたテーマを一覧で非表示にします。</p>${a.themeVisibilityError ? `<p class="form-error" role="alert">${esc(a.themeVisibilityError)} <button type="button" class="text-button" data-action="theme-visibility-retry">再読み込み</button></p>` : ''}<button type="button" class="text-button" data-action="theme-visibility-all" ${controlsDisabled || a.hiddenThemeIds?.size === 0 ? 'disabled' : ''}>すべて表示に戻す</button>${!a.themeVisibilityReady && !a.themeVisibilityError ? '<p class="account-hint">設定を読み込み中です。完了するまで変更できません。</p>' : ''}${categoryRows}</section>${ageSettingsView(a)}<section class="account-delete-section"><h2>退会</h2>${a.deletionAvailable ? `<button type="button" class="danger-button" data-action="account-delete-open" ${a.avatarBusy ? "disabled" : ""}>アカウントを削除</button>` : '<p class="account-hint">退会手続きは現在利用できません。</p><a class="account-support" href="mailto:inquiry@erudaite.ai">問い合わせる</a>'}</section>`, "account-dialog-settings");
 }
 function accountView(options = {}) {
   if (!state.account.enabled) return "";
@@ -1439,7 +1454,10 @@ function themeExplorerUnique(decksForResult) {
   return [...new Map(decksForResult.map((deck) => [deck.id, deck])).values()];
 }
 function themeExplorerEmpty() {
-  return '<p class="theme-explorer-empty" role="status">見つかりませんでした。<button type="button" class="secondary-button" data-theme-reset>絞り込みを解除</button></p>';
+  if (state.account.user && !state.account.themeVisibilityReady) return state.account.themeVisibilityError
+    ? `<p class="theme-explorer-empty" role="status">テーマの表示設定を取得できませんでした。<button type="button" class="text-button" data-action="theme-visibility-retry">再読み込み</button></p>`
+    : `<p class="theme-explorer-empty" role="status">テーマの表示設定を読み込み中です。</p>`;
+  return `<p class="theme-explorer-empty" role="status">見つかりませんでした。<button type="button" class="secondary-button" data-theme-reset>絞り込みを解除</button>${state.account.user ? '<button type="button" class="text-button" data-action="account-settings-open">テーマの表示設定を開く</button>' : ''}</p>`;
 }
 function themeTagMatches(id, tagFilter, bookmarkedIds, experiencedIds) {
   return tagFilter === 'bookmarked' ? bookmarkedIds.has(id) : tagFilter === 'experienced' ? experiencedIds.has(id) : true;
@@ -1474,9 +1492,9 @@ function soloDecksView() {
   const bookmarkedIds = new Set(themeExplorerBookmarks(state.account.user?.id));
   const experiencedIds = new Set(themeExplorerExperienced(state.account.user?.id));
   const tagMatches = (deck) => themeTagMatches(deck.__mySet ? `set:${deck.__mySet.id}` : deck.id, state.themeExplorerTagFilter, bookmarkedIds, experiencedIds);
-  const all = soloDecks.filter(matches).filter(tagMatches);
+  const all = soloDecks.filter(matches).filter(tagMatches).filter((deck) => canSeeDeck(deck));
   const historyIds = themeExplorerHistory(state.account.user?.id, 'solo').flatMap((row) => row.themeIds || []);
-  const history = historyIds.map((id) => soloDecks.find((deck) => deck.id === id)).filter(Boolean).filter(matches);
+  const history = historyIds.map((id) => soloDecks.find((deck) => deck.id === id)).filter(Boolean).filter(matches).filter((deck) => canSeeDeck(deck));
   const historyRows = history.map((deck) => ({ themeIds: [deck.id] }));
   const filters = [`<button type="button" class="filter-chip ${state.themeExplorerShelf === 'all' ? 'is-active' : ''}" data-theme-category="all">すべて</button>`, ...soloCategories.map((category) => `<button type="button" class="filter-chip ${state.themeExplorerShelf === category.id ? 'is-active' : ''}" data-theme-category="${esc(category.id)}">${esc(category.label)}</button>`)].join('');
   const categoryDecks = state.themeExplorerShelf !== 'all' ? all.filter((deck) => deck.category === state.themeExplorerShelf) : all;
@@ -1510,7 +1528,7 @@ function soloDecksView() {
     ? mySetEntries.filter((entry) => state.themeExplorerShelf === 'all' || entry.__mySet?.category === state.themeExplorerShelf)
     : [];
   const soloFlat = themeExplorerUnique([...sponsorEntries('solo', state.themeExplorerShelf === 'all' ? 'all' : state.themeExplorerShelf, query), ...categoryDecks, ...visibleMySetEntries]);
-  const visibleQuiz = groupGames.filter((game) => game.id === 'quiz' && gameParticipantGate(game, state.participants.length).valid && (!query || `${game.title} ${game.subtitle} ${game.meta}`.toLocaleLowerCase('ja-JP').includes(query)));
+  const visibleQuiz = groupGames.filter((game) => game.id === 'quiz' && canSeeDeck(game) && gameParticipantGate(game, state.participants.length).valid && (!query || `${game.title} ${game.subtitle} ${game.meta}`.toLocaleLowerCase('ja-JP').includes(query)));
   const soloQuizShelf = visibleQuiz.length ? themeGameShelf(visibleQuiz) : '';
   const soloNeedsFlat = state.themeExplorerView === 'list' || query.length > 0 || state.themeExplorerShelf !== 'all' || state.themeExplorerTagFilter !== 'all';
   const soloBrowse = soloNeedsFlat
@@ -1568,7 +1586,7 @@ function decksView() {
   const filters = Object.entries(groupLabels).filter(([id]) => id !== 'adult' || (!mixed && ageConfirmed() && r18DisplayVisible())).map(([id, label]) => `<button type="button" class="filter-chip ${((mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf) === id) ? 'is-active' : ''}" data-theme-category="${esc(id)}">${esc(label)}</button>`).join('');
   const categoryId = mixed && state.themeExplorerShelf === 'adult' ? 'all' : state.themeExplorerShelf;
   const gameQuery = state.themeExplorerQuery.trim().toLocaleLowerCase('ja-JP');
-  const visibleGames = groupGames.filter((game) => gameParticipantGate(game, state.participants.length).valid && (!gameQuery || `${game.title} ${game.subtitle} ${game.meta}`.toLocaleLowerCase('ja-JP').includes(gameQuery)));
+  const visibleGames = groupGames.filter((game) => canSeeDeck(game) && gameParticipantGate(game, state.participants.length).valid && (!gameQuery || `${game.title} ${game.subtitle} ${game.meta}`.toLocaleLowerCase('ja-JP').includes(gameQuery)));
   const categoryDecks = categoryId !== 'all' && categoryId !== 'adult' ? regular.filter((deck) => themeGroups[deck.id]?.includes(categoryId)) : categoryId === 'adult' ? adult : regular;
   const recommendedIds = state.participants.length >= 3
     ? ['friends', 'family-reunion', 'team', 'group-mixer', 'party-first-meeting', 'business-meetup', 'bar-first-meeting', 'date']
@@ -2012,13 +2030,14 @@ function normalizeAccountUser(user, previous = null) { if (!user) return null; c
   }; }
 async function loadAccount() {
   if (!state.account.enabled) return;
-  const generation = state.account.generation; const profileRevision = state.account.profileRevision; const avatarRevision = state.account.avatarRevision;
+  const generation = state.account.generation; const profileRevision = state.account.profileRevision; const avatarRevision = state.account.avatarRevision; const themeVisibilityRevision = state.account.themeVisibilityRevision;
   const localDraftSnapshot = { drafts: state.account.drafts, sets: state.account.sets, customCards: state.account.customCards, soloNoteDrafts: state.soloNoteDrafts, soloSummaryDrafts: state.soloSummaryDrafts, soloHistory: state.soloHistory };
   const previousUser = state.account.user; let transientFailure = false;
+  if (!previousUser) { state.account.themeVisibilityReady = false; state.account.themeVisibilityAvailable = false; state.account.themeVisibilityError = ""; }
   let continueAfterLogin = false;
   let resumeAfterLogin = null;
   let intentFailed = false;
-  const current = () => generation === state.account.generation && profileRevision === state.account.profileRevision && avatarRevision === state.account.avatarRevision;
+  const current = () => generation === state.account.generation && profileRevision === state.account.profileRevision && avatarRevision === state.account.avatarRevision && themeVisibilityRevision === state.account.themeVisibilityRevision;
   try {
     const me = await accountApi.me();
     if (!current()) return;
@@ -2030,6 +2049,9 @@ async function loadAccount() {
     state.account.avatarUrl = avatarImageSrc(state.account.user?.avatarUrl);
     if (!state.account.avatarBusy && !state.account.avatarDraft) state.account.avatarError = "";
     state.account.deletionAvailable = me.account?.deletionAvailable === true;
+    const themeVisibilityAvailable = me.account?.themeVisibilityAvailable === true;
+    if (themeVisibilityAvailable) { state.account.hiddenThemeIds = new Set(Array.isArray(me.account?.hiddenThemeIds) ? me.account.hiddenThemeIds : []); state.account.savedHiddenThemeIds = new Set(state.account.hiddenThemeIds); state.account.themeVisibilityReady = true; state.account.themeVisibilityAvailable = true; state.account.themeVisibilityError = ""; }
+    else { state.account.themeVisibilityAvailable = false; state.account.themeVisibilityError = "テーマの表示設定を読み込めませんでした。再読み込みしてください。"; state.account.themeVisibilityReady = Boolean(previousUser && previousUser.id === state.account.user?.id && state.account.themeVisibilityReady); }
     state.account.adultConfirmationAvailable = me.account?.adultConfirmationAvailable === true;
     // When the server could not read the status (available:false), keep the last known value for the same account only.
     state.account.ageConfirmedAt = nextAgeConfirmedAt({ previous: previousAgeConfirmedAt, sameAccount: Boolean(previousUserId && previousUserId === state.account.user?.id), confirmedAt: me.account?.adultConfirmedAt, available: me.account?.adultConfirmationAvailable });
@@ -2070,7 +2092,7 @@ async function loadAccount() {
         state.pendingCustomResume = null;
       }
     }
-  } catch { transientFailure = true; if (!current()) return; state.account.user = previousUser; state.account.ageConfirmedAt = previousUser ? state.account.ageConfirmedAt : null; state.account.adultConfirmationAvailable = previousUser ? state.account.adultConfirmationAvailable : false; state.account.authReady = true; if (state.continuePending) { state.account.status = ""; state.account.error = "ログイン状態を確認できませんでした。時間をおいて、もう一度お試しください。"; } }
+  } catch { transientFailure = true; if (!current()) return; state.account.user = previousUser; state.account.ageConfirmedAt = previousUser ? state.account.ageConfirmedAt : null; state.account.adultConfirmationAvailable = previousUser ? state.account.adultConfirmationAvailable : false; state.account.themeVisibilityAvailable = false; state.account.themeVisibilityError = "テーマの表示設定を読み込めませんでした。再読み込みしてください。"; if (!previousUser) state.account.themeVisibilityReady = false; state.account.authReady = true; if (state.continuePending) { state.account.status = ""; state.account.error = "ログイン状態を確認できませんでした。時間をおいて、もう一度お試しください。"; } }
   if (transientFailure && previousUser && state.account.user?.id === previousUser.id) { state.account.drafts = localDraftSnapshot.drafts; state.account.sets = localDraftSnapshot.sets; state.account.customCards = localDraftSnapshot.customCards; state.soloNoteDrafts = localDraftSnapshot.soloNoteDrafts; state.soloSummaryDrafts = localDraftSnapshot.soloSummaryDrafts; state.soloHistory = localDraftSnapshot.soloHistory; state.soloNoteStatuses = Object.create(null); state.soloNoteErrors = Object.create(null); state.soloSummaryStatuses = Object.create(null); state.soloSummaryErrors = Object.create(null); }
   if (!transientFailure && !state.account.user && previousUser) { state.account.drafts = []; state.account.sets = []; state.account.customCards = []; state.soloNoteDrafts = Object.create(null); state.soloNoteStatuses = Object.create(null); state.soloNoteErrors = Object.create(null); state.soloSummaryDrafts = Object.create(null); state.soloSummaryStatuses = Object.create(null); state.soloSummaryErrors = Object.create(null); state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryHasMore = false; state.soloHistoryError = ""; }
   if (!current()) return;
@@ -2111,6 +2133,15 @@ async function saveProfile() {
     state.account.status = "表示名を保存しました。"; }
   catch { if (generation === state.account.generation && revision === state.account.profileRevision) state.account.error = "表示名を保存できませんでした。"; }
   finally { if (generation === state.account.generation) { state.account.busy = false; render(); } }
+}
+async function saveThemeVisibility() {
+  if (state.account.busy || !state.account.user || !state.account.themeVisibilityReady || !state.account.themeVisibilityAvailable) return;
+  const focusSelector = state.focusSelector; const focusGeneration = state.account.generation; const focusScreen = state.screen; const focusSettingsOpen = state.account.settingsOpen;
+  const generation = state.account.generation; const revision = ++state.account.themeVisibilityRevision; const previous = new Set(state.account.savedHiddenThemeIds || []); const hiddenThemeIds = [...(state.account.hiddenThemeIds || new Set())];
+  state.account.busy = true; state.account.error = ''; render();
+  try { const result = await accountApi.updateThemeVisibility(hiddenThemeIds); if (generation !== state.account.generation || revision !== state.account.themeVisibilityRevision) return; state.account.hiddenThemeIds = new Set(Array.isArray(result.hiddenThemeIds) ? result.hiddenThemeIds : hiddenThemeIds); state.account.savedHiddenThemeIds = new Set(state.account.hiddenThemeIds); state.account.themeVisibilityReady = true; state.account.themeVisibilityAvailable = true; state.account.themeVisibilityError = ''; state.account.status = 'テーマの表示設定を保存しました。'; }
+  catch { if (generation === state.account.generation && revision === state.account.themeVisibilityRevision) { state.account.hiddenThemeIds = previous; state.account.themeVisibilityError = 'テーマの表示設定を保存できませんでした。'; state.account.error = ''; } }
+  finally { if (generation === state.account.generation) { state.account.busy = false; if (focusSelector && focusGeneration === state.account.generation && focusScreen === state.screen && focusSettingsOpen === state.account.settingsOpen) state.focusSelector = focusSelector; render(); } }
 }
 function validCustomText(value) { return typeof value === "string" && !/[\u0000-\u001f\u007f\u2028\u2029]/u.test(value) && Array.from(value.trim()).length >= 1 && Array.from(value.trim()).length <= 300; }
 async function saveStudioDraft() {
@@ -2209,7 +2240,7 @@ async function deleteAccount() {
     state.account.user = null;
     state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryEditing = null; state.soloHistoryOpen = false;
     state.account.ageConfirmedAt = null; state.account.adultConfirmationAvailable = false; state.account.ageRevokeOpen = false; state.account.ageConfirmChecked = false;
-    state.account.favorites = new Set();
+    state.account.favorites = new Set(); state.account.hiddenThemeIds = new Set(); state.account.savedHiddenThemeIds = new Set(); state.account.themeVisibilityReady = false; state.account.themeVisibilityAvailable = false;
     state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.completionAvailable = false; state.account.studioRequestId += 1; state.account.studioItems = []; state.account.aiTheme = ""; state.account.aiTone = ""; state.account.aiR18 = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = [];
     state.account.customCardsAvailable = false;
     state.account.sets = [];
@@ -2664,6 +2695,7 @@ async function makeTorisetsuImage(mode = "save") {
 function startSelectedSoloDeck() {
   if (state.selectedMySetId) { const set = playableSavedSets(state.account.sets, state.account.customCards).find((item) => item.id === state.selectedMySetId && ['solo', 'both'].includes(item.audience)); if (!set) { state.error = "このマイセットは一人用では利用できません。"; render(); return; } try { playSavedSet(set); } catch (error) { state.error = error.message; render(); } return; }
   const deck = soloDecks.find((item) => item.id === state.selectedDeckId) || soloDecks[0];
+  if (!deck || !canSeeDeck(deck)) { state.error = "このテーマはテーマの表示設定で非表示です。"; render(); return; }
   if (deck.builder === 'torisetsu') { openTorisetsu(); return; }
   try { state.session = createSoloSession({ deck, participant: soloEntryParticipant() }); state.session.feedbackSubmitted = []; state.feedback = null; state.resume = null; state.soloMemoOpen = false; state.soloNoteDraft = ""; state.soloNoteStatus = ""; state.soloNoteError = ""; state.soloSummaryDraft = ""; trackThemeStart(state.session.deckId); recordThemeExplorerStart({ ownerId: state.account.user?.id, mode: "solo", themeIds: [state.session.deckId] }); saveCurrentSession(state.session); state.screen = "play"; state.error = ""; render(); } catch (error) { state.error = error.message; render(); }
 }
@@ -2686,6 +2718,8 @@ function finishToHome() {
 
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
+  if (action === "theme-visibility-all") { if (state.account.busy || !state.account.themeVisibilityReady || !state.account.themeVisibilityAvailable) return; state.account.hiddenThemeIds = new Set(); state.focusSelector = '[data-action="theme-visibility-all"]'; saveThemeVisibility(); return; }
+  if (action === "theme-visibility-retry") { if (state.account.busy) return; state.account.themeVisibilityError = ''; loadAccount(); return; }
   if (typeof action === "string" && action.startsWith("torisetsu-")) { handleTorisetsuAction(event); return; }
   if (action === "completion-reply-skip") {
     const section = event.currentTarget.closest("[data-completion-reply]"); const key = section?.dataset.replyKey;
@@ -2747,6 +2781,7 @@ async function handleAction(event) {
   if (action === "theme-experienced") { event.stopPropagation(); const id = event.currentTarget.dataset.experiencedId; toggleThemeExplorerExperienced(id, state.account.user?.id); state.focusSelector = `[data-action="theme-experienced"][data-experienced-id="${CSS.escape(id)}"]`; render(); return; }
   if (action === "game-launch") {
     const game = groupGames.find((item) => item.id === event.currentTarget.dataset.gameId);
+    if (game && !canSeeDeck(game)) { state.error = "このゲームはテーマの表示設定で非表示です。"; render(); return; }
     const gate = gameParticipantGate(game, state.participants.length);
     if (!game || !gate.valid) {
       if (game) state.error = `「${game.title}」は${gate.label}。`;
@@ -3588,7 +3623,7 @@ accountConfigReady.then(() => { state.account.enabled = accountConfig.enabled; s
             state.sharedLoading = false;
             state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryHasMore = false; state.soloHistoryLoading = false; state.soloHistoryError = ""; state.soloHistoryEditing = null; state.soloHistoryOpen = false; state.soloMemoOpen = false; state.soloNoteDrafts = Object.create(null); state.soloNoteStatuses = Object.create(null); state.soloNoteErrors = Object.create(null); state.soloSummaryDrafts = Object.create(null); state.soloSummaryStatuses = Object.create(null); state.soloSummaryErrors = Object.create(null); state.busy = false;
           }
-          const privateResume = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (event === "SIGNED_OUT" || identityChanged) { clearAccountParticipantName(); purgeAdultSessions(); }
+          const privateResume = isPrivateCustomSession(state.session) || isPrivateCustomSession(state.resume) || isPrivateCustomSession(state.pendingCustomResume); if (event === "SIGNED_OUT" || identityChanged) { clearAccountParticipantName(); state.account.hiddenThemeIds = new Set(); state.account.savedHiddenThemeIds = new Set(); state.account.themeVisibilityReady = false; state.account.themeVisibilityAvailable = false; purgeAdultSessions(); }
           if ((event === "SIGNED_OUT" || identityChanged) && privateResume) { clearSession(); state.session = null; state.resume = null; state.pendingCustomResume = null; if (state.screen === "play") state.screen = "participants";
           }
           if (previousId === nextId && event !== "SIGNED_OUT") { if (nextId) state.account.user = normalizeAccountUser(nextUser, state.account.user); return; } state.account.generation += 1; state.account.profileRevision += 1; state.account.busy = false; state.account.user = normalizeAccountUser(nextUser); if (state.account.user && state.account.libraryReturn) { state.account.open = true; state.account.libraryOpen = true; state.account.studioMode = "list"; clearLibraryReturnIntent(); } if (!state.account.user) state.account.authReady = true; state.account.favorites = new Set(); state.account.customCards = []; state.account.drafts = []; state.account.draftsAvailable = false; state.account.studioMode = "list"; state.account.editingDraftId = null; state.account.aiQuestions = []; state.account.aiName = ""; state.account.aiR18 = false; state.account.studioReplaceIndex = null; state.account.customCardsAvailable = false; state.account.sets = []; state.account.customEditorOpen = false; state.account.editingCardId = null; state.account.customDraft = ""; state.account.customDraftR18 = false; state.account.selectedCards = new Set(); state.account.editingSetId = null; state.account.setName = undefined; state.account.pendingSet = null; state.account.avatarUrl = "";

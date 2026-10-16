@@ -73,6 +73,7 @@ export const accountApi = {
   google: async () => { const result = await authClient().signInWithOAuth({ provider: 'google', options: { redirectTo: `${location.origin}${location.pathname}` } }); if (result.error) throw result.error; return result; },
   logout: async (options = { scope: 'local' }) => { const result = await authClient().signOut(options); if (result.error) throw result.error; return result; },
   updateProfile: (displayName) => request('/profile', { method: 'PATCH', body: { displayName } }),
+  updateThemeVisibility: (hiddenThemeIds) => request('/theme-visibility', { method: 'PUT', body: { hiddenThemeIds } }),
   updateAvatar: (imageData) => request('/avatar', { method: 'PUT', body: { imageData } }),
   deleteAvatar: () => request('/avatar', { method: 'DELETE' }),
   deleteAccount: () => request('', { method: 'DELETE', body: { confirmation: 'DELETE' } }),

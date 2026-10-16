@@ -99,3 +99,10 @@ body.help-open{overflow:hidden}
 .account-dialog-howto{width:min(430px,100%)}
 .how-to-play-copy{margin:16px 2px 4px;color:var(--ink);font-size:15px;line-height:1.85;letter-spacing:.01em;text-align:left}
 @media(max-width:680px){.account-bar{gap:8px}.how-to-play-button{font-size:12px}.account-dialog-howto{width:100%}}
+.account-theme-visibility { margin-top: 1.5rem; }
+.account-theme-visibility h2 { margin-bottom: .35rem; }
+.account-theme-visibility-category { margin-top: 1rem; }
+.account-theme-visibility-category-head { display: flex; gap: .5rem; align-items: center; }
+.account-theme-visibility-list { display: grid; gap: .35rem; margin: .45rem 0 0 1.55rem; }
+.account-theme-visibility-list[hidden] { display: none; }
+.account-theme-visibility-item { display: flex; gap: .5rem; align-items: flex-start; }

@@ -65,6 +65,10 @@ test('profile, deletion, and local signout use the fixed account contract', asyn
   assert.equal(calls.at(-1).url, '/api/account/profile');
   assert.equal(calls.at(-1).options.method, 'PATCH');
   assert.deepEqual(JSON.parse(calls.at(-1).options.body), { displayName: '新しい名前' });
+  await client.api.updateThemeVisibility(['friends', 'self-love-now']);
+  assert.equal(calls.at(-1).url, '/api/account/theme-visibility');
+  assert.equal(calls.at(-1).options.method, 'PUT');
+  assert.deepEqual(JSON.parse(calls.at(-1).options.body), { hiddenThemeIds: ['friends', 'self-love-now'] });
   await client.api.deleteAccount();
   assert.equal(calls.at(-1).url, '/api/account');
   assert.equal(calls.at(-1).options.method, 'DELETE');

@@ -4,11 +4,13 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { consumeAiQuota, persistentStoreAvailable } from './store.mjs';
 import { readAdultConfirmation, requireAdultConfirmed, setAdultConfirmation, userFromBearer } from './age-confirmation.mjs';
 import { normalizeCreatorDesign, effectiveCreatorAdult } from '../dist/creator-metadata.js';
+import { groupGames } from '../dist/data/game-registry.js';
 
 const MAX_NAME = 80;
 const MAX_CARDS = 40;
 const MIN_CARDS = 6;
 const ALL_DECKS = [...decks, ...soloDecks];
+const THEME_IDS = new Set([...ALL_DECKS.map((deck) => deck.id), ...groupGames.map((game) => game.id)]);
 const CARD_IDS = new Set(ALL_DECKS.flatMap((deck) => [...(deck.questions || []), ...(deck.r18Questions || [])].map((card) => typeof card === 'string' ? card : card.id)));
 const CUSTOM_ID = /^custom:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const CUSTOM_TEXT_MAX = 300;
@@ -149,6 +151,11 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     let customCards = []; let customCardsAvailable = true;
     try { customCards = (await customRows(user.id, authorization)).map(mapCustom); } catch (error) { if (missingCustomTable(error)) customCardsAvailable = false; else throw error; }
     let adultState = { available: true, confirmedAt: null }; try { adultState = await readAdultConfirmation({ config, userId: user.id, authorization, fetchImpl }); } catch { adultState = { available: false, confirmedAt: null }; /* Unreadable: treated as not confirmed and flagged unavailable; /me stays available. */ }
+    let hiddenThemeIds = []; let themeVisibilityAvailable = true; try {
+      const profileRows = await supabaseFetch(config, `/rest/v1/account_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=hidden_theme_ids`, { headers: { Authorization: authorization } }, fetchImpl);
+      const raw = profileRows?.[0]?.hidden_theme_ids;
+      hiddenThemeIds = Array.isArray(raw) ? raw.filter((id) => typeof id === 'string' && THEME_IDS.has(id)) : [];
+    } catch { themeVisibilityAvailable = false; /* Older deployments without the visibility migration are unavailable, never an empty preference. */ }
     let avatarUrlValue = null; try { avatarUrlValue = await avatarUrl(user.id, authorization); } catch { /* Storage may not be configured; account data remains available. */ }
     let drafts = []; let draftsAvailable = true;
     try {
@@ -157,7 +164,7 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     } catch (error) { if (missingDraftTable(error)) draftsAvailable = false; else throw error; }
     let hasVenue = false; try { const ownedVenues = await supabaseFetch(config, `/rest/v1/venues?owner_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, { headers: { Authorization: authorization } }, fetchImpl); hasVenue = Array.isArray(ownedVenues) && ownedVenues.length > 0; } catch { /* Older deployments without venue tables keep the generic menu. */ }
     const normalizedSets = sets.map((row) => mapSet(row, customCards));
-    return { user: { id: user.id, email: user.email || null, displayName: userDisplayName(user), avatarUrl: avatarUrlValue }, account: { deletionAvailable: Boolean(config.serviceKey), completionAvailable: Boolean(config.serviceKey), adultConfirmedAt: adultState.confirmedAt, adultConfirmationAvailable: adultState.available, hasVenue }, favorites, sets: normalizedSets, customCards, customCardsAvailable, drafts, draftsAvailable, aiGenerationAvailable: Boolean(openAiKey && (persistentStoreAvailable() || rateLimitImpl !== consumeAiQuota)) };
+    return { user: { id: user.id, email: user.email || null, displayName: userDisplayName(user), avatarUrl: avatarUrlValue }, account: { deletionAvailable: Boolean(config.serviceKey), completionAvailable: Boolean(config.serviceKey), adultConfirmedAt: adultState.confirmedAt, adultConfirmationAvailable: adultState.available, hiddenThemeIds, themeVisibilityAvailable, hasVenue }, favorites, sets: normalizedSets, customCards, customCardsAvailable, drafts, draftsAvailable, aiGenerationAvailable: Boolean(openAiKey && (persistentStoreAvailable() || rateLimitImpl !== consumeAiQuota)) };
   }
   async function ensureAdult(user, authorization) { return requireAdultConfirmed({ config, userId: user.id, authorization, fetchImpl }); }
   async function adultConfirmation(req) {
@@ -281,6 +288,15 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     if (Array.from(value).length > DISPLAY_NAME_MAX) throw fail(400, ACCOUNT_ERRORS.invalid);
     const updated = await supabaseFetch(config, '/auth/v1/user', { method: 'PUT', body: JSON.stringify({ data: { display_name: value } }), headers: { Authorization: authorization } }, fetchImpl);
     return { user: { id: updated?.id || user.id, email: updated?.email || user.email || null, displayName: userDisplayName(updated) ?? (value || null) } };
+  }
+  async function themeVisibility(req) {
+    const { authorization } = await requireUser(req);
+    const input = req.body || {};
+    if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length !== 1 || !Array.isArray(input.hiddenThemeIds)) throw fail(400, ACCOUNT_ERRORS.invalid);
+    const hiddenThemeIds = [...new Set(input.hiddenThemeIds)];
+    if (hiddenThemeIds.length !== input.hiddenThemeIds.length || hiddenThemeIds.some((id) => typeof id !== 'string' || !THEME_IDS.has(id))) throw fail(400, ACCOUNT_ERRORS.invalid);
+    const saved = await supabaseFetch(config, '/rest/v1/rpc/set_theme_visibility', { method: 'POST', body: JSON.stringify({ p_hidden_theme_ids: hiddenThemeIds }), headers: { Authorization: authorization } }, fetchImpl);
+    return { hiddenThemeIds: Array.isArray(saved) ? saved : hiddenThemeIds };
   }
   async function favorite(req, cardId) {
     const { user, authorization } = await requireUser(req);
@@ -508,7 +524,7 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     await supabaseFetch({ ...config, key: config.serviceKey }, `/auth/v1/admin/users/${encodeURIComponent(user.id)}`, { method: 'DELETE', body: JSON.stringify({ should_soft_delete: false }), headers: { Authorization: `Bearer ${config.serviceKey}` } }, fetchImpl);
     return { deleted: true };
   }
-  return { account, adultConfirmation, profile, avatar, favorite, set, customCard, draft, completeDraft, aiQuestions, shareSet, stopShare, publicShare, removeAccount, available: Boolean(config), config: config && { url: config.url, key: config.key, googleEnabled: config.googleEnabled } };
+  return { account, adultConfirmation, profile, themeVisibility, avatar, favorite, set, customCard, draft, completeDraft, aiQuestions, shareSet, stopShare, publicShare, removeAccount, available: Boolean(config), config: config && { url: config.url, key: config.key, googleEnabled: config.googleEnabled } };
 }
 
 export { MAX_NAME, MAX_CARDS, MIN_CARDS, DISPLAY_NAME_MAX, CARD_IDS, CUSTOM_TEXT_MAX };
