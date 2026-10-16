@@ -11,6 +11,7 @@ const MAX_CARDS = 40;
 const MIN_CARDS = 6;
 const ALL_DECKS = [...decks, ...soloDecks];
 const THEME_IDS = new Set([...ALL_DECKS.map((deck) => deck.id), ...groupGames.map((game) => game.id)]);
+const DEFAULT_HIDDEN_THEME_IDS = new Set(ALL_DECKS.filter((deck) => deck.adultOnly === true).map((deck) => deck.id));
 const CARD_IDS = new Set(ALL_DECKS.flatMap((deck) => [...(deck.questions || []), ...(deck.r18Questions || [])].map((card) => typeof card === 'string' ? card : card.id)));
 const CUSTOM_ID = /^custom:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const CUSTOM_TEXT_MAX = 300;
@@ -152,9 +153,12 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
     try { customCards = (await customRows(user.id, authorization)).map(mapCustom); } catch (error) { if (missingCustomTable(error)) customCardsAvailable = false; else throw error; }
     let adultState = { available: true, confirmedAt: null }; try { adultState = await readAdultConfirmation({ config, userId: user.id, authorization, fetchImpl }); } catch { adultState = { available: false, confirmedAt: null }; /* Unreadable: treated as not confirmed and flagged unavailable; /me stays available. */ }
     let hiddenThemeIds = []; let themeVisibilityAvailable = true; try {
-      const profileRows = await supabaseFetch(config, `/rest/v1/account_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=hidden_theme_ids`, { headers: { Authorization: authorization } }, fetchImpl);
-      const raw = profileRows?.[0]?.hidden_theme_ids;
-      hiddenThemeIds = Array.isArray(raw) ? raw.filter((id) => typeof id === 'string' && THEME_IDS.has(id)) : [];
+      const profileRows = await supabaseFetch(config, `/rest/v1/account_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=hidden_theme_ids,theme_visibility_initialized`, { headers: { Authorization: authorization } }, fetchImpl);
+      const profile = profileRows?.[0];
+      const raw = profile?.hidden_theme_ids;
+      hiddenThemeIds = profile?.theme_visibility_initialized === true
+        ? (Array.isArray(raw) ? raw.filter((id) => typeof id === 'string' && THEME_IDS.has(id)) : [])
+        : [...DEFAULT_HIDDEN_THEME_IDS];
     } catch { themeVisibilityAvailable = false; /* Older deployments without the visibility migration are unavailable, never an empty preference. */ }
     let avatarUrlValue = null; try { avatarUrlValue = await avatarUrl(user.id, authorization); } catch { /* Storage may not be configured; account data remains available. */ }
     let drafts = []; let draftsAvailable = true;

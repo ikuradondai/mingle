@@ -45,7 +45,7 @@ test('theme visibility API does not report success when the RPC fails', async ()
 test('/me distinguishes a loaded empty preference from an unavailable visibility column', async () => {
   const base = async (url) => {
     if (url.endsWith('/auth/v1/user')) return response(200, { id: userId, email: 'a@example.test' });
-    if (url.includes('/account_profiles?')) return response(200, [{ hidden_theme_ids: [] }]);
+    if (url.includes('/account_profiles?')) return response(200, [{ hidden_theme_ids: [], theme_visibility_initialized: true }]);
     return response(200, []);
   };
   const loaded = await createAccountService({ env, fetchImpl: base }).account({ headers: { authorization: 'Bearer user-token' } });
@@ -54,4 +54,34 @@ test('/me distinguishes a loaded empty preference from an unavailable visibility
   const unavailable = await createAccountService({ env, fetchImpl: async (url) => url.includes('/account_profiles?') ? response(404, { code: 'PGRST205' }) : base(url) }).account({ headers: { authorization: 'Bearer user-token' } });
   assert.equal(unavailable.account.themeVisibilityAvailable, false);
   assert.deepEqual(unavailable.account.hiddenThemeIds, []);
+});
+
+test('/me defaults only the dedicated adult themes for an uninitialized profile', async () => {
+  const service = createAccountService({ env, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: userId, email: 'a@example.test' });
+    if (url.includes('/account_profiles?')) return response(200, [{ hidden_theme_ids: [], theme_visibility_initialized: false }]);
+    return response(200, []);
+  } });
+  const result = await service.account({ headers: { authorization: 'Bearer user-token' } });
+  assert.deepEqual(result.account.hiddenThemeIds.sort(), ['first-intimacy', 'intimacy', 'intimacy-distance', 'intimacy-refresh']);
+});
+
+test('/me defaults dedicated adult themes when no profile row exists', async () => {
+  const service = createAccountService({ env, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: userId, email: 'a@example.test' });
+    if (url.includes('/account_profiles?')) return response(200, []);
+    return response(200, []);
+  } });
+  const result = await service.account({ headers: { authorization: 'Bearer user-token' } });
+  assert.deepEqual(result.account.hiddenThemeIds.sort(), ['first-intimacy', 'intimacy', 'intimacy-distance', 'intimacy-refresh']);
+});
+
+test('/me preserves an existing non-empty preference instead of applying defaults', async () => {
+  const service = createAccountService({ env, fetchImpl: async (url) => {
+    if (url.endsWith('/auth/v1/user')) return response(200, { id: userId, email: 'a@example.test' });
+    if (url.includes('/account_profiles?')) return response(200, [{ hidden_theme_ids: ['friends'], theme_visibility_initialized: true }]);
+    return response(200, []);
+  } });
+  const result = await service.account({ headers: { authorization: 'Bearer user-token' } });
+  assert.deepEqual([...result.account.hiddenThemeIds], ['friends']);
 });
