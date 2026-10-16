@@ -92,3 +92,10 @@ body.account-open{overflow:hidden}
 .account-age-section{margin-top:28px;padding-top:18px;border-top:1px solid var(--line);display:grid;gap:10px}.account-age-section h2{margin:0;font-size:1rem}.account-age-section p{margin:0}
 .account-age-check,.account-adult-intent{display:flex;align-items:flex-start;gap:9px;font-weight:800;cursor:pointer}.account-age-check input,.account-adult-intent input{width:22px;height:22px;flex:0 0 22px;margin:1px 0 0}.account-adult-intent{flex-wrap:wrap;margin:12px 0 4px;font-size:15px}.account-adult-intent small{flex:1 0 100%;padding-left:31px;margin-top:-4px;font-weight:400;color:var(--muted);font-size:12.5px;line-height:1.5}
 .account-age-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.account-age-actions button{min-height:44px}
+body.help-open{overflow:hidden}
+.account-bar{align-items:center;gap:12px}
+.how-to-play-button{min-height:44px;padding:0 2px;border:0;color:var(--blue);background:transparent;font:inherit;font-size:13px;font-weight:900;white-space:nowrap;text-decoration:underline;text-underline-offset:3px}
+.how-to-play-button:hover,.how-to-play-button:focus-visible{color:var(--ink)}
+.account-dialog-howto{width:min(430px,100%)}
+.how-to-play-copy{margin:16px 2px 4px;color:var(--ink);font-size:15px;line-height:1.85;letter-spacing:.01em;text-align:left}
+@media(max-width:680px){.account-bar{gap:8px}.how-to-play-button{font-size:12px}.account-dialog-howto{width:100%}}

@@ -58,7 +58,7 @@ const state = {
   session: null,
   continuePending: null,
   pendingCustomResume: null,
-  error: "", busy: false, sponsorItems: [], sponsorOrder: Object.create(null), sponsorLoaded: false, sponsorLoading: false, sponsorError: "", sponsorDetailLoading: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, themeLikePending: new Set(), themeLikeStatus: Object.create(null), lastAdvanceAt: 0, focusAction: null, focusSelector: null, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null, soloNoteDraft: "", soloNoteStatus: "", soloNoteError: "", soloSummaryDraft: "", soloSummaryStatus: "", soloDraftOwner: null, soloDraftRevision: 0, soloMemoOpen: false, soloMemoKey: "", soloHistoryOpen: false, soloHistory: [], soloHistoryCursor: null, soloHistoryHasMore: false, soloHistoryLoading: false, soloHistoryError: "", soloHistoryEditing: null, soloNoteDrafts: Object.create(null), soloNoteStatuses: Object.create(null), soloNoteErrors: Object.create(null), soloSummaryDrafts: Object.create(null), soloSummaryStatuses: Object.create(null), soloSummaryErrors: Object.create(null),
+  error: "", busy: false, sponsorItems: [], sponsorOrder: Object.create(null), sponsorLoaded: false, sponsorLoading: false, sponsorError: "", sponsorDetailLoading: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, themeLikePending: new Set(), themeLikeStatus: Object.create(null), lastAdvanceAt: 0, focusAction: null, focusSelector: null, helpOpen: false, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null, soloNoteDraft: "", soloNoteStatus: "", soloNoteError: "", soloSummaryDraft: "", soloSummaryStatus: "", soloDraftOwner: null, soloDraftRevision: 0, soloMemoOpen: false, soloMemoKey: "", soloHistoryOpen: false, soloHistory: [], soloHistoryCursor: null, soloHistoryHasMore: false, soloHistoryLoading: false, soloHistoryError: "", soloHistoryEditing: null, soloNoteDrafts: Object.create(null), soloNoteStatuses: Object.create(null), soloNoteErrors: Object.create(null), soloSummaryDrafts: Object.create(null), soloSummaryStatuses: Object.create(null), soloSummaryErrors: Object.create(null),
   selectedDeckIds: ["friends"],
   themeMode: "single", participantTab: "group", guestThemeHintDismissed: false,
   filter: "all", adultConfirmed: false, includeChallenges: false, resume: null, themeExplorerView: "cards", themeExplorerQuery: "", themeExplorerShelf: "all", themeExplorerTagFilter: "all", themeOptionsOpen: false, account: { enabled: accountConfig.enabled, authReady: false, google: accountConfig.google, user: null, favorites: new Set(), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false,
@@ -203,6 +203,7 @@ function syncNavigationHistory() {
 function restoreNavigationHistory(event) {
   const entry = event.state;
   if (!entry?.mingle || typeof entry.screen !== "string") return;
+  state.helpOpen = false;
   const sameDocument = entry.doc === historyDocumentId;
   historyRestoring = true;
   stopCompletionCelebration();
@@ -390,7 +391,7 @@ function setR18DisplayVisible(visible) {
 }
 function r18DisplayToggle() { return ageConfirmed() ? `<label class="r18-display-toggle"><input type="checkbox" data-r18-display ${r18DisplayVisible() ? "checked" : ""}/> <span>R18を表示する</span></label>` : ""; }
 function venueR18Hidden(session = state.session) { return Boolean(state.venue && session?.venueSession && sessionHasR18(session) && !(state.venue.ageTapped === true && state.venue.displayR18 === true)); }
-function venueR18Gate(session) { return `<div class="venue-r18-display-gate"><p>R18を表示するまで、店舗テーマの名前と質問を非表示にしています。</p><label class="adult-consent"><input type="checkbox" data-venue-play-r18 ${state.venue?.displayR18 ? "checked" : ""}/> <span>R18を表示する</span></label></div>${state.account.open ? accountView({ overlayOnly: true }) : ""}`; }
+function venueR18Gate(session) { return `<div class="venue-r18-display-gate"><p>R18を表示するまで、店舗テーマの名前と質問を非表示にしています。</p><label class="adult-consent"><input type="checkbox" data-venue-play-r18 ${state.venue?.displayR18 ? "checked" : ""}/> <span>R18を表示する</span></label></div>${state.account.open || state.helpOpen ? accountView({ overlayOnly: true }) : ""}`; }
 function canSeeDeck(deck) { return canSeeTheme(deck, state.account); }
 function canOfferR18(deck) { return canOfferR18Option(deck, state.account); }
 const AGE_REQUIRED_MESSAGE = "R18は、アカウント設定で18歳以上の確認をすると利用できます。";
@@ -660,6 +661,7 @@ function render() {
   restoreAccountScroll(accountScroll);
   root.dataset.screen = state.screen;
   document.body.classList.toggle("account-open", state.account.open);
+  document.body.classList.toggle("help-open", state.helpOpen);
   document.body.classList.toggle("share-open", state.shareDialogOpen);
   document.body.classList.toggle("solo-play", state.session?.mode === "solo" && state.screen === "play");
   trackPage(state.screen);
@@ -828,6 +830,23 @@ function render() {
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
   const accountOverlay = root.querySelector("[data-account-overlay]");
+  const howToPlayOverlay = root.querySelector("[data-how-to-play-overlay]");
+  const closeHowToPlay = () => {
+    if (!state.helpOpen) return;
+    state.helpOpen = false;
+    state.focusAction = "how-to-play";
+    render();
+  };
+  howToPlayOverlay?.addEventListener("click", (event) => { if (event.target === event.currentTarget) closeHowToPlay(); });
+  howToPlayOverlay?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { event.preventDefault(); closeHowToPlay(); return; }
+    if (event.key !== "Tab") return;
+    const focusable = [...howToPlayOverlay.querySelectorAll("button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled])")].filter((element) => element.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
   accountOverlay?.addEventListener("click", (event) => { if (event.target === event.currentTarget && !state.account.busy) { state.account.profileRevision += 1;
       state.account.avatarDraft = "";
       state.account.avatarError = "";
@@ -905,8 +924,8 @@ function render() {
   });
   updateAdultButton();
   const shareDialog = root.querySelector("[data-share-overlay]");
-  const background = root.querySelectorAll(".topbar, .round-break");
-  background.forEach((element) => { element.inert = Boolean(state.shareDialogOpen) || Boolean(root.querySelector("[data-ts-modal]") && element.matches(".ts-topbar")); });
+  const background = root.querySelectorAll(".topbar, .round-break, .account-bar");
+  background.forEach((element) => { element.inert = Boolean(state.helpOpen) || Boolean(state.shareDialogOpen) || Boolean(root.querySelector("[data-ts-modal]") && element.matches(".ts-topbar")); });
   const pendingFocusSelector = state.focusSelector;
   const focusTarget = pendingFocusSelector ? (root.querySelector(pendingFocusSelector) || (pendingFocusSelector.includes('theme-bookmark') || pendingFocusSelector.includes('theme-experienced') ? root.querySelector('[data-theme-tag-filter]') : null)) : state.focusAction ? root.querySelector(`[data-action="${state.focusAction}"]`) : null;
   const shouldScrollToInput = Boolean(pendingFocusSelector?.includes("participant") || pendingFocusSelector?.includes("data-index"));
@@ -1008,7 +1027,10 @@ function accountDialog(content, className = "") {
 }
 function accountButton(a) {
   const label = a.user ? "アカウントメニュー" : "ログインして保存";
-  return `<div class="account-bar"><button type="button" class="account-button" data-action="account" aria-label="${label}" aria-expanded="${a.open}" aria-controls="account-dialog" title="${label}"><span class="account-avatar">${accountAvatar(a.user)}</span><span class="visually-hidden">${label}</span></button></div>`;
+  return `<div class="account-bar"><button type="button" class="how-to-play-button" data-action="how-to-play" aria-expanded="${state.helpOpen}" aria-controls="how-to-play-dialog">あそびかた</button><button type="button" class="account-button" data-action="account" aria-label="${label}" aria-expanded="${a.open}" aria-controls="account-dialog" title="${label}"><span class="account-avatar">${accountAvatar(a.user)}</span><span class="visually-hidden">${label}</span></button></div>`;
+}
+function howToPlayDialog() {
+  return `<div class="account-overlay how-to-play-overlay" data-how-to-play-overlay><div id="how-to-play-dialog" class="account-dialog account-dialog-howto" role="dialog" aria-modal="true" aria-labelledby="how-to-play-dialog-title" aria-describedby="how-to-play-dialog-description"><div class="account-panel-head"><strong id="how-to-play-dialog-title">あそびかた</strong><button type="button" class="icon-button" data-action="how-to-play-close" aria-label="あそびかたを閉じる">×</button></div><p id="how-to-play-dialog-description" class="how-to-play-copy">通常の会話カードは、人数と呼び名を入力してテーマを選び、カードをめくって順番に答えます。話したくない質問はパスしてOK！みんなでは3問、ひとりでは6問ごとにふりかえれます。</p></div></div>`;
 }
 function guestThemeAccountHint() {
   if (state.screen !== "decks" || state.themeMode === "solo" || state.account.open || state.shared || state.venue || state.session?.sharedGuest || state.session?.venueSession || !state.account.enabled || !state.account.authReady || state.account.user || state.guestThemeHintDismissed) return "";
@@ -1191,8 +1213,9 @@ function accountView(options = {}) {
   const a = state.account;
   const overlayOnly = options.overlayOnly === true;
   const bar = accountButton(a);
+  const help = state.helpOpen ? howToPlayDialog() : "";
   const wrap = (dialog) => (overlayOnly ? dialog : `${bar}${dialog}`);
-  if (!a.open) return overlayOnly ? "" : bar;
+  if (!a.open) return overlayOnly ? help : `${bar}${help}`;
   if (a.user && a.shareOpen) return wrap(shareDialogView(a));
   if (a.user && a.settingsOpen) return wrap(accountSettingsView(a));
   if (a.user && a.libraryOpen) return wrap(libraryAccountView(a));
@@ -1494,7 +1517,7 @@ function soloDecksView() {
   const soloControls = hideSoloControls ? '' : `<div class="theme-options ${soloOptionsOpen ? 'is-expanded' : ''}"><div class="theme-options-details"><div class="theme-options-head"><strong>詳細設定</strong><button type="button" class="icon-button" data-action="theme-options-toggle" aria-label="詳細設定を閉じる" title="閉じる">×</button></div>${soloConsent}</div>${themeExplorerSelectedBar({ solo: true, selected, selectedMySet, showSettings: Boolean(soloConsent), optionsOpen: soloOptionsOpen, canStart: true })}</div>`;
   const nickname = soloDisplayName(null);
   const nicknameIntro = nickname ? `<p class="solo-nickname-context">${esc(nickname)}の時間</p>` : `<p class="solo-nickname-context">自分のペースで話せるテーマ</p>`;
-  return frame(`<div class="theme-screen solo-theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>ひとりで</h1>${nicknameIntro}</div>${themeExplorerToolbar({ solo: true, filters })}${soloBrowse}<p class="form-error" role="alert">${esc(state.error)}</p>${soloControls}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'ひとりで', true);
+  return frame(`<div class="theme-screen solo-theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>ひとりで</h1>${nicknameIntro}</div>${themeExplorerToolbar({ solo: true, filters })}${soloBrowse}<p class="form-error" role="alert">${esc(state.error)}</p>${soloControls}${state.account.open || state.helpOpen ? accountView({ overlayOnly: true }) : ''}</div>`, 'ひとりで', true);
 }
 function decksView() {
   if (state.themeMode === 'solo') return soloDecksView();
@@ -1593,7 +1616,7 @@ function decksView() {
   const guestNotice = !isRegisteredUser() && !gameCategory
     ? `<p class="guest-theme-note"><strong>${guestThemeCount()}</strong>テーマ解放中！アカウント登録で全<strong>${registrationThemeCount()}</strong>テーマを楽しめます！</p>`
     : '';
-  return frame(`<div class="theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>テーマを選ぼう！</h1></div>${guestNotice}${themeExplorerToolbar({ filters, mix: !gameCategory, hideTag: gameCategory })}${state.error ? `<p class="form-error" role="alert">${esc(state.error)}</p>` : ''}${groupBrowse}${gameCategory ? '' : controls}${state.account.open ? accountView({ overlayOnly: true }) : ''}</div>`, 'Mingle.Cards', true);
+  return frame(`<div class="theme-screen theme-explorer-screen"><div class="intro compact"><h1 tabindex="-1" data-focus>テーマを選ぼう！</h1></div>${guestNotice}${themeExplorerToolbar({ filters, mix: !gameCategory, hideTag: gameCategory })}${state.error ? `<p class="form-error" role="alert">${esc(state.error)}</p>` : ''}${groupBrowse}${gameCategory ? '' : controls}${state.account.open || state.helpOpen ? accountView({ overlayOnly: true }) : ''}</div>`, 'Mingle.Cards', true);
 }
 
 function participantChips(session) { return session.participants.map((name, index) => { const initial = Array.from(name.trim())[0] ?? '・'; return `<span class="participant-chip participant-color-${index} ${index === currentParticipantIndex(session) ? "is-current" : ""}"><i aria-hidden="true">${esc(initial)}</i>${esc(name)}</span>`;
@@ -2803,6 +2826,23 @@ async function handleAction(event) {
     state.resume = loadResumeForCurrentUser();
     state.screen = "participants";
     state.error = ""; state.includeChallenges = false; state.adultConfirmed = false; render(); return; }
+  if (action === "how-to-play") {
+    state.helpOpen = true;
+    state.account.open = false;
+    state.account.libraryOpen = false;
+    state.account.settingsOpen = false;
+    state.account.deleteOpen = false;
+    state.focusAction = "how-to-play-close";
+    render();
+    return;
+  }
+  if (action === "how-to-play-close") {
+    if (!state.helpOpen) return;
+    state.helpOpen = false;
+    state.focusAction = "how-to-play";
+    render();
+    return;
+  }
   if (action === "account") { if (state.screen === "decks") state.guestThemeHintDismissed = true; state.account.returnAfterAuth = event.currentTarget.dataset.authReturn === "true"; state.account.open = true; state.account.libraryOpen = false; state.focusAction = state.account.user ? "account-library-open" : "account-close";
     render();
     return;
