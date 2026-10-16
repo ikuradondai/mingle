@@ -89,3 +89,10 @@ export function startCompletionCelebration({ documentRef = document, windowRef =
   const updateCountdown = () => { if (stopped || !countdown) return; const remaining = Math.max(0, Math.ceil((returnDelay - (Date.now() - startedAt)) / 1000)); countdown.textContent = remaining > 0 ? `${remaining}秒後にトップへ戻ります` : "まもなくトップへ戻ります"; if (remaining > 0) countdownTimer = windowRef.setTimeout(updateCountdown, 1000); };
   updateCountdown(); timer = windowRef.setTimeout(cleanup, returnDelay); if (!animationStopped) animationTimer = windowRef.setTimeout(finishAnimation, duration); if (!reduced && !animationStopped) raf = windowRef.requestAnimationFrame(draw); else finishAnimation(); activeCelebrationStop = stopActive; return { variant: VARIANTS[variant], stop: stopActive };
 }
+
+// Navigation can leave the completion screen before its delayed return fires.
+// Keep the cancellation hook small and side-effect free for callers that own
+// the surrounding state machine.
+export function stopCompletionCelebration() {
+  activeCelebrationStop?.();
+}

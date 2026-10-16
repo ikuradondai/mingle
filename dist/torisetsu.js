@@ -333,16 +333,24 @@ function setManualSection(ts, id = '', today = '') {
   ts.manualSectionId = ids.includes(id) ? id : (ids[0] || '');
 }
 
-function openSlot(ts, side, index, phase, target, returnTo, layer = 0) {
+function openSlot(ts, side, index, phase, target, returnTo, layer = 0, preferStash = false) {
   ts.side = side; ts.index = index; ts.phase = phase; ts.target = target; ts.returnTo = returnTo;
   const items = sideList(ts.data, ts.chapterId, side);
   const record = target >= 0 ? items[target] : null;
-  ts.draft = record ? draftFromRecord(ts.chapterId, side, record) : ts.stash[stashKey(ts)] ? clone(ts.stash[stashKey(ts)]) : emptyDraft(ts.chapterId, side);
+  const stashed = ts.stash[stashKey(ts)];
+  ts.draft = preferStash && stashed ? clone(stashed) : record ? draftFromRecord(ts.chapterId, side, record) : stashed ? clone(stashed) : emptyDraft(ts.chapterId, side);
   if (ts.chapterId === 'needs') setStep(ts, 'layer', { layer });
   else setStep(ts, side === 'admire' ? 'admire' : 'episode');
 }
 
 function openAdmire(ts, phase, returnTo) { openSlot(ts, 'admire', 0, phase, ts.data.values.admire ? 0 : -1, returnTo); }
+
+function stashCurrentDraft(ts) {
+  if (!ts?.draft || !ts.chapterId || !ts.side || !['layer', 'episode', 'admire'].includes(ts.step)) return;
+  const hasValue = Object.values(ts.draft).some((value) => (Array.isArray(value) ? value.length : String(value).trim()));
+  if (hasValue) ts.stash[stashKey(ts)] = clone(ts.draft);
+  else delete ts.stash[stashKey(ts)];
+}
 
 function openIntro(ts, sideIndex) {
   const cfg = cfgOf(ts);
@@ -448,7 +456,7 @@ function toggleIn(items, id, max, allowOff) {
 
 function backFromStep(ts) {
   const cfg = cfgOf(ts);
-  const stashDraft = () => { if (ts.draft && Object.values(ts.draft).some((value) => (Array.isArray(value) ? value.length : String(value).trim()))) ts.stash[stashKey(ts)] = clone(ts.draft); else delete ts.stash[stashKey(ts)]; };
+  const stashDraft = () => stashCurrentDraft(ts);
   const openPrev = (side, index) => openSlot(ts, side, index, 'init', slotMapOf(ts, ts.chapterId, side)[index] ?? -1, null, lastLayer(side));
   switch (ts.step) {
     case 'predict': ts.view = 'contents'; ts.step = null; return;
@@ -1682,4 +1690,24 @@ export function torisetsuView(ts, helpers) {
 
 export function torisetsuViewKey(ts) {
   return `${ts.view}:${ts.chapterId || ''}:${ts.step || ''}:${ts.side || ''}:${ts.index}:${ts.layer}:${ts.phase}:${ts.target}:${ts.manualSectionId || ''}:${ts.insightPage || 0}`;
+}
+
+// Restore navigation chrome without replacing the accumulated answers. Entry
+// screens that own a draft must reopen their slot so the slot-specific draft
+// and target are reconstructed from the current in-memory stash/data.
+export function restoreNavigationView(ts, snapshot) {
+  if (!ts || !snapshot || typeof snapshot !== 'object') return ts;
+  // Preserve a dirty current slot before switching the view. This is the same
+  // stash path used by the normal in-app Back action.
+  stashCurrentDraft(ts);
+  const restoredTarget = snapshot.phase === 'init' && snapshot.chapterId && snapshot.side
+    ? (slotMapOf(ts, snapshot.chapterId, snapshot.side)[Number(snapshot.index) || 0] ?? -1)
+    : snapshot.target;
+  const fields = ['view', 'chapterId', 'step', 'side', 'layer', 'index', 'phase', 'target', 'returnTo', 'manualSectionId', 'insightPage', 'leaveConfirm', 'undo', 'imageStatus'];
+  for (const field of fields) if (Object.hasOwn(snapshot, field)) ts[field] = snapshot[field];
+  if (snapshot.phase === 'init') ts.target = restoredTarget;
+  if (ts.view === 'step' && ['layer', 'episode', 'admire'].includes(ts.step) && ts.chapterId && ts.side) {
+    openSlot(ts, ts.side, Number(ts.index) || 0, ts.phase, Number(ts.target) ?? -1, ts.returnTo ?? null, Number(ts.layer) || 0, true);
+  }
+  return ts;
 }

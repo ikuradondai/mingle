@@ -7,7 +7,7 @@ import { roundCompletionInfo } from "./round-completion.js";
 import { completionFeelingChoices, completionFeelingFor, completionFeelingKey } from "./round-feeling.js";
 import { completionReplyContext, completionReplyKey, completionReplyCopy } from "./completion-reply.js";
 import { completionRecallKey as recallMemoryKey, completionRecallCandidates, chooseRecallEntry } from "./completion-recall.js";
-import { startCompletionCelebration } from "./completion-celebration.js";
+import { startCompletionCelebration, stopCompletionCelebration } from "./completion-celebration.js";
 import { ROUND_SIZE, roundSizeFor, isTogetherCard, createSession, createMixedSession, createSavedSession, createSharedSession, createSoloSession, createSponsorSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer, previousAnswer, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS, summarizeLikes } from "./engine.js";
 import { themeGroups, groupLabels } from "./data/theme-groups.js";
 import { buildFeedbackPayload, feedbackKey, submitFeedback } from "./feedback.js";
@@ -24,7 +24,7 @@ import { CREATOR_PRESET_IDS, normalizeCreatorDesign, effectiveCreatorAdult } fro
 import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, rankThemeRecommendations, themeExplorerBookmarks, toggleThemeExplorerBookmark, themeExplorerExperienced, toggleThemeExplorerExperienced } from "./theme-explorer.js";
 import { loadRecommendationLabels, recommendationLabel } from "./recommendation-labels.js";
 import { themeExampleForDeck } from "./theme-examples.js";
-import { createTorisetsuState, torisetsuView, applyAction as applyTorisetsuAction, loadTorisetsu, expireUndo as expireTorisetsuUndo, torisetsuViewKey, setDraftText as setTorisetsuText, draftComplete as torisetsuDraftComplete, isPicked as torisetsuIsPicked, finishLabel as torisetsuFinishLabel, composeManual as composeTorisetsuManual, canSendImage } from "./torisetsu.js";
+import { createTorisetsuState, torisetsuView, applyAction as applyTorisetsuAction, loadTorisetsu, expireUndo as expireTorisetsuUndo, torisetsuViewKey, restoreNavigationView as restoreTorisetsuNavigationView, setDraftText as setTorisetsuText, draftComplete as torisetsuDraftComplete, isPicked as torisetsuIsPicked, finishLabel as torisetsuFinishLabel, composeManual as composeTorisetsuManual, canSendImage } from "./torisetsu.js";
 import { GUEST_THEME_IDS, countGuestThemes, countRegistrationThemes, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText, normalizeSoloNickname, soloNicknameLabel, personalizeSoloQuestion, hasSoloQuestionPersonalization } from "./participant-rule.js";
 import { consumeMinorityAuthIntent, clearMinorityAuthIntent } from "./minority-auth-intent.js";
@@ -89,6 +89,175 @@ const state = {
     guestNormalizedGeneration: -1,
   },
 };
+
+// The app is a single document, so the browser's native history otherwise
+// skips all of the meaningful screens. Keep only a public screen identifier in
+// history.state; user text, answers, and auth-sensitive data stay in memory or
+// the existing session stores.
+const initialRouteParams = new URLSearchParams(location.search);
+const initialHistoryContext = initialRouteParams.has("venue") ? "venue" : initialRouteParams.has("share") ? "share" : "app";
+const NAV_SETUP_KEY = "mingle.cards.navigation-setup.v1";
+let historyLastKey = null;
+let historyCurrentEntryId = null;
+let historyRestoring = false;
+let historyReplaceNext = false;
+let historySequence = 0;
+let historyContextOverride = initialHistoryContext;
+const historyDocumentId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+const navigationEntrySnapshots = new Map();
+const torisetsuHistorySnapshots = new Map();
+function saveNavigationSetup() {
+  if (!['participants', 'decks'].includes(state.screen) || !Array.isArray(state.participants)) return;
+  try {
+    const createdAt = Date.now();
+    sessionStorage.setItem(NAV_SETUP_KEY, JSON.stringify({ createdAt, expiresAt: createdAt + 30 * 60 * 1000, participants: state.participants.slice(0, 8), groupParticipants: state.groupParticipants.slice(0, 8), themeMode: state.themeMode, selectedDeckId: state.selectedDeckId, selectedDeckIds: state.selectedDeckIds.slice(0, 3), selectedMySetId: state.selectedMySetId }));
+  } catch {}
+}
+function restoreNavigationSetup() {
+  try {
+    const setup = JSON.parse(sessionStorage.getItem(NAV_SETUP_KEY) || "null");
+    if (!setup || !Number.isFinite(setup.createdAt) || !Number.isFinite(setup.expiresAt) || setup.expiresAt < Date.now() || setup.expiresAt - setup.createdAt > 30 * 60 * 1000 || !Array.isArray(setup.participants) || setup.participants.length < 1 || setup.participants.length > 8 || !setup.participants.every((name) => typeof name === "string" && Array.from(name).length <= MAX_NAME_LENGTH)) return;
+    state.participants = setup.participants;
+    state.groupParticipants = Array.isArray(setup.groupParticipants) ? setup.groupParticipants : setup.participants;
+    state.themeMode = setup.themeMode === "solo" ? "solo" : setup.themeMode === "mixed" ? "mixed" : "single";
+    if (typeof setup.selectedDeckId === "string") state.selectedDeckId = setup.selectedDeckId;
+    if (Array.isArray(setup.selectedDeckIds) && setup.selectedDeckIds.length) state.selectedDeckIds = setup.selectedDeckIds.slice(0, 3);
+    state.participantTab = state.themeMode === "solo" ? "solo" : state.themeMode === "mixed" ? (state.selectedDeckIds.some((id) => participantRuleForDeck(id) === "pair") ? "pair" : "group") : participantRuleForDeck(state.selectedDeckId);
+    state.selectedMySetId = typeof setup.selectedMySetId === "string" ? setup.selectedMySetId : null;
+  } catch {}
+}
+function navigationSetupSnapshot() {
+  return { participants: [...state.participants], groupParticipants: [...state.groupParticipants], themeMode: state.themeMode, participantTab: state.participantTab, filter: state.filter, themeExplorerShelf: state.themeExplorerShelf, selectedDeckId: state.selectedDeckId, selectedDeckIds: [...state.selectedDeckIds], selectedMySetId: state.selectedMySetId };
+}
+function restoreNavigationSnapshot(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.participants)) return;
+  state.participants = [...snapshot.participants];
+  state.groupParticipants = [...(snapshot.groupParticipants || snapshot.participants)];
+  state.themeMode = ["single", "solo", "mixed"].includes(snapshot.themeMode) ? snapshot.themeMode : state.themeMode;
+  state.participantTab = snapshot.participantTab || state.participantTab;
+  if (typeof snapshot.filter === "string") state.filter = snapshot.filter;
+  if (typeof snapshot.themeExplorerShelf === "string") state.themeExplorerShelf = snapshot.themeExplorerShelf;
+  if (typeof snapshot.selectedDeckId === "string") state.selectedDeckId = snapshot.selectedDeckId;
+  if (Array.isArray(snapshot.selectedDeckIds)) state.selectedDeckIds = [...snapshot.selectedDeckIds];
+  state.selectedMySetId = typeof snapshot.selectedMySetId === "string" ? snapshot.selectedMySetId : null;
+}
+function updateCurrentNavigationSnapshot() {
+  if (historyCurrentEntryId !== null) navigationEntrySnapshots.set(historyCurrentEntryId, navigationSetupSnapshot());
+}
+function historyContext() {
+  if (state.venue) return "venue";
+  if (state.shared) return "share";
+  return historyContextOverride === null ? "app" : historyContextOverride;
+}
+function historyKey() {
+  let screen = state.screen === "torisetsu" ? `torisetsu:${state.torisetsu ? torisetsuViewKey(state.torisetsu) : ""}` : state.screen === "decks" ? `decks:${state.themeMode}` : state.screen === "play" ? `play:${state.session?.sessionId || "none"}` : state.screen;
+  return `${historyContext()}:${screen}:account-${accountHistoryMode()}`;
+}
+function historyState(key, entryId) {
+  // `key` is used only in memory to detect meaningful renders. Do not persist
+  // chapter/detail identifiers or any other content-derived data in history.
+  return { mingle: 1, doc: historyDocumentId, screen: state.screen, sessionId: state.screen === "play" ? state.session?.sessionId || null : null, account: accountHistoryMode(), entryId };
+}
+function accountHistoryMode() {
+  const a = state.account;
+  if (!a.open) return "none";
+  if (a.deleteOpen) return "delete";
+  if (a.ageRevokeOpen) return "age-revoke";
+  if (a.shareOpen) return "share";
+  if (a.customEditorOpen) return "custom-editor";
+  if (a.libraryOpen) return a.studioMode && a.studioMode !== "list" ? `library-${a.studioMode}` : "library";
+  if (a.settingsOpen) return "settings";
+  return "account";
+}
+function torisetsuHistoryViewState() {
+  if (!state.torisetsu) return null;
+  const fields = ["view", "chapterId", "step", "side", "layer", "index", "phase", "target", "returnTo", "manualSectionId", "insightPage", "leaveConfirm", "undo", "imageStatus"];
+  return Object.fromEntries(fields.filter((field) => Object.hasOwn(state.torisetsu, field)).map((field) => [field, state.torisetsu[field]]));
+}
+function syncNavigationHistory() {
+  const key = historyKey();
+  saveNavigationSetup();
+  if (historyLastKey === null) {
+    historyLastKey = key;
+    const entryId = ++historySequence;
+    if (state.screen === "torisetsu") torisetsuHistorySnapshots.set(entryId, torisetsuHistoryViewState());
+    navigationEntrySnapshots.set(entryId, navigationSetupSnapshot());
+    historyCurrentEntryId = entryId;
+    history.replaceState(historyState(key, entryId), "", location.href);
+    return;
+  }
+  if (historyLastKey === key) {
+    if (historyCurrentEntryId !== null) navigationEntrySnapshots.set(historyCurrentEntryId, navigationSetupSnapshot());
+    historyReplaceNext = false; return;
+  }
+  const entryId = ++historySequence;
+  if (state.screen === "torisetsu") torisetsuHistorySnapshots.set(entryId, torisetsuHistoryViewState());
+  navigationEntrySnapshots.set(entryId, navigationSetupSnapshot());
+  historyCurrentEntryId = entryId;
+  const replace = historyReplaceNext || historyRestoring;
+  historyReplaceNext = false;
+  if (replace) history.replaceState(historyState(key, entryId), "", location.href);
+  else history.pushState(historyState(key, entryId), "", location.href);
+  historyLastKey = key;
+}
+function restoreNavigationHistory(event) {
+  const entry = event.state;
+  if (!entry?.mingle || typeof entry.screen !== "string") return;
+  const sameDocument = entry.doc === historyDocumentId;
+  historyRestoring = true;
+  stopCompletionCelebration();
+  completionFinishInFlight = false;
+  const requested = ["participants", "decks", "play", "torisetsu"].includes(entry.screen) ? entry.screen : "participants";
+  if (sameDocument && (requested === "participants" || requested === "decks")) restoreNavigationSnapshot(navigationEntrySnapshots.get(entry.entryId));
+  if (requested === "play" && (!state.session || (entry.sessionId && entry.sessionId !== state.session.sessionId) || !canAccessSessionContent(state.session, state.account, { activeVenue: isActiveVenueSession(state.session), venueDisplay: state.venue?.displayR18 === true }))) {
+    const staleSessionEntry = Boolean(entry.sessionId && state.session && entry.sessionId !== state.session.sessionId);
+    state.screen = staleSessionEntry ? "decks" : "participants";
+  } else if (requested === "torisetsu" && sameDocument) {
+    const snapshot = entry.entryId ? torisetsuHistorySnapshots.get(entry.entryId) : null;
+    if (snapshot && state.torisetsu) restoreTorisetsuNavigationView(state.torisetsu, snapshot);
+    else if (snapshot && !state.torisetsu) {
+      state.torisetsu = createTorisetsuState({ stored: loadTorisetsu(() => window.localStorage, { today: localIsoDate() }) });
+      restoreTorisetsuNavigationView(state.torisetsu, snapshot);
+    }
+    if (state.torisetsu) state.screen = "torisetsu";
+    else state.screen = "decks";
+  } else state.screen = requested;
+  resetAccountHistorySurface();
+  restoreAccountHistorySurface(entry.account);
+  state.focusSelector = null;
+  historyLastKey = historyKey();
+  historyCurrentEntryId = sameDocument ? entry.entryId || null : null;
+  render();
+  // A protected/unknown entry may have been reduced to participants or decks.
+  // Replace the traversed entry with metadata matching the visible UI so a
+  // later Forward cannot resurrect the rejected screen.
+  if (!sameDocument || requested !== state.screen) {
+    const entryId = ++historySequence;
+    history.replaceState(historyState(historyKey(), entryId), "", location.href);
+    historyLastKey = historyKey();
+    historyCurrentEntryId = entryId;
+  }
+  historyRestoring = false;
+}
+function resetAccountHistorySurface() {
+  const a = state.account;
+  a.open = false; a.libraryOpen = false; a.settingsOpen = false; a.deleteOpen = false; a.deleteConfirmed = false;
+  a.shareOpen = false; a.ageRevokeOpen = false; a.ageConfirmChecked = false;
+  a.customEditorOpen = false;
+  a.studioMode = "list"; a.studioReplaceIndex = null;
+}
+function restoreAccountHistorySurface(mode) {
+  const a = state.account;
+  if (typeof mode !== "string" || mode === "none") return;
+  a.open = true;
+  if (mode === "delete") { a.settingsOpen = true; a.deleteOpen = true; return; }
+  if (mode === "age-revoke") { a.settingsOpen = true; a.ageRevokeOpen = true; return; }
+  if (mode === "share") { a.libraryOpen = true; a.shareOpen = true; return; }
+  if (mode === "custom-editor") { a.libraryOpen = true; a.customEditorOpen = true; return; }
+  if (mode === "settings") { a.settingsOpen = true; return; }
+  if (mode === "library" || mode.startsWith("library-")) { a.libraryOpen = true; a.studioMode = mode.slice("library-".length) || "list"; return; }
+}
+window.addEventListener("popstate", restoreNavigationHistory);
 try { const savedExplorerView = localStorage.getItem("mingle.theme-explorer.view.v1"); if (savedExplorerView === "list" || savedExplorerView === "cards") state.themeExplorerView = savedExplorerView; } catch {}
 const AUTH_RETURN_KEY = "mingle.cards.auth-return.v1";
 const LIBRARY_RETURN_KEY = "mingle.cards.library-return.v1";
@@ -471,6 +640,9 @@ function render() {
   const torisetsuKeyBefore = state.screen === "torisetsu" ? root.querySelector(".ts-screen")?.dataset.tsViewKey || null : null;
   const torisetsuScrollBefore = state.screen === "torisetsu" ? window.scrollY : 0;
   if (state.screen === "torisetsu" && !state.torisetsu) state.screen = "decks";
+  // Auth/R18 enforcement above may change the screen or close an account
+  // surface. Record the resulting UI, never the pre-enforcement request.
+  syncNavigationHistory();
   root.innerHTML = state.shared ? sharedView() : state.screen === "torisetsu" ? torisetsuScreenView() : state.screen === "participants" ? participantsView() : state.screen === "decks" ? decksView() : playView();
   if (state.screen === "torisetsu") {
     const torisetsuKeyAfter = root.querySelector(".ts-screen")?.dataset.tsViewKey || null;
@@ -2151,6 +2323,7 @@ async function startSharedSet() {
   }
 }
 function submitParticipants() {
+  updateCurrentNavigationSnapshot();
   const validationError = homeParticipantValidationError(state.participants);
   if (validationError) {
     state.error = validationError;
@@ -2471,10 +2644,13 @@ function quickQuizRoster() {
   return state.participants.map((name) => name.trim());
 }
 function finishToHome() {
+  const leavingExternalContext = Boolean(state.shared || state.venue || location.search.includes("share=") || location.search.includes("venue="));
   clearCompletionRecallSession(state.session); state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
   state.resume = loadResumeForCurrentUser();
   restoreGroupHomeState();
   state.screen = "participants";
+  historyContextOverride = null;
+  historyReplaceNext = leavingExternalContext;
   state.venue = null; state.shared = null; state.selectedVenueSetId = null;
   if (location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
   state.error = ""; state.includeChallenges = false; state.adultConfirmed = false; render();
@@ -2604,6 +2780,7 @@ async function handleAction(event) {
   }
   if (action === "reveal") { playFlipSound(); const previous = ensureSession(); state.session = revealCard(previous); persist(previous); render(); return; }
   if (action === "home") {
+    const leavingExternalContext = Boolean(state.shared || state.venue || location.search.includes("share=") || location.search.includes("venue="));
     clearCompletionRecallSession(state.session);
     const keepSoloHome = state.themeMode === "solo" && !state.venue && !state.shared;
     state.continuePending = null;
@@ -2613,6 +2790,8 @@ async function handleAction(event) {
     state.selectedVenueSetId = null;
     state.sharedLoading = false;
     state.busy = false;
+    historyContextOverride = null;
+    historyReplaceNext = leavingExternalContext;
     if (location.search.includes("share=") || location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
     state.adultConfirmed = false;
     state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null;
@@ -3333,6 +3512,21 @@ async function loadVenueLink() {
 
 const accountConfigReady = discoverAccountConfig();
 try { const saved = loadSession(); if (saved?.customSet && saved.ownerUserId && Array.isArray(saved.customQuestions) && saved.customQuestions.length > 0) state.pendingCustomResume = saved; else state.resume = saved; } catch { state.resume = null; state.pendingCustomResume = null; }
+// A native game page (quiz, rooms, etc.) creates a new document. When its
+// Back navigation returns here without BFCache, recover only the public app
+// screen from the prior entry; all private state still comes from the normal
+// session store and is rechecked by render()/enforceAgeGate().
+const bootHistoryEntry = history.state;
+if (bootHistoryEntry?.mingle && typeof bootHistoryEntry.screen === "string") {
+  restoreNavigationSetup();
+  if (bootHistoryEntry.screen === "decks") state.screen = "decks";
+  else if (bootHistoryEntry.screen === "play" && state.resume && (!bootHistoryEntry.sessionId || bootHistoryEntry.sessionId === state.resume.sessionId) && canAccessSessionContent(state.resume, state.account, { activeVenue: false, venueDisplay: false })) {
+    state.session = state.resume;
+    state.participants = [...(state.session.participants || [])];
+    state.screen = "play";
+  }
+  history.replaceState({ ...bootHistoryEntry, doc: historyDocumentId }, "", location.href);
+}
 render();
 loadSponsors();
 loadSharedLink();

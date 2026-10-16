@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyAction, setDraftText, createTorisetsuState, torisetsuView, torisetsuViewKey, composeManual, normalizeData } from '../dist/torisetsu.js';
+import { applyAction, setDraftText, createTorisetsuState, torisetsuView, torisetsuViewKey, composeManual, normalizeData, restoreNavigationView } from '../dist/torisetsu.js';
 import { COPY } from '../dist/data/torisetsu-content.js';
 import { makeCtx, spyStorage, runChapter, fillLayers } from './helpers/torisetsu-flow.mjs';
 import * as A from './fixtures/torisetsu/v3-a-office.mjs';
@@ -19,6 +19,28 @@ const openHard = (ts, ctx) => {
   act(ts, ctx, 'torisetsu-skip-item'); act(ts, ctx, 'torisetsu-skip-item'); // happy 1, 2 を飛ばす → しんどい側の案内
   act(ts, ctx, 'torisetsu-recall-start'); // hard 1
 };
+
+test('navigation view restoration reopens the saved slot without replacing accumulated answers', () => {
+  const { ts, ctx } = setup();
+  openHard(ts, ctx);
+  const firstSlot = { view: ts.view, chapterId: ts.chapterId, step: ts.step, side: ts.side, index: ts.index, layer: ts.layer, phase: ts.phase, target: -1, returnTo: ts.returnTo };
+  act(ts, ctx, 'torisetsu-layer-next'); act(ts, ctx, 'torisetsu-layer-next'); act(ts, ctx, 'torisetsu-layer-next');
+  act(ts, ctx, 'torisetsu-chip', { group: 'needs', chip: 'nd_safe' });
+  act(ts, ctx, 'torisetsu-record');
+  assert.equal(ts.data.needs.hard.length, 1);
+  const secondSlot = { view: ts.view, chapterId: ts.chapterId, step: ts.step, side: ts.side, index: ts.index, layer: ts.layer, phase: ts.phase, target: -1, returnTo: ts.returnTo };
+  setDraftText(ts, '未保存の2つ目', 'memo', ctx);
+  restoreNavigationView(ts, firstSlot);
+  assert.deepEqual(ts.draft.needs, ['nd_safe']);
+  assert.equal(ts.data.needs.hard.length, 1);
+  setDraftText(ts, '保存済slotの未保存編集', 'memo', ctx);
+  restoreNavigationView(ts, secondSlot);
+  assert.equal(ts.draft.memo, '未保存の2つ目');
+  assert.deepEqual(ts.data.needs.hard[0].needs, ['nd_safe']);
+  restoreNavigationView(ts, firstSlot);
+  assert.equal(ts.draft.memo, '保存済slotの未保存編集');
+  assert.deepEqual(ts.data.needs.hard[0].needs, ['nd_safe']);
+});
 
 test('chapter 1 walks 4 layers for a hard episode and 3 for a happy one, one layer per screen', () => {
   const { ts, ctx } = setup();
