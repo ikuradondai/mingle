@@ -280,7 +280,12 @@ export function revealCard(session) {
   const card = currentCard(session);
   const eligible = card && card.kind !== 'challenge' && (session.mode === 'solo' || (card.sourceDeckId !== 'custom' && card.custom !== true));
   const revealedQuestionIds = eligible && !session.revealedQuestionIds?.includes(card.id) ? [...(session.revealedQuestionIds || []), card.id] : [...(session.revealedQuestionIds || [])];
-  return { ...session, revealed: true, revealedQuestionIds };
+  return {
+    ...session,
+    revealed: true,
+    progressRevealed: (session.progressCursor ?? session.cursor) === session.cursor ? true : session.progressRevealed === true,
+    revealedQuestionIds,
+  };
 }
 
 export function likeCurrentAnswer(session) {
@@ -300,7 +305,9 @@ function moveToNextAnswer(session) {
     return { ...session, answerIndex: session.answerIndex + 1 };
   }
   const cursor = session.cursor + 1; const roundSize = roundSizeFor(session);
-  return { ...session, cursor, revealed: false, answerIndex: 0, roundCount: cursor % roundSize, roundNumber: Math.floor(cursor / roundSize) + 1 };
+  const farthest = Number.isInteger(session.progressCursor) ? session.progressCursor : session.cursor;
+  const advancingPastFarthest = cursor > farthest;
+  return { ...session, cursor, progressCursor: Math.max(farthest, cursor), progressRevealed: advancingPastFarthest ? false : session.progressRevealed === true, revealed: advancingPastFarthest ? false : session.progressRevealed === true, answerIndex: 0, roundCount: cursor % roundSize, roundNumber: Math.floor(cursor / roundSize) + 1 };
 }
 
 export function nextAnswer(session) {
@@ -316,10 +323,34 @@ export function previousAnswer(session) {
   return { ...session, answerIndex: session.answerIndex - 1 };
 }
 
+// Return to the preceding card without opening a new round or changing the
+// saved answer/like data. Show the completed card at its final answer position
+// so pressing next resumes the card that was being viewed.
+export function previousCard(session) {
+  if (!session || session.cursor <= 0 || !Array.isArray(session.questions)) return session;
+  const cursor = session.cursor - 1;
+  const card = session.questions[cursor];
+  const roundSize = roundSizeFor(session);
+  return {
+    ...session,
+    cursor,
+    // Keep the farthest reached position so storage can distinguish a
+    // rewind from an unvisited current card, including across round starts.
+    progressCursor: Math.max(session.progressCursor ?? session.cursor, session.cursor),
+    progressRevealed: session.cursor === (session.progressCursor ?? session.cursor) ? session.revealed === true : session.progressRevealed === true,
+    revealed: true,
+    answerIndex: isTogetherCard(card) ? 0 : Math.max(0, session.participants.length - 1),
+    roundNumber: Math.floor(cursor / roundSize) + 1,
+    roundCount: cursor % roundSize,
+  };
+}
+
 export function advance(session) {
   if (session.cursor >= session.questions.length || session.cursor >= session.unlockedUntil) return session;
   const cursor = session.cursor + 1; const roundSize = roundSizeFor(session);
-  const next = { ...session, cursor, revealed: false, answerIndex: 0, roundCount: cursor % roundSize, roundNumber: Math.floor(cursor / roundSize) + 1 };
+  const farthest = Number.isInteger(session.progressCursor) ? session.progressCursor : session.cursor;
+  const advancingPastFarthest = cursor > farthest;
+  const next = { ...session, cursor, progressCursor: Math.max(farthest, cursor), progressRevealed: advancingPastFarthest ? false : session.progressRevealed === true, revealed: advancingPastFarthest ? false : session.progressRevealed === true, answerIndex: 0, roundCount: cursor % roundSize, roundNumber: Math.floor(cursor / roundSize) + 1 };
   return next;
 }
 

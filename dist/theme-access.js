@@ -99,7 +99,8 @@ export function sessionNeedsThemeAccess(session, account) {
     const canonical = Boolean(deck && session.questionOrder === 'fixed' && session.questions?.length === 12 && session.questions.every((card, index) => card?.id === deck.questions[index]?.id && card.r18 !== true));
     if (!canonical) return true;
     if (isRegisteredAccount(account)) return false;
-    return !(session.cursor < 6 || (session.cursor === 6 && session.unlockedUntil === 6));
+    const progressCursor = Number.isInteger(session.progressCursor) ? session.progressCursor : session.cursor;
+    return !(progressCursor < 6 || (progressCursor === 6 && session.unlockedUntil === 6));
   }
   if (session.customSet) return !isRegisteredAccount(account);
   if (session.sharedGuest) return session.includeR18 === true && !isRegisteredAccount(account);

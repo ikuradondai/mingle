@@ -59,7 +59,7 @@ export function saveSession(session, options = {}) {
       includeChallenges: session.includeChallenges === true, questionIds: session.questions.map((card) => card.id),
       questionSources: session.questions.map((card) => card.sourceDeckId || null), cursor: session.cursor,
       roundSize: persistedRoundSize,
-      unlockedUntil: session.unlockedUntil, roundStart: session.roundStart, roundCount: session.roundCount,
+      unlockedUntil: session.unlockedUntil, progressCursor: Math.max(session.cursor, Number.isInteger(session.progressCursor) ? session.progressCursor : session.cursor), progressRevealed: (Number.isInteger(session.progressCursor) ? session.progressCursor : session.cursor) === session.cursor ? session.progressRevealed === true || session.revealed === true : session.progressRevealed === true, roundStart: session.roundStart, roundCount: session.roundCount,
       roundNumber: session.roundNumber, revealed: session.revealed === true, answerIndex: session.answerIndex,
       likes: { ...(session.likes || {}) },
       revealedQuestionIds: Array.isArray(session.revealedQuestionIds) ? [...new Set(session.revealedQuestionIds)] : [],
@@ -152,14 +152,21 @@ function hydrate(record, now, options = {}) {
   if (hasRevealedHistory && !Array.isArray(record.revealedQuestionIds)) throw new Error('revealed-history');
   const revealedQuestionIds = hasRevealedHistory ? [...new Set(record.revealedQuestionIds)] : [];
   if (revealedQuestionIds.length > 40 || revealedQuestionIds.length !== (hasRevealedHistory ? record.revealedQuestionIds.length : 0) || revealedQuestionIds.some((id) => typeof id !== 'string' || !record.questionIds.includes(id))) throw new Error('revealed-history');
+  const hasProgressCursor = Object.hasOwn(record, 'progressCursor');
+  const hasProgressRevealed = Object.hasOwn(record, 'progressRevealed');
+  if (hasProgressCursor !== hasProgressRevealed) throw new Error('progress-metadata');
+  const progressCursor = hasProgressCursor ? record.progressCursor : record.cursor;
+  const progressRevealed = hasProgressRevealed ? record.progressRevealed : record.revealed === true;
+  if (typeof progressRevealed !== 'boolean') throw new Error('progress-revealed');
   const questionIndex = new Map(record.questionIds.map((id, index) => [id, index]));
   if (revealedQuestionIds.some((id) => {
     const card = questions[questionIndex.get(id)];
-    return (!solo && (card?.sourceDeckId === 'custom' || card?.custom === true)) || card?.kind === 'challenge' || questionIndex.get(id) > record.cursor || (!record.revealed && questionIndex.get(id) >= record.cursor);
+    const index = questionIndex.get(id);
+    return (!solo && (card?.sourceDeckId === 'custom' || card?.custom === true)) || card?.kind === 'challenge' || index > progressCursor || (index === progressCursor ? !progressRevealed : false);
   })) throw new Error('revealed-history');
   const finalLength = record.questionIds.length;
   const validUnlock = (value) => value === finalLength || (value >= roundSize && value < finalLength && value % roundSize === 0);
-  if (!Number.isInteger(record.cursor) || record.cursor < 0 || record.cursor > finalLength || !Number.isInteger(record.unlockedUntil) || !validUnlock(record.unlockedUntil) || record.cursor > record.unlockedUntil || (record.cursor === finalLength && record.unlockedUntil !== finalLength)) throw new Error('progress');
+  if (!Number.isInteger(record.cursor) || record.cursor < 0 || record.cursor > finalLength || !Number.isInteger(progressCursor) || progressCursor < record.cursor || progressCursor > record.unlockedUntil || !Number.isInteger(record.unlockedUntil) || !validUnlock(record.unlockedUntil) || record.cursor > record.unlockedUntil || (progressRevealed && progressCursor >= record.unlockedUntil) || (progressCursor === record.cursor && progressRevealed !== record.revealed) || (record.cursor === finalLength && record.unlockedUntil !== finalLength)) throw new Error('progress');
   const expectedRoundStart = record.unlockedUntil === finalLength ? Math.max(0, finalLength - (finalLength % roundSize || roundSize)) : Math.max(0, record.unlockedUntil - roundSize);
   if (!Number.isInteger(record.roundStart) || record.roundStart !== expectedRoundStart || !Number.isInteger(record.roundCount) || record.roundCount !== record.cursor % roundSize || !Number.isInteger(record.roundNumber) || record.roundNumber !== Math.floor(record.cursor / roundSize) + 1) throw new Error('round');
   if (record.revealed && record.cursor === record.unlockedUntil) throw new Error('progress');
@@ -169,9 +176,9 @@ function hydrate(record, now, options = {}) {
     const match = key.match(/^([A-Za-z0-9._:-]+):(\d+)$/);
     if (!match || !record.questionIds.includes(match[1]) || Number(match[2]) >= record.participants.length || !Number.isSafeInteger(value) || value < 0) throw new Error('likes');
   }
-  const feedbackSubmitted = Array.isArray(record.feedbackSubmitted) ? [...new Set(record.feedbackSubmitted.filter((cursor) => Number.isInteger(cursor) && cursor >= roundSize && cursor <= finalLength && cursor <= record.cursor))] : [];
+  const feedbackSubmitted = Array.isArray(record.feedbackSubmitted) ? [...new Set(record.feedbackSubmitted.filter((cursor) => Number.isInteger(cursor) && cursor >= roundSize && cursor <= finalLength && cursor <= progressCursor))] : [];
   if (record.cursor >= finalLength && options.allowCompleted !== true) return null;
-  return { sessionId: record.sessionId, mode: solo ? 'solo' : 'group', questionOrder: record.questionOrder === 'fixed' ? 'fixed' : 'shuffle', setId: customSet && typeof record.setId === 'string' ? record.setId : null, setName: customSet && typeof record.setName === 'string' ? record.setName : null, participants: [...record.participants], deckId: record.deckId, deckIds, customSet, sponsorSet, sponsor: sponsorSet ? { ...sponsor } : null, ownerUserId: hasCustom ? record.ownerUserId : null, customQuestions: hasCustom ? record.customQuestions.map((card) => ({ ...card })) : [], mixed: record.mixed === true, r18: record.r18 === true, design, questions, cursor: record.cursor, roundSize, unlockedUntil: record.unlockedUntil, roundStart: Number.isInteger(record.roundStart) ? record.roundStart : Math.max(0, record.unlockedUntil - roundSize), roundCount: Number.isInteger(record.roundCount) ? record.roundCount : record.cursor % roundSize, roundNumber: Number.isInteger(record.roundNumber) ? record.roundNumber : Math.floor(record.cursor / roundSize) + 1, adultConfirmed: record.adultConfirmed === true, includeR18: record.includeR18 === true, includeChallenges: record.includeChallenges === true, revealed: record.revealed === true, answerIndex: record.answerIndex, likes: solo ? {} : { ...likes }, feedbackSubmitted: solo ? [] : feedbackSubmitted, revealedQuestionIds };
+  return { sessionId: record.sessionId, mode: solo ? 'solo' : 'group', questionOrder: record.questionOrder === 'fixed' ? 'fixed' : 'shuffle', setId: customSet && typeof record.setId === 'string' ? record.setId : null, setName: customSet && typeof record.setName === 'string' ? record.setName : null, participants: [...record.participants], deckId: record.deckId, deckIds, customSet, sponsorSet, sponsor: sponsorSet ? { ...sponsor } : null, ownerUserId: hasCustom ? record.ownerUserId : null, customQuestions: hasCustom ? record.customQuestions.map((card) => ({ ...card })) : [], mixed: record.mixed === true, r18: record.r18 === true, design, questions, cursor: record.cursor, progressCursor, progressRevealed, roundSize, unlockedUntil: record.unlockedUntil, roundStart: Number.isInteger(record.roundStart) ? record.roundStart : Math.max(0, record.unlockedUntil - roundSize), roundCount: Number.isInteger(record.roundCount) ? record.roundCount : record.cursor % roundSize, roundNumber: Number.isInteger(record.roundNumber) ? record.roundNumber : Math.floor(record.cursor / roundSize) + 1, adultConfirmed: record.adultConfirmed === true, includeR18: record.includeR18 === true, includeChallenges: record.includeChallenges === true, revealed: record.revealed === true, answerIndex: record.answerIndex, likes: solo ? {} : { ...likes }, feedbackSubmitted: solo ? [] : feedbackSubmitted, revealedQuestionIds };
 }
 
 export function loadSession(options = {}) {

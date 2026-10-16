@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ROUND_SIZE, createSession, createMixedSession, isTogetherCard, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker,
+  ROUND_SIZE, createSession, createMixedSession, createSoloSession, isTogetherCard, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker,
   continueRound, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer,
-  previousAnswer, revealCard, remaining, sessionLikeTotals,
+  previousAnswer, previousCard, revealCard, remaining, sessionLikeTotals,
 } from '../dist/engine.js';
+import { loadSession, saveSession } from '../dist/session-storage.js';
 import { decks } from '../dist/data/decks.js';
+import { soloDecks } from '../dist/data/solo-decks.js';
 import { challenges, commonChallenges, themeChallenges, challengePoolFor, DECK_TOUCH_POLICY } from '../dist/data/challenges.js';
 import { themeGroups } from '../dist/data/theme-groups.js';
 import { participantRuleForDeck } from '../dist/participant-rule.js';
@@ -21,6 +23,7 @@ const challengeCards = (value) => value.questions.filter((card) => card.kind ===
 const ADULT_DECK_IDS = ['intimacy', 'first-intimacy', 'intimacy-refresh', 'intimacy-distance'];
 // Legacy six-card fixture: the group default is covered by group-round-size.test.mjs.
 const session = () => ({ ...createSession({ participants: names, deck, random: () => 0.5 }), roundSize: 6, unlockedUntil: 6 });
+function memoryStorage() { let value = null; return { get value() { return value; }, set value(next) { value = next; }, getItem() { return value; }, setItem(_key, next) { value = next; }, removeItem() { value = null; } }; }
 
 function answerCurrent(value, step = nextAnswer) {
   value = revealCard(value);
@@ -324,6 +327,135 @@ test('likes are scoped to card and participant, and previousAnswer restores them
   while (value.cursor === 0) value = nextAnswer(value);
   assert.equal(value.revealed, false);
   assert.equal(likeCurrentAnswer(value), value);
+});
+
+test('previousCard returns to the completed card without reopening its answers or changing round state', () => {
+  let value = session();
+  assert.equal(previousCard(value), value);
+  value = answerCurrent(value);
+  assert.equal(value.cursor, 1);
+  assert.equal(value.revealed, false);
+  const before = { ...value };
+  value = previousCard(value);
+  assert.equal(value.cursor, 0);
+  assert.equal(value.revealed, true);
+  assert.equal(value.answerIndex, names.length - 1);
+  assert.equal(value.roundStart, before.roundStart);
+  assert.equal(value.unlockedUntil, before.unlockedUntil);
+  assert.equal(currentCard(value).id, 'q-0');
+  value = nextAnswer(value);
+  assert.equal(value.cursor, 1);
+  assert.equal(value.revealed, false);
+  assert.equal(value.answerIndex, 0);
+});
+
+test('previousCard keeps together cards at one answer position and crosses the round boundary safely', () => {
+  const together = challenges.find((card) => card.perform === 'together' && card.players === 'any');
+  const base = createSession({ participants: names, deck, random: () => 0.5 });
+  const questions = base.questions.map((card, index) => index === 0 ? { ...together, sourceDeckId: 'test' } : card);
+  let value = { ...base, questions, roundSize: 6, unlockedUntil: 6 };
+  value = revealCard(value);
+  value = nextAnswer(value);
+  assert.equal(value.cursor, 1);
+  value = previousCard(value);
+  assert.equal(value.cursor, 0);
+  assert.equal(value.answerIndex, 0);
+  assert.equal(value.revealed, true);
+  value = session();
+  for (let i = 0; i < 6; i += 1) value = answerCurrent(value);
+  value = continueRound(value);
+  value = revealCard(value);
+  value = previousCard(value);
+  assert.equal(value.cursor, 5);
+  assert.equal(value.progressCursor, 6);
+  value = nextAnswer(value);
+  assert.equal(value.cursor, 6);
+  value = previousCard(value);
+  assert.equal(value.cursor, 5);
+  assert.equal(value.roundStart, 6);
+  assert.equal(value.unlockedUntil, 12);
+  assert.equal(isRoundComplete(value), false);
+});
+
+test('previousCard round-trips through storage for group 3, legacy group 6, and solo 6 sessions', () => {
+  const roundTrip = (value) => {
+    const storage = memoryStorage();
+    assert.equal(saveSession(value, { storage, now: 1000 }), true);
+    const restored = loadSession({ storage, now: 1001 });
+    assert.ok(restored);
+    return restored;
+  };
+  const friends = deckById('friends');
+
+  let group3 = createSession({ participants: ['A', 'B'], deck: friends, random: () => 0.5 });
+  for (let i = 0; i < 3; i += 1) group3 = answerCurrent(group3);
+  group3 = continueRound(group3);
+  group3 = revealCard(group3);
+  group3 = previousCard(group3);
+  assert.equal(group3.cursor, 2);
+  assert.equal(group3.progressCursor, 3);
+  const rewoundGroup3 = roundTrip(group3);
+  assert.equal(rewoundGroup3.cursor, 2);
+  assert.equal(rewoundGroup3.progressCursor, 3);
+  assert.equal(rewoundGroup3.progressRevealed, true);
+  assert.equal(rewoundGroup3.revealed, true);
+  group3 = nextAnswer(group3);
+  group3 = nextAnswer(group3);
+  const group3Order = group3.questions.map((card) => card.id);
+  group3 = roundTrip(group3);
+  assert.equal(group3.cursor, 3);
+  assert.equal(group3.progressCursor, 3);
+  assert.deepEqual(group3.questions.map((card) => card.id), group3Order);
+  group3 = nextAnswer(group3);
+  assert.equal(group3.cursor, 4);
+
+  let group6 = { ...createSession({ participants: ['A', 'B'], deck: friends, random: () => 0.5 }), roundSize: 6, unlockedUntil: 6 };
+  for (let i = 0; i < 6; i += 1) group6 = answerCurrent(group6);
+  group6 = continueRound(group6);
+  group6 = revealCard(group6);
+  group6.feedbackSubmitted = [6];
+  group6 = previousCard(group6);
+  assert.equal(group6.cursor, 5);
+  assert.equal(group6.progressCursor, 6);
+  const rewoundGroup6 = roundTrip(group6);
+  assert.equal(rewoundGroup6.cursor, 5);
+  assert.equal(rewoundGroup6.progressCursor, 6);
+  assert.deepEqual(rewoundGroup6.feedbackSubmitted, [6]);
+  group6 = nextAnswer(group6);
+  group6 = roundTrip(group6);
+  assert.equal(group6.cursor, 6);
+  assert.equal(group6.progressCursor, 6);
+  assert.deepEqual(group6.feedbackSubmitted, [6]);
+  group6 = nextAnswer(group6);
+  group6 = nextAnswer(group6);
+  assert.equal(group6.cursor, 7);
+
+  let solo = createSoloSession({ deck: soloDecks[0], participant: '自分' });
+  for (let i = 0; i < 6; i += 1) solo = answerCurrent(solo);
+  solo = continueRound(solo);
+  solo = revealCard(solo);
+  solo = nextAnswer(solo);
+  solo = previousCard(solo);
+  solo = roundTrip(solo);
+  assert.equal(solo.cursor, 6);
+  assert.equal(solo.progressCursor, 7);
+  solo = nextAnswer(solo);
+  assert.equal(solo.cursor, 7);
+
+  const legacyStorage = memoryStorage();
+  let legacy = createSession({ participants: ['A', 'B'], deck: friends, random: () => 0.5 });
+  legacy = answerCurrent(legacy);
+  assert.equal(saveSession(legacy, { storage: legacyStorage, now: 1000 }), true);
+  const legacyRecord = JSON.parse(legacyStorage.value);
+  delete legacyRecord.progressCursor;
+  delete legacyRecord.progressRevealed;
+  legacyStorage.value = JSON.stringify(legacyRecord);
+  legacy = loadSession({ storage: legacyStorage, now: 1001 });
+  legacy = previousCard(legacy);
+  assert.equal(saveSession(legacy, { storage: legacyStorage, now: 1002 }), true);
+  const restoredLegacy = loadSession({ storage: legacyStorage, now: 1003 });
+  assert.equal(restoredLegacy.cursor, 0);
+  assert.equal(restoredLegacy.revealed, true);
 });
 
 test('the back side cannot advance or receive likes, and pass advances only the current turn', () => {

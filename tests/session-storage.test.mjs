@@ -199,3 +199,20 @@ test('corrupt, adult-invalid, and unavailable records are discarded safely', () 
   const broken = { getItem() { throw new Error('unavailable'); }, setItem() { throw new Error('unavailable'); }, removeItem() {} }; assert.equal(saveSession(null, { storage: broken }), false); assert.equal(loadSession({ storage: broken }), null);
   clearSession({ storage: adultStorage }); assert.equal(adultStorage.value, null);
 });
+
+test('rewind progress metadata is paired and agrees with the farthest card state', () => {
+  const storage = memory();
+  const value = createSession({ participants: ['A', 'B'], deck: pick('friends') });
+  assert.equal(saveSession(value, { storage }), true);
+  const record = JSON.parse(storage.value);
+  delete record.progressRevealed;
+  storage.value = JSON.stringify(record);
+  assert.equal(loadSession({ storage }), null);
+
+  const mismatch = memory();
+  assert.equal(saveSession(value, { storage: mismatch }), true);
+  const mismatchRecord = JSON.parse(mismatch.value);
+  mismatchRecord.progressRevealed = true;
+  mismatch.value = JSON.stringify(mismatchRecord);
+  assert.equal(loadSession({ storage: mismatch }), null);
+});
