@@ -1823,7 +1823,7 @@ function completionReplyView(session, solo = false, favoriteBusy = false) {
 }
 const completionActions = Object.freeze({
   common: { label: "共通点", icon: "common", prompt: "「自分と同じだ！」と思ったところを伝えてみよう。" },
-  like: { label: "いいね！", icon: "heart", prompt: "相手の「いいな！」と思ったところを伝えてみよう。" },
+  like: { label: "あれ、いいね！", icon: "heart", prompt: "相手の「いいな！」と思ったところを伝えてみよう。" },
   more: { label: "もっと聞きたい", icon: "more", prompt: "気になった話を、もう少し聞いてみよう。" },
   recall: { label: "覚えてる？", icon: "bookmark", prompt: "誰の答えだったか、思い出してみよう。" },
 });
