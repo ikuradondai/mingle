@@ -29,8 +29,8 @@ function answerCurrent(value, step = nextAnswer) {
 }
 
 test('contains complete decks with unique question ids', () => {
-  assert.equal(decks.length, 40);
-  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 1600);
+  assert.equal(decks.length, 45);
+  assert.equal(new Set(decks.flatMap((item) => item.questions.map((question) => question.id))).size, 1800);
   for (const item of decks) {
     assert.equal(item.questions.length, 40, item.id);
     assert.equal(new Set(item.questions.map((card) => card.id)).size, 40, item.id);
@@ -39,7 +39,7 @@ test('contains complete decks with unique question ids', () => {
     assert.equal(item.questions.every((question) => question.r18 === true), true, item.id);
   }
   assert.equal(new Set(challenges.map((card) => card.id)).size, challenges.length);
-  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 1600 + challenges.length);
+  assert.equal(new Set([...decks.flatMap((item) => item.questions.map((question) => question.id)), ...challenges.map((card) => card.id)]).size, 1800 + challenges.length);
 });
 
 function normalizedQuestionText(card) {

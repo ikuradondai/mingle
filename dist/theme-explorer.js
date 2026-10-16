@@ -55,6 +55,11 @@ export const THEME_EXPLORER_IMAGES = {
   'self-decision': '/assets/theme-explorer/self-decision-v3.webp',
   'self-future': '/assets/theme-explorer/self-future-v3.webp',
   'parent-under12': '/assets/theme-explorer/parent-under12-v3.webp',
+  'mom-friends-first': '/assets/theme-explorer/party-first-meeting-v3.webp',
+  'mom-friends-children': '/assets/theme-explorer/parent-under12-v3.webp',
+  'mom-friends-self': '/assets/theme-explorer/self-friends-v3.webp',
+  'mom-friends-concerns': '/assets/theme-explorer/self-people-tired-v3.webp',
+  'mom-friends-daily': '/assets/theme-explorer/self-checkin-v3.webp',
 };
 
 export function themeExplorerImage(id) {

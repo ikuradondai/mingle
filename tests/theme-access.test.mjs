@@ -25,13 +25,13 @@ test('guest theme count follows the authoritative catalog and current participan
   const withoutFriends = decks.filter((deck) => deck.id !== 'friends');
   assert.equal(countGuestThemes(withoutFriends), 5);
   assert.equal(countGuestThemes([...decks, { id: 'custom-public', questions: [] }]), 6, 'unregistered custom catalog entries are never counted');
-  assert.equal(countRegistrationThemes(decks), 36, 'adult-only themes are excluded from the registration total');
-  assert.equal(countRegistrationThemes(decks, { isEligible: (deck) => deck.id !== 'date' }), 35);
+  assert.equal(countRegistrationThemes(decks), 41, 'adult-only themes are excluded from the registration total');
+  assert.equal(countRegistrationThemes(decks, { isEligible: (deck) => deck.id !== 'date' }), 40);
   const added = [...decks, { id: 'new-public', adultOnly: false, questions: [] }];
-  assert.equal(countRegistrationThemes(added), 37, 'a new ordinary catalog theme increases the registration total');
-  assert.equal(countRegistrationThemes(added.filter((deck) => deck.id !== 'new-public')), 36, 'removing it decreases the total');
-  assert.equal(countRegistrationThemes([...decks, { id: 'new-adult', adultOnly: true, questions: [] }]), 36, 'adult additions stay excluded');
-  assert.equal(countRegistrationThemes([null, undefined, ...decks]), 36, 'invalid catalog entries stay excluded');
+  assert.equal(countRegistrationThemes(added), 42, 'a new ordinary catalog theme increases the registration total');
+  assert.equal(countRegistrationThemes(added.filter((deck) => deck.id !== 'new-public')), 41, 'removing it decreases the total');
+  assert.equal(countRegistrationThemes([...decks, { id: 'new-adult', adultOnly: true, questions: [] }]), 41, 'adult additions stay excluded');
+  assert.equal(countRegistrationThemes([null, undefined, ...decks]), 41, 'invalid catalog entries stay excluded');
 });
 
 test('adult-only themes need an age-confirmed account; unconfirmed members keep every regular theme', () => {

@@ -13,11 +13,11 @@ const pairIds = [
 ];
 const allIds = [...decks, ...soloDecks].map((deck) => deck.id);
 
-test('all 56 built-in themes have an explicit participant rule', () => {
-  assert.equal(allIds.length, 56);
+test('all 61 built-in themes have an explicit participant rule', () => {
+  assert.equal(allIds.length, 61);
   assert.deepEqual(Object.keys(PARTICIPANT_RULES).sort(), [...allIds].sort());
   assert.equal(pairIds.filter((id) => PARTICIPANT_RULES[id] === 'pair').length, 18);
-  assert.equal(Object.values(PARTICIPANT_RULES).filter((rule) => rule === 'group').length, 22);
+  assert.equal(Object.values(PARTICIPANT_RULES).filter((rule) => rule === 'group').length, 27);
   assert.equal(Object.values(PARTICIPANT_RULES).filter((rule) => rule === 'solo').length, 16);
   assert.equal(participantRuleForDeck('future-theme'), 'group');
   assert.equal(participantRuleForDeck({ id: 'future-solo', audience: 'solo' }), 'solo');

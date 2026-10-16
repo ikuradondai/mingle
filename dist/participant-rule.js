@@ -29,6 +29,7 @@ export const PARTICIPANT_RULES = Object.freeze({
   'same-oshi-fans': 'group', roommates: 'group', 'grandparents-and-grandchildren': 'group',
   neighbors: 'group', 'travel-companions': 'group', 'late-night-diner': 'group',
   'group-mixer': 'group', classmates: 'group',
+  'mom-friends-first': 'group', 'mom-friends-children': 'group', 'mom-friends-self': 'group', 'mom-friends-concerns': 'group', 'mom-friends-daily': 'group',
   'self-love-now': 'solo', 'self-crush': 'solo', 'self-breakup-decided': 'solo',
   'self-breakup-lingering': 'solo', 'self-strengths': 'solo', 'self-work': 'solo',
   'self-school': 'solo', 'self-club': 'solo', 'self-friends': 'solo',

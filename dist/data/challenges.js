@@ -33,6 +33,7 @@ export const DECK_TOUCH_POLICY = Object.freeze({
   // I なりきり
   'promotion-rivals': 1, 'love-rivals': 1, 'arch-enemies': 1, 'hero-and-demon-king': 1, 'assassin-and-target': 1, 'detective-and-phantom-thief': 1,
   'ex-lovers': 0,
+  'mom-friends-first': 0, 'mom-friends-children': 0, 'mom-friends-self': 0, 'mom-friends-concerns': 0, 'mom-friends-daily': 0,
 });
 
 // R18 のお題を出してよいデッキ（C 成人向け 4 テーマ）。

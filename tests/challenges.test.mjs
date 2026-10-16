@@ -33,12 +33,13 @@ const EXPECTED_POLICY = {
   'party-first-meeting': 0, 'bar-first-meeting': 0, 'group-mixer': 0, neighbors: 0,
   'promotion-rivals': 1, 'love-rivals': 1, 'arch-enemies': 1, 'hero-and-demon-king': 1, 'assassin-and-target': 1, 'detective-and-phantom-thief': 1,
   'ex-lovers': 0,
+  'mom-friends-first': 0, 'mom-friends-children': 0, 'mom-friends-self': 0, 'mom-friends-concerns': 0, 'mom-friends-daily': 0,
 };
 
 const hasStandaloneAite = (text) => displayQuestionText(text, { participants: ['甲', '乙'], participantIndex: 0, rule: 'pair' }) !== text;
 
-test('1. all 40 group decks have exactly 10 theme challenges and nothing else', () => {
-  assert.equal(deckIds.length, 40);
+test('1. all 45 group decks have exactly 10 theme challenges and nothing else', () => {
+  assert.equal(deckIds.length, 45);
   assert.deepEqual(Object.keys(themeChallenges).sort(), [...deckIds].sort());
   for (const [deckId, cards] of Object.entries(themeChallenges)) assert.equal(cards.length, 10, deckId);
   // 6 つのファイルで同じデッキを二重に書かない

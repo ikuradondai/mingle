@@ -9,6 +9,7 @@ export const themeGroups = {
   'promotion-rivals': ['roleplay'], 'love-rivals': ['relationship', 'roleplay'], 'arch-enemies': ['roleplay'], 'hero-and-demon-king': ['roleplay'], 'assassin-and-target': ['roleplay'],
   'ex-lovers': ['relationship', 'roleplay'], 'detective-and-phantom-thief': ['roleplay'], 'in-laws': ['family'], 'same-oshi-fans': ['friends'], 'roommates': ['friends'], 'grandparents-and-grandchildren': ['family'], 'neighbors': ['first-meeting'], 'travel-companions': ['friends', 'first-meeting'], 'late-night-diner': ['friends'], 'group-mixer': ['first-meeting', 'relationship'],
   'engaged-couple': ['relationship'], classmates: ['friends'],
+  'mom-friends-first': ['family'], 'mom-friends-children': ['family'], 'mom-friends-self': ['family'], 'mom-friends-concerns': ['family'], 'mom-friends-daily': ['family'],
 };
 
 export function isAdultGroup(deck) { return Boolean(deck?.adultOnly || deck?.r18Available || themeGroups[deck?.id]?.includes('adult')); }

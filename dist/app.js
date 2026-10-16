@@ -1259,6 +1259,11 @@ function topicIcon(deck) {
   paths["group-mixer"] = '<circle cx="6" cy="9" r="2.5"/><circle cx="12" cy="7" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M2 19c.4-3 1.8-5 4-5M22 19c-.4-3-1.8-5-4-5M8 19c.5-3.5 1.8-6 4-6s3.5 2.5 4 6"/>';
   paths["engaged-couple"] = '<circle cx="9" cy="15" r="5"/><circle cx="15" cy="15" r="5"/><path d="m10 5 2-2 2 2-2 3-2-3Z"/>';
   paths["classmates"] = '<rect x="3" y="4" width="18" height="12" rx="1"/><path d="M7 20l2-4M17 20l-2-4M7 9h6M7 12h4"/>';
+  paths["mom-friends-first"] = '<circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3 20c.5-4 2.5-6 5-6s4.5 2 5 6M11 20c.5-3 2.1-5 5-5s4.5 2 5 5"/>';
+  paths["mom-friends-children"] = '<path d="M12 3 14 8l5 1-4 3 1 6-4-3-4 3 1-6-4-3 5-1 2-5Z"/>';
+  paths["mom-friends-self"] = '<circle cx="12" cy="12" r="8"/><path d="m12 7 1.5 3.5L17 12l-3.5 1.5L12 17l-1.5-3.5L7 12l3.5-1.5L12 7Z"/>';
+  paths["mom-friends-concerns"] = '<path d="M4 5h16v11H8l-4 4V5Z"/><path d="M8 9h8M8 12h5"/>';
+  paths["mom-friends-daily"] = '<path d="M3 11 12 4l9 7v9H3v-9Z"/><path d="M9 20v-5h6v5"/>';
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[deck.id] ?? paths.team}</svg>`;
 }
 function soloHistoryView() {

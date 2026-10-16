@@ -1,7 +1,7 @@
 {
   "version": 1,
   "generatedAt": "2026-10-06",
-  "count": 56,
+  "count": 61,
   "items": [
     {
       "id": "date",
@@ -672,6 +672,66 @@
       "rawPath": "sources/self-future-v1.png",
       "webpPath": "/assets/theme-explorer/self-future-v1.webp",
       "status": "generated",
+      "adultOnly": false,
+      "optionalR18": false
+    },
+    {
+      "id": "mom-friends-first",
+      "title": "ママ友と、はじめまして",
+      "subtitle": "気軽な日常の話から、少しずつ知り合う",
+      "mode": "group",
+      "category": "家族",
+      "rawPath": "sources/party-first-meeting-v3.webp",
+      "webpPath": "/assets/theme-explorer/party-first-meeting-v3.webp",
+      "status": "reused",
+      "adultOnly": false,
+      "optionalR18": false
+    },
+    {
+      "id": "mom-friends-children",
+      "title": "うちの子の、いま",
+      "subtitle": "子どもの今を眺めながら、気持ちを共有する",
+      "mode": "group",
+      "category": "家族",
+      "rawPath": "sources/parent-under12-v3.webp",
+      "webpPath": "/assets/theme-explorer/parent-under12-v3.webp",
+      "status": "reused",
+      "adultOnly": false,
+      "optionalR18": false
+    },
+    {
+      "id": "mom-friends-self",
+      "title": "子ども以外の、私の話",
+      "subtitle": "親以外の自分の好きなことや最近の発見",
+      "mode": "group",
+      "category": "家族",
+      "rawPath": "sources/self-friends-v3.webp",
+      "webpPath": "/assets/theme-explorer/self-friends-v3.webp",
+      "status": "reused",
+      "adultOnly": false,
+      "optionalR18": false
+    },
+    {
+      "id": "mom-friends-concerns",
+      "title": "ちょっと聞いて、子育てのモヤモヤ",
+      "subtitle": "迷いや気持ちを、無理なく言葉にする",
+      "mode": "group",
+      "category": "家族",
+      "rawPath": "sources/self-people-tired-v3.webp",
+      "webpPath": "/assets/theme-explorer/self-people-tired-v3.webp",
+      "status": "reused",
+      "adultOnly": false,
+      "optionalR18": false
+    },
+    {
+      "id": "mom-friends-daily",
+      "title": "毎日の暮らし、どうしてる？",
+      "subtitle": "無理なく暮らす工夫や、日々の小さな気づき",
+      "mode": "group",
+      "category": "家族",
+      "rawPath": "sources/self-checkin-v3.webp",
+      "webpPath": "/assets/theme-explorer/self-checkin-v3.webp",
+      "status": "reused",
       "adultOnly": false,
       "optionalR18": false
     }
