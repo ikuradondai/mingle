@@ -38,6 +38,18 @@ body.account-open{overflow:hidden}
 .account-menu-action:hover,.account-menu-action:focus-visible{background:color-mix(in srgb,var(--blue) 7%,transparent);color:var(--blue);outline:none}
 .account-menu-action:focus-visible{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--blue) 35%,transparent)}
 .account-menu-action::after{margin-left:auto;color:var(--muted);content:"›";font-size:22px;font-weight:400}
+.account-menu-audio,.account-audio-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;box-sizing:border-box;cursor:pointer;font-weight:800}
+.account-menu-audio{width:100%;padding:10px 4px;border-top:1px solid color-mix(in srgb,var(--line) 72%,transparent)}
+.account-audio-toggle{margin-top:4px}
+.account-audio-toggle-control{display:flex;align-items:center;gap:8px;margin-left:auto}
+.account-audio-toggle-control input{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+.account-audio-switch{display:inline-flex;align-items:center;width:44px;height:26px;padding:3px;box-sizing:border-box;border-radius:999px;background:#9aa5b5;transition:background .15s ease}
+.account-audio-switch span{display:block;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(20,33,61,.25);transition:transform .15s ease}
+.account-audio-toggle-control input:checked + .account-audio-switch{background:var(--blue,#1769e8)}
+.account-audio-toggle-control input:checked + .account-audio-switch span{transform:translateX(18px)}
+.account-audio-toggle-control input:focus-visible + .account-audio-switch{outline:3px solid color-mix(in srgb,var(--blue,#1769e8) 35%,transparent);outline-offset:3px}
+.account-audio-toggle-control strong{min-width:2em;color:var(--muted);font-size:13px;text-align:right}
+.account-menu-audio:hover,.account-menu-audio:focus-within{background:color-mix(in srgb,var(--blue) 7%,transparent)}
 .account-dialog-menu .secondary-button { border:0; background:transparent; }
 .account-dialog-menu .account-menu-action:hover,.account-dialog-menu .account-menu-action:focus-visible{background:color-mix(in srgb,var(--blue) 7%,transparent);color:var(--blue)}
 .account-dialog-menu .text-button { min-height:44px; }
