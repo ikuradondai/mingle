@@ -4,7 +4,7 @@
     "file": "mingle-card-click.mp3",
     "duration_seconds": 0.5,
     "prompt_influence": 0.5,
-    "prompt": "A single short tactile click for selecting a thick conversation card: a tiny warm paper and wood tap with a clean rounded transient, bright but gentle, memorable and satisfying, suitable for frequent interface use. No voice, no speech, no music, no melody, no chime, no notification ding, no metallic clang, no harsh high frequencies."
+    "prompt": "A single short, unmistakable playful UI pop for selecting a conversation card: bright rounded bubble-pop transient with a tiny warm wooden click and a cheerful upward sparkle, punchy and memorable, clean attack and quick tail, satisfying on phone speakers. No voice, no speech, no words, no music, no melody, no notification ding, no metallic clang, no harsh high frequencies."
   },
   {
     "id": "theme-select",
@@ -16,29 +16,29 @@
   {
     "id": "celebration-confetti",
     "file": "mingle-celebration-confetti.mp3",
-    "duration_seconds": 2.4,
+    "duration_seconds": 2.8,
     "prompt_influence": 0.45,
-    "prompt": "A joyful short celebration sound for colorful confetti falling after a meaningful conversation: soft airy burst, light paper flutter, several tiny warm sparkles and a gentle uplifting finish. Bright, human, elegant, memorable, celebratory without being loud. No voice, no speech, no lyrics, no continuous music, no harsh cymbals, no alarm, no casino jackpot, no huge trailer impact."
+    "prompt": "A bright 2.8 second celebration sound for colorful paper confetti: several light playful pops, crisp paper flutter and tiny paper flicks moving downward, followed by a short happy crowd cheer and light applause with no intelligible words. Warm, friendly, joyful and clear on a phone speaker. No music, no melody, no lyrics, no spoken words, no harsh cymbals, no alarm, no casino jackpot, no giant boom."
   },
   {
     "id": "celebration-fireworks",
     "file": "mingle-celebration-fireworks.mp3",
-    "duration_seconds": 2.8,
+    "duration_seconds": 3.2,
     "prompt_influence": 0.45,
-    "prompt": "A concise warm fireworks celebration sound for a conversation game completion: one soft rising whoosh, two delicate colorful bursts with rounded sparkling particles, then a calm luminous tail. Uplifting and special, intimate enough for a phone speaker, no explosion or startling peak. No voice, no speech, no lyrics, no continuous music, no harsh treble, no weapon sound, no giant cinematic boom."
+    "prompt": "A bright 3.2 second real outdoor fireworks celebration: one audible rocket launching upward, a crisp natural aerial firework burst, a second colorful crackling burst with a falling sparkle tail, then a short happy crowd cheer and light applause with no intelligible words. Exciting but safe for a phone speaker, controlled peaks. No music, lyrics, spoken words, weapon sound, giant cinematic explosion, or alarm."
   },
   {
     "id": "celebration-ribbons",
     "file": "mingle-celebration-ribbons.mp3",
-    "duration_seconds": 2.6,
+    "duration_seconds": 2.9,
     "prompt_influence": 0.45,
-    "prompt": "A graceful short celebration sound for colorful ribbons drifting through the air: smooth airy swirls, soft brushed movement, three light rounded bell-like tones that gently rise, and a warm resolved finish. Playful, bright, elegant and emotionally positive for Mingle.cards. No voice, no speech, no lyrics, no continuous music, no sharp chime, no harsh high frequencies, no fanfare blast."
+    "prompt": "A bright 2.9 second party-ribbon celebration: a distinct party cracker pop at the start, a quick burst of paper streamers and ribbons unfurling with soft fluttering movement, followed by a short happy crowd cheer and light applause with no intelligible words. Playful, warm and energetic without harsh peaks. No music, no melody, no lyrics, no spoken words, no weapon sound, no alarm, no giant fanfare blast."
   },
   {
     "id": "celebration-cards",
     "file": "mingle-celebration-cards.mp3",
-    "duration_seconds": 2.5,
+    "duration_seconds": 2.9,
     "prompt_influence": 0.45,
-    "prompt": "A warm short celebration sound for illustrated conversation cards floating down: a soft sequence of three friendly paper flicks and rounded card landings, with a gentle optimistic shimmer at the end. Tactile, bright, memorable, and satisfying without becoming busy. No voice, no speech, no lyrics, no continuous music, no harsh clicks, no metal, no casino sound, no loud game fanfare."
+    "prompt": "A bright 2.9 second celebration for illustrated cards floating down: recognizable close-up card shuffle and several distinct paper cards flipped rapidly, papery flicks and soft landings, followed by a short happy crowd cheer and light applause with no intelligible words. Tactile, playful and clean on a phone speaker. No music, melody, lyrics, spoken words, metal, casino sound, or loud fanfare."
   }
 ]

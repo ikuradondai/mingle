@@ -1,12 +1,12 @@
 const STORAGE_KEY = "mingle.cardAudio.enabled";
 const AUDIO_URLS = {
   flip: "/assets/audio/mingle-card-flip.mp3?v=17-cotton-table-fb811852",
-  click: "/assets/audio/mingle-card-click.mp3",
+  click: "/assets/audio/mingle-card-click.mp3?v=18-elevenlabs-20261017",
   theme: "/assets/audio/mingle-theme-select.mp3",
-  "celebration-confetti": "/assets/audio/mingle-celebration-confetti.mp3",
-  "celebration-fireworks": "/assets/audio/mingle-celebration-fireworks.mp3",
-  "celebration-ribbons": "/assets/audio/mingle-celebration-ribbons.mp3",
-  "celebration-cards": "/assets/audio/mingle-celebration-cards.mp3",
+  "celebration-confetti": "/assets/audio/mingle-celebration-confetti.mp3?v=18-elevenlabs-20261017",
+  "celebration-fireworks": "/assets/audio/mingle-celebration-fireworks.mp3?v=18-elevenlabs-20261017",
+  "celebration-ribbons": "/assets/audio/mingle-celebration-ribbons.mp3?v=18-elevenlabs-20261017",
+  "celebration-cards": "/assets/audio/mingle-celebration-cards.mp3?v=18-elevenlabs-20261017",
 };
 let enabled = true;
 let context = null;
@@ -106,7 +106,7 @@ function playAudioKey(key, gainValue = 0.72) {
 }
 
 export function playFlipSound() { playAudioKey("flip"); }
-export function playUiClick() { playAudioKey("click", 0.25); }
+export function playUiClick() { playAudioKey("click", 0.42); }
 export function playThemeSelectSound() { playAudioKey("theme", 0.58); }
 export function playCompletionSound(variant) {
   if (typeof variant !== "string") return;
