@@ -18,7 +18,7 @@ import { renderAd } from "./ad-config.js";
 import { playableSavedSets } from "./my-set.js";
 import { resetStudioEntryState } from "./studio-state.js";
 import { buildFacebookShareUrl, buildShareText, buildXShareUrl } from "./share-text.js";
-import { isCardAudioEnabled, toggleCardAudio, playFlipSound } from "./card-audio.js";
+import { isCardAudioEnabled, toggleCardAudio, stopCardAudio, playFlipSound, playUiClick, playThemeSelectSound, playCompletionSound } from "./card-audio.js";
 import { cardDesignForSession, soloMotifForDeck } from "./card-design.js";
 import { CREATOR_PRESET_IDS, normalizeCreatorDesign, effectiveCreatorAdult } from "./creator-metadata.js";
 import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, rankThemeRecommendations, themeExplorerBookmarks, toggleThemeExplorerBookmark, themeExplorerExperienced, toggleThemeExplorerExperienced } from "./theme-explorer.js";
@@ -40,6 +40,7 @@ import { gameParticipantGate } from "./game-participant-gate.js";
 import { consumeSocialGameIntent, saveSocialGameIntent } from "./social-game-intent.js";
 const root = document.querySelector("#app");
 let completionFinishInFlight = false;
+let audioClickBound = false;
 const state = {
   torisetsu: null,
   shared: null,
@@ -208,6 +209,7 @@ function restoreNavigationHistory(event) {
   const sameDocument = entry.doc === historyDocumentId;
   historyRestoring = true;
   stopCompletionCelebration();
+  stopCardAudio();
   completionFinishInFlight = false;
   const requested = ["participants", "decks", "play", "torisetsu"].includes(entry.screen) ? entry.screen : "participants";
   if (sameDocument && (requested === "participants" || requested === "decks")) restoreNavigationSnapshot(navigationEntrySnapshots.get(entry.entryId));
@@ -602,6 +604,15 @@ function restoreAccountScroll(snapshot) {
   if (favorites) { favorites.scrollTop = snapshot.favoritesTop; favorites.scrollLeft = snapshot.favoritesLeft; }
 }
 function render() {
+  if (!audioClickBound) {
+    root.addEventListener("click", (event) => {
+      const target = event.target?.closest?.("button,[data-action]");
+      if (!target || !root.contains(target) || target.disabled || target.getAttribute("aria-disabled") === "true") return;
+      if (["reveal", "theme-select", "sponsor-select", "game-launch", "finish"].includes(target.dataset.action)) return;
+      playUiClick();
+    }, true);
+    audioClickBound = true;
+  }
   if (state.screen === "decks") loadRecommendationLabels(() => {
     if (state.screen !== "decks") return;
     root.querySelectorAll('[data-theme-recommendation-label]').forEach((node) => {
@@ -794,14 +805,10 @@ function render() {
   });
   root.querySelectorAll('[data-theme-visibility-toggle]').forEach((button) => button.addEventListener('click', () => { const id = button.dataset.themeVisibilityToggle; const open = state.account.themeVisibilityOpenCategories || new Set(); const next = new Set(open); if (next.has(id)) next.delete(id); else next.add(id); state.account.themeVisibilityOpenCategories = next; state.focusSelector = `[data-theme-visibility-toggle="${CSS.escape(id)}"]`; render(); }));
    root.querySelectorAll('[data-theme-visibility-id]').forEach((input) => input.addEventListener('change', (event) => { if (!state.account.themeVisibilityReady || !state.account.themeVisibilityAvailable) return; const next = applyThemeVisibility(state.account.hiddenThemeIds || new Set(), input.dataset.themeVisibilityId, input.checked); const id = input.dataset.themeVisibilityId; state.account.hiddenThemeIds = next; state.focusSelector = event.currentTarget.id ? `#${CSS.escape(event.currentTarget.id)}` : `[data-theme-visibility-id="${CSS.escape(id)}"]`; root.querySelectorAll(`[data-theme-visibility-id="${CSS.escape(id)}"]`).forEach((other) => { other.checked = input.checked; }); saveThemeVisibility(); }));
+  root.querySelectorAll('[data-card-audio-setting]').forEach((input) => input.addEventListener('change', (event) => { if (event.currentTarget.checked === isCardAudioEnabled()) return; toggleCardAudio(); state.focusSelector = '[data-card-audio-setting]'; render(); }));
   root.querySelector("[data-avatar-file]")?.addEventListener("change", prepareAvatar);
   root.querySelector("[data-share-facebook]")?.addEventListener("click", copyFacebookShareText);
   root.querySelector("[data-share-fallback]")?.addEventListener("focus", (event) => event.currentTarget.select());
-  root.querySelectorAll("[data-action=\"audio-toggle\"]").forEach((button) => {
-    const stop = (event) => event.stopPropagation();
-    button.addEventListener("click", stop);
-    button.addEventListener("keydown", stop);
-  });
   root.querySelectorAll("[data-avatar-image]").forEach((image) => image.addEventListener("error", () => { image.replaceWith(document.createRange().createContextualFragment(accountAvatar(null))); }, { once: true }));
   root.querySelector("[data-custom-text]")?.addEventListener("input", (event) => { state.account.customDraft = event.target.value; const count = root.querySelector("[data-custom-count]");
     if (count) count.textContent = `文字数 ${Array.from(event.target.value.trim()).length} / 300。改行や制御文字は使えません。`;
@@ -1213,6 +1220,10 @@ function ageSettingsView(a) {
   if (a.adultConfirmationAvailable !== true) return section('<p class="account-hint">年齢の確認は現在利用できません。</p>');
   return section(`<p class="account-hint">R18のテーマは、18歳以上であることを確認したアカウントにだけ表示されます。</p><label class="account-age-check"><input type="checkbox" data-age-confirm ${a.ageConfirmChecked ? "checked" : ""} ${a.ageBusy ? "disabled" : ""}/> <span>私は18歳以上です</span></label><div class="account-age-actions"><button type="button" class="primary-button" data-action="age-confirm" ${a.ageBusy || !a.ageConfirmChecked ? "disabled" : ""}>${a.ageBusy ? "保存中…" : "確認して保存"}</button></div>`);
 }
+function audioSettingsView() {
+  const enabled = isCardAudioEnabled();
+  return `<section class="account-audio-settings" aria-labelledby="account-audio-title"><h2 id="account-audio-title">効果音</h2><label class="account-age-check"><input type="checkbox" data-card-audio-setting ${enabled ? "checked" : ""}/> <span>効果音を鳴らす</span></label><p class="account-hint">この端末に保存されます。初期設定はオンです。</p></section>`;
+}
 function accountSettingsView(a) {
   if (a.deleteOpen) return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-settings">戻る</button><strong id="account-dialog-title">退会の確認</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-delete-warning"><p>退会すると、このアカウントの表示名・年齢確認の記録・お気に入り・自作質問カード・非公開マイセットを削除します。</p><p>このアカウントが所有する店舗設定・提供テーマ・卓上QR・利用集計も削除されます。</p><p>このアカウントが所有する企業組織と、そのメンバー登録・テーマや機能の設定も削除されます。所属しているだけの組織では、自分の登録だけが削除されます。</p><p>この端末の呼び名と途中データも削除されます。</p><p>削除後は取り消せません。</p><label class="account-delete-confirm-label"><input type="checkbox" data-delete-confirm ${a.deleteConfirmed ? "checked" : ""} ${a.busy ? "disabled" : ""}/> 内容を確認しました</label></div>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}<div class="account-delete-actions"><button type="button" class="text-button" data-action="account-delete-cancel" ${a.busy ? "disabled" : ""}>キャンセル</button><button type="button" class="danger-button" data-action="account-delete-confirm" ${a.busy || !a.deletionAvailable || !a.deleteConfirmed ? "disabled" : ""}>${a.busy ? "削除中…" : "退会して削除"}</button></div>`, "account-dialog-delete");
   const valid = validDisplayName(a.profileDraft);
@@ -1221,21 +1232,24 @@ function accountSettingsView(a) {
   const categories = [...Object.entries(groupLabels).filter(([id]) => id !== 'all').map(([id, label]) => ({ id, label, themes: id === 'adult' ? decks.filter((deck) => deck.adultOnly) : id === 'game' ? gameThemes : decks.filter((deck) => themeGroups[deck.id]?.includes(id)) })), ...soloCategories.map((category) => ({ id: `solo-${category.id}`, label: category.label, themes: soloDecks.filter((deck) => deck.category === category.id) }))].filter(({ themes }) => themes.length);
    const themeRows = (themes, categoryIndex) => themes.map((deck, themeIndex) => { const inputId = `theme-visibility-${deck.id}-${categoryIndex}-${themeIndex}`; return `<label class="account-theme-visibility-item" for="${esc(inputId)}"><input id="${esc(inputId)}" type="checkbox" data-theme-visibility-id="${esc(deck.id)}" ${a.hiddenThemeIds?.has(deck.id) ? 'checked' : ''} ${controlsDisabled ? 'disabled' : ''}/> <span>${esc(deck.title)}</span></label>`; }).join('');
    const categoryRows = categories.map(({ id, label, themes }, categoryIndex) => { const stateValue = categoryVisibility(themes.map((deck) => deck.id), a.hiddenThemeIds).state; const open = a.themeVisibilityOpenCategories?.has(id); return `<section class="account-theme-visibility-category"><div class="account-theme-visibility-category-head"><label><input type="checkbox" data-theme-visibility-category="${esc(id)}" data-theme-visibility-state="${stateValue}" ${stateValue === 'all' ? 'checked' : ''} ${controlsDisabled ? 'disabled' : ''}/> <strong>${esc(label)}</strong></label><button type="button" class="text-button" data-theme-visibility-toggle="${esc(id)}" aria-expanded="${open}">${open ? '閉じる' : '開く'}（${themes.length}）</button></div><div class="account-theme-visibility-list" ${open ? '' : 'hidden'}>${themeRows(themes, categoryIndex)}</div></section>`; }).join('');
-   return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-menu">戻る</button><strong id="account-dialog-title">アカウント設定</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${avatarSettingsView(a)}<form class="account-settings-form" data-form="profile"><label>表示名<input type="text" data-profile-name value="${esc(a.profileDraft)}" maxlength="80" autocomplete="nickname" ${a.busy ? "disabled" : ""}/></label><p class="account-hint">1人目の呼び名に自動入力されます。遊ぶときに変更できます。</p><p class="account-email">${esc(a.user?.email || "")}</p><button type="submit" class="primary-button" ${a.busy || !valid ? "disabled" : ""}>${a.busy ? "保存中…" : "表示名を保存"}</button></form>${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ""}${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}<section class="account-theme-visibility" aria-labelledby="theme-visibility-title"><h2 id="theme-visibility-title">非表示テーマの選択</h2><p class="account-hint">チェックしたテーマを一覧で非表示にします。</p>${a.themeVisibilityError ? `<p class="form-error" role="alert">${esc(a.themeVisibilityError)} <button type="button" class="text-button" data-action="theme-visibility-retry">再読み込み</button></p>` : ''}<button type="button" class="text-button" data-action="theme-visibility-all" ${controlsDisabled || a.hiddenThemeIds?.size === 0 ? 'disabled' : ''}>すべて表示に戻す</button>${!a.themeVisibilityReady && !a.themeVisibilityError ? '<p class="account-hint">設定を読み込み中です。完了するまで変更できません。</p>' : ''}${categoryRows}</section>${ageSettingsView(a)}<section class="account-delete-section"><h2>退会</h2>${a.deletionAvailable ? `<button type="button" class="danger-button" data-action="account-delete-open" ${a.avatarBusy ? "disabled" : ""}>アカウントを削除</button>` : '<p class="account-hint">退会手続きは現在利用できません。</p><a class="account-support" href="mailto:inquiry@erudaite.ai">問い合わせる</a>'}</section>`, "account-dialog-settings");
+   return accountDialog(`<div class="account-panel-head"><button type="button" class="text-button" data-action="account-menu">戻る</button><strong id="account-dialog-title">アカウント設定</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${avatarSettingsView(a)}<form class="account-settings-form" data-form="profile"><label>表示名<input type="text" data-profile-name value="${esc(a.profileDraft)}" maxlength="80" autocomplete="nickname" ${a.busy ? "disabled" : ""}/></label><p class="account-hint">1人目の呼び名に自動入力されます。遊ぶときに変更できます。</p><p class="account-email">${esc(a.user?.email || "")}</p><button type="submit" class="primary-button" ${a.busy || !valid ? "disabled" : ""}>${a.busy ? "保存中…" : "表示名を保存"}</button></form>${audioSettingsView()}${a.status ? `<p class="account-status" role="status">${esc(a.status)}</p>` : ""}${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}<section class="account-theme-visibility" aria-labelledby="theme-visibility-title"><h2 id="theme-visibility-title">非表示テーマの選択</h2><p class="account-hint">チェックしたテーマを一覧で非表示にします。</p>${a.themeVisibilityError ? `<p class="form-error" role="alert">${esc(a.themeVisibilityError)} <button type="button" class="text-button" data-action="theme-visibility-retry">再読み込み</button></p>` : ''}<button type="button" class="text-button" data-action="theme-visibility-all" ${controlsDisabled || a.hiddenThemeIds?.size === 0 ? 'disabled' : ''}>すべて表示に戻す</button>${!a.themeVisibilityReady && !a.themeVisibilityError ? '<p class="account-hint">設定を読み込み中です。完了するまで変更できません。</p>' : ''}${categoryRows}</section>${ageSettingsView(a)}<section class="account-delete-section"><h2>退会</h2>${a.deletionAvailable ? `<button type="button" class="danger-button" data-action="account-delete-open" ${a.avatarBusy ? "disabled" : ""}>アカウントを削除</button>` : '<p class="account-hint">退会手続きは現在利用できません。</p><a class="account-support" href="mailto:inquiry@erudaite.ai">問い合わせる</a>'}</section>`, "account-dialog-settings");
 }
 function accountView(options = {}) {
-  if (!state.account.enabled) return "";
   const a = state.account;
   const overlayOnly = options.overlayOnly === true;
   const bar = accountButton(a);
   const help = state.helpOpen ? howToPlayDialog() : "";
   const wrap = (dialog) => (overlayOnly ? dialog : `${bar}${dialog}`);
+  if (!state.account.enabled) {
+    const dialog = a.open ? accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">設定</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${audioSettingsView()}<p class="account-hint">アカウント機能は現在利用できません。</p>`, "account-dialog-login") : "";
+    return a.open ? (overlayOnly ? dialog : `${bar}${dialog}`) : (overlayOnly ? help : `${bar}${help}`);
+  }
   if (!a.open) return overlayOnly ? help : `${bar}${help}`;
   if (a.user && a.shareOpen) return wrap(shareDialogView(a));
   if (a.user && a.settingsOpen) return wrap(accountSettingsView(a));
   if (a.user && a.libraryOpen) return wrap(libraryAccountView(a));
   if (a.user) return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">アカウント</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div><div class="account-menu-avatar"><span class="account-avatar">${accountAvatar(a.user)}</span></div>${a.user.displayName ? `<p class="account-display-name">${esc(a.user.displayName)}</p>` : ""}<p class="account-email">${esc(a.user.email || a.user.name || "ログイン中")}</p><button type="button" class="secondary-button account-menu-action" data-action="account-settings-open">${actionIcon("settings")}<span>アカウント設定</span></button>${!a.ageConfirmedAt && a.adultConfirmationAvailable ? '<p class="account-hint">R18テーマを表示するには、アカウント設定で年齢の確認が必要です。</p>' : ""}<a class="secondary-button account-menu-action" href="/daily.html">${actionIcon("clock")}<span>1日1問</span></a><button type="button" class="secondary-button account-menu-action" data-action="account-library-open">${actionIcon("bookmark")}<span>保存したカード・マイセット</span></button><a class="secondary-button account-menu-action" href="/marketplace.html">${actionIcon("search")}<span>マーケットプレイス</span></a><a class="secondary-button account-menu-action" href="${a.hasVenue ? '/venue.html' : 'https://partnerplan.mingle.cards'}">${actionIcon("building")}<span>${a.hasVenue ? '店舗管理' : '店舗の体験向上のために導入する'}</span></a><button type="button" class="text-button account-menu-action" data-action="logout">${actionIcon("right")}<span>ログアウト</span></button>${a.error ? `<p class="form-error" role="alert">${esc(a.error)}</p>` : ""}`, "account-dialog-menu"));
-  return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">${a.venueOnboarding ? "店舗アカウントを作成・ログイン" : state.continuePending ? "ログイン / 新規登録" : "ログインする"}</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.venueOnboarding ? '<p class="account-hint">ログイン後、店舗情報の入力画面へ戻ります。</p>' : '<p class="account-hint"><a href="https://partnerplan.mingle.cards">店舗の体験向上のために導入する</a></p>'}${a.google ? '<button type="button" class="secondary-button account-provider" data-action="google-login">Googleで続ける</button>' : ""}${a.venueOnboarding ? "" : `<label class="account-adult-intent"><input type="checkbox" data-adult-intent ${a.adultIntent ? "checked" : ""} /> <span>私は18歳以上です（任意）</span><small>チェックすると、ログイン後に年齢確認を設定できます。表示はアカウント設定で「R18を表示する」を選んだ場合だけです。</small></label>`}<form class="account-otp" data-form="account"><label>メールアドレス<input type="email" data-account-email value="${esc(a.email)}" required autocomplete="email" /></label>${a.otpSent ? '<label>確認コード<input inputmode="numeric" data-account-otp value="' + esc(a.otp) + '" required autocomplete="one-time-code" /></label><button type="button" class="text-button muted" data-action="reset-otp"' + (a.busy ? " disabled" : "") + ">メールアドレスを変更／コードを再送</button>" : ""}<button type="submit" class="primary-button">${a.busy ? "処理中…" : a.otpSent ? "ログインする" : "確認コードを送る"}</button></form><p class="account-status" role="status">${esc(a.status || (a.venueOnboarding ? "店舗情報を登録するにはログインしてください" : "ログインすると質問を保存できます"))}</p><p class="form-error" role="alert">${esc(a.error)}</p>`, "account-dialog-login"));
+  return wrap(accountDialog(`<div class="account-panel-head"><strong id="account-dialog-title">${a.venueOnboarding ? "店舗アカウントを作成・ログイン" : state.continuePending ? "ログイン / 新規登録" : "ログインする"}</strong><button type="button" class="icon-button" data-action="account-close" aria-label="閉じる">×</button></div>${a.venueOnboarding ? '<p class="account-hint">ログイン後、店舗情報の入力画面へ戻ります。</p>' : '<p class="account-hint"><a href="https://partnerplan.mingle.cards">店舗の体験向上のために導入する</a></p>'}${audioSettingsView()}${a.google ? '<button type="button" class="secondary-button account-provider" data-action="google-login">Googleで続ける</button>' : ""}${a.venueOnboarding ? "" : `<label class="account-adult-intent"><input type="checkbox" data-adult-intent ${a.adultIntent ? "checked" : ""} /> <span>私は18歳以上です（任意）</span><small>チェックすると、ログイン後に年齢確認を設定できます。表示はアカウント設定で「R18を表示する」を選んだ場合だけです。</small></label>`}<form class="account-otp" data-form="account"><label>メールアドレス<input type="email" data-account-email value="${esc(a.email)}" required autocomplete="email" /></label>${a.otpSent ? '<label>確認コード<input inputmode="numeric" data-account-otp value="' + esc(a.otp) + '" required autocomplete="one-time-code" /></label><button type="button" class="text-button muted" data-action="reset-otp"' + (a.busy ? " disabled" : "") + ">メールアドレスを変更／コードを再送</button>" : ""}<button type="submit" class="primary-button">${a.busy ? "処理中…" : a.otpSent ? "ログインする" : "確認コードを送る"}</button></form><p class="account-status" role="status">${esc(a.status || (a.venueOnboarding ? "店舗情報を登録するにはログインしてください" : "ログインすると質問を保存できます"))}</p><p class="form-error" role="alert">${esc(a.error)}</p>`, "account-dialog-login"));
 }
 function topicIcon(deck) {
   const paths = {
@@ -1645,8 +1659,6 @@ function decksView() {
 function participantChips(session) { return session.participants.map((name, index) => { const initial = Array.from(name.trim())[0] ?? '・'; return `<span class="participant-chip participant-color-${index} ${index === currentParticipantIndex(session) ? "is-current" : ""}"><i aria-hidden="true">${esc(initial)}</i>${esc(name)}</span>`;
     })
     .join(""); }
-function cardAudioButton() { return `<button type="button" class="card-audio-toggle" data-action="audio-toggle" aria-label="カードをめくる音を${isCardAudioEnabled() ? "オフ" : "オン"}にする" aria-pressed="${isCardAudioEnabled()}">${isCardAudioEnabled() ? "🔊" : "🔇"}</button>`; }
-
 function sharedPlayView(session) {
   if (venueR18Hidden(session)) return frame(venueR18Gate(session), "店舗カード", true);
   const revealed = session.revealed === true;
@@ -1671,8 +1683,7 @@ function sharedPlayView(session) {
   const question = revealed ? esc(displayText || "カードを読み込んでいます…") : (solo ? "タップしてめくる" : "タップしてめくる");
   const isChallenge = Boolean(card?.kind === "challenge");
   const together = !solo && isTogetherCard(card);
-  const favorite = revealed && !solo && !session.sponsorSet && state.account.user && state.account.enabled && card?.kind !== "challenge" && !card?.custom ? `<button type="button" class="favorite-card-button ${state.account.favorites.has(card.id) ? "is-saved" : ""}" data-action="favorite-card" aria-pressed="${state.account.favorites.has(card.id)}" aria-label="${state.account.favorites.has(card.id) ? "保存済み" : "質問を保存"}" title="${state.account.favorites.has(card.id) ? "保存済み" : "質問を保存"}" ${state.account.busy ? "disabled" : ""}>${state.account.favorites.has(card.id) ? "★" : "☆"}</button>` : `<span class="play-toolbar-slot" aria-hidden="true"></span>`;
-  const cardAudio = cardAudioButton();
+  const favorite = revealed && !solo && !session.sponsorSet && state.account.user && state.account.enabled && card?.kind !== "challenge" && !card?.custom ? `<button type="button" class="favorite-card-button ${state.account.favorites.has(card.id) ? "is-saved" : ""}" data-action="favorite-card" aria-pressed="${state.account.favorites.has(card.id)}" aria-label="${state.account.favorites.has(card.id) ? "保存済み" : "質問を保存"}" title="${state.account.favorites.has(card.id) ? "保存済み" : "質問を保存"}" ${state.account.busy ? "disabled" : ""}>${state.account.favorites.has(card.id) ? "★" : "☆"}</button>` : "";
   const cardClass = `shared-question-card ${revealed ? "is-revealed" : "is-face-down"} ${session.sponsorSet && cardDesign.sponsorCustomFront ? "sponsor-custom-front" : ""} ${session.sponsorSet && cardDesign.sponsorCustomBack ? "sponsor-custom-back" : ""}`;
   const primaryAction = revealed ? (solo ? "next-answer" : "next-answer") : "reveal";
   const primaryState = !revealed ? "reveal" : solo || together || session.answerIndex === session.participants.length - 1 ? "next-card" : "next-person";
@@ -1688,7 +1699,7 @@ function sharedPlayView(session) {
   const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
   const measurement = !revealed && displayText ? `<span class="shared-card-measure" aria-hidden="true">${esc(displayText)}</span>` : "";
   const soloAddress = revealed && solo && soloDisplayName(session) && !hasSoloQuestionPersonalization(activeCard) ? `<span class="solo-card-address">${esc(soloDisplayName(session))}へ</span>` : "";
-  return frame(`<div class="shared-play-shell ${solo ? "is-solo" : "is-group"}"><div class="shared-play-head"><div>${session.sponsorSet ? `<small class="theme-explorer-sponsor-label">スポンサー · ${esc(session.sponsor?.providerName || '公式提供')}の公式カード</small>` : ""}<p class="play-deck">${esc(playTitle)}</p><p class="progress-copy" aria-label="全${session.questions.length}枚中${session.cursor + 1}枚目">${roundPosition + 1} / ${roundTotal}</p></div><button type="button" class="icon-action theme-change-button" data-action="decks" aria-label="テーマを変更">${actionIcon("grid")}</button></div><div class="round-progress shared-round-progress" aria-label="今回の進み具合">${segments}</div><article style="${cardArtStyle}" data-card-family="${cardDesign.family}" class="${cardClass}" ${!revealed ? 'data-action="reveal" role="button" tabindex="0" aria-label="カードをめくる"' : ""} aria-live="polite"><span class="shared-art-rail" aria-hidden="true"></span><span class="shared-card-copy">${soloAddress}${isChallenge ? '<span class="challenge-badge">やってみて</span>' : ""}${question}</span>${measurement}<span class="shared-card-motif" aria-hidden="true">${cardThemeMark || ""}</span><span class="shared-bubbles" aria-hidden="true"><i></i><i></i></span>${favorite}${cardAudio}</article>${speaker}${actions}<p class="shared-pass-hint">話したくない質問はパスしてOK</p>${solo && session.cursor === 0 ? soloStartNoteView(session.customSet ? null : soloDecks.find((item) => item.id === session.deckId)) : ""}<p class="form-error" role="alert">${esc(state.error)}</p>${accountOverlay}</div>`, "Mingle.Cards", true);
+  return frame(`<div class="shared-play-shell ${solo ? "is-solo" : "is-group"}"><div class="shared-play-head"><div>${session.sponsorSet ? `<small class="theme-explorer-sponsor-label">スポンサー · ${esc(session.sponsor?.providerName || '公式提供')}の公式カード</small>` : ""}<p class="play-deck">${esc(playTitle)}</p><p class="progress-copy" aria-label="全${session.questions.length}枚中${session.cursor + 1}枚目">${roundPosition + 1} / ${roundTotal}</p></div><button type="button" class="icon-action theme-change-button" data-action="decks" aria-label="テーマを変更">${actionIcon("grid")}</button></div><div class="round-progress shared-round-progress" aria-label="今回の進み具合">${segments}</div><article style="${cardArtStyle}" data-card-family="${cardDesign.family}" class="${cardClass}" ${!revealed ? 'data-action="reveal" role="button" tabindex="0" aria-label="カードをめくる"' : ""} aria-live="polite"><span class="shared-art-rail" aria-hidden="true"></span><span class="shared-card-copy">${soloAddress}${isChallenge ? '<span class="challenge-badge">やってみて</span>' : ""}${question}</span>${measurement}<span class="shared-card-motif" aria-hidden="true">${cardThemeMark || ""}</span><span class="shared-bubbles" aria-hidden="true"><i></i><i></i></span>${favorite}</article>${speaker}${actions}<p class="shared-pass-hint">話したくない質問はパスしてOK</p>${solo && session.cursor === 0 ? soloStartNoteView(session.customSet ? null : soloDecks.find((item) => item.id === session.deckId)) : ""}<p class="form-error" role="alert">${esc(state.error)}</p>${accountOverlay}</div>`, "Mingle.Cards", true);
 }
 
 function playView() {
@@ -2706,6 +2717,7 @@ function quickQuizRoster() {
   return state.participants.map((name) => name.trim());
 }
 function finishToHome() {
+  stopCardAudio();
   const leavingExternalContext = Boolean(state.shared || state.venue || location.search.includes("share=") || location.search.includes("venue="));
   clearCompletionRecallSession(state.session); state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
   state.resume = loadResumeForCurrentUser();
@@ -2778,7 +2790,6 @@ async function handleAction(event) {
     const key = state.session && completionReplyKey(state.session); const reply = completionReplyStates.get(key) || {}; const entries = completionRecallEntries(state.session); const choices = entries.filter((entry) => !(entry.cardId === reply.recallCardId && entry.participantIndex === reply.recallParticipantIndex));
     if (!choices.length) return; const entry = chooseRecallEntry(choices); reply.recallCardId = entry.cardId; reply.recallParticipantIndex = entry.participantIndex; state.focusAction = "completion-recall-next"; completionReplyStates.set(key, reply); render(); return;
   }
-  if (action === "audio-toggle") { event.stopPropagation(); state.focusAction = "audio-toggle"; toggleCardAudio(); render(); return; }
   if (action === "theme-bookmark") { event.stopPropagation(); const id = event.currentTarget.dataset.bookmarkId; toggleThemeExplorerBookmark(id, state.account.user?.id); state.focusSelector = `[data-action="theme-bookmark"][data-bookmark-id="${CSS.escape(id)}"]`; render(); return; }
   if (action === "theme-experienced") { event.stopPropagation(); const id = event.currentTarget.dataset.experiencedId; toggleThemeExplorerExperienced(id, state.account.user?.id); state.focusSelector = `[data-action="theme-experienced"][data-experienced-id="${CSS.escape(id)}"]`; render(); return; }
   if (action === "game-launch") {
@@ -2790,6 +2801,7 @@ async function handleAction(event) {
       render();
       return;
     }
+    playThemeSelectSound();
     if (game?.id === 'match' || game?.id === 'choice') launchSocialGame(game);
     else if (game?.href) {
       const href = new URL(game.href, location.href);
@@ -2831,6 +2843,7 @@ async function handleAction(event) {
         state.selectedDeckId = state.selectedDeckIds[0] || id;
       } else { state.selectedDeckId = id; state.selectedDeckIds = [id]; state.selectedMySetId = null; state.participantTab = participantRuleForDeck(deck) === 'pair' ? 'pair' : 'group'; }
     }
+    playThemeSelectSound();
     state.adultConfirmed = false; state.themeOptionsOpen = state.themeMode !== "mixed" && Boolean(selectedDeck?.adultOnly || (selectedDeck && canOfferR18(selectedDeck))); state.error = "";
     if (startsThemeOnSelect(selectedDeck, { solo: state.themeMode === "solo", mixed: state.themeMode === "mixed" })) {
       if (state.themeMode === "solo") startSelectedSoloDeck();
@@ -2840,6 +2853,7 @@ async function handleAction(event) {
     state.focusSelector = `[data-theme-key="${event.currentTarget.dataset.themeKey}"]`; render(); return;
   }
   if (action === "sponsor-select") {
+    playThemeSelectSound();
     await startSponsorSet(event.currentTarget.dataset.sponsorId || '');
     return;
   }
@@ -3458,7 +3472,7 @@ async function handleAction(event) {
     await continueCurrentRound();
     return;
   }
-  if (action === "finish") { const celebrateCandidate = event.currentTarget.classList.contains("completion-finish"); if (celebrateCandidate && completionFinishInFlight) return; if (celebrateCandidate) { completionFinishInFlight = true; try { startCompletionCelebration({ onComplete: () => { completionFinishInFlight = false; finishToHome(); } }); } catch { completionFinishInFlight = false; finishToHome(); } } else finishToHome(); }
+  if (action === "finish") { const celebrateCandidate = event.currentTarget.classList.contains("completion-finish"); if (celebrateCandidate && completionFinishInFlight) return; if (celebrateCandidate) { completionFinishInFlight = true; try { stopCardAudio(); const celebration = startCompletionCelebration({ onComplete: () => { completionFinishInFlight = false; finishToHome(); } }); playCompletionSound(celebration?.variant); } catch { completionFinishInFlight = false; finishToHome(); } } else finishToHome(); }
 }
 
 let webMcpRegistered = false;

@@ -1,12 +1,19 @@
 const STORAGE_KEY = "mingle.cardAudio.enabled";
+const AUDIO_URLS = {
+  flip: "/assets/audio/mingle-card-flip.mp3?v=17-cotton-table-fb811852",
+  click: "/assets/audio/mingle-card-click.mp3",
+  theme: "/assets/audio/mingle-theme-select.mp3",
+  "celebration-confetti": "/assets/audio/mingle-celebration-confetti.mp3",
+  "celebration-fireworks": "/assets/audio/mingle-celebration-fireworks.mp3",
+  "celebration-ribbons": "/assets/audio/mingle-celebration-ribbons.mp3",
+  "celebration-cards": "/assets/audio/mingle-celebration-cards.mp3",
+};
 let enabled = true;
 let context = null;
 let soundRevision = 0;
-let activeSource = null;
-let activeGain = null;
-let audioBytesPromise = null;
-let audioBufferPromise = null;
-const AUDIO_URL = "/assets/audio/mingle-card-flip.mp3?v=17-cotton-table-fb811852";
+const activeSources = new Set();
+const audioBytesPromises = new Map();
+const audioBufferPromises = new Map();
 
 try {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -16,20 +23,23 @@ try {
   // Storage can be unavailable in private or restricted browsing modes.
 }
 
-function fetchAudioBytes() {
-  if (audioBytesPromise) return audioBytesPromise;
-  try {
-    audioBytesPromise = fetch(AUDIO_URL, { cache: "force-cache" })
-      .then((response) => { if (!response.ok) throw new Error(`audio-${response.status}`); return response.arrayBuffer(); })
-      .catch(() => { audioBytesPromise = null; return null; });
-  } catch {
-    audioBytesPromise = null;
-    return Promise.resolve(null);
-  }
-  return audioBytesPromise;
-}
+if (enabled) Object.keys(AUDIO_URLS).forEach((key) => { fetchAudioBytes(key); });
 
-if (enabled) fetchAudioBytes();
+function fetchAudioBytes(key) {
+  if (audioBytesPromises.has(key)) return audioBytesPromises.get(key);
+  const url = AUDIO_URLS[key];
+  if (!url) return Promise.resolve(null);
+  let promise;
+  try {
+    promise = fetch(url, { cache: "force-cache" })
+      .then((response) => { if (!response.ok) throw new Error(`audio-${response.status}`); return response.arrayBuffer(); })
+      .catch(() => { audioBytesPromises.delete(key); return null; });
+  } catch {
+    promise = Promise.resolve(null);
+  }
+  audioBytesPromises.set(key, promise);
+  return promise;
+}
 
 export function isCardAudioEnabled() {
   return enabled;
@@ -38,7 +48,7 @@ export function isCardAudioEnabled() {
 export function toggleCardAudio() {
   enabled = !enabled;
   soundRevision += 1;
-  if (!enabled) stopActiveSource();
+  if (!enabled) stopActiveSources();
   try {
     localStorage.setItem(STORAGE_KEY, enabled ? "1" : "0");
   } catch {
@@ -47,52 +57,58 @@ export function toggleCardAudio() {
   return enabled;
 }
 
-function stopActiveSource() {
-  if (!activeSource) return;
-  try { activeSource.stop(); } catch { /* already ended */ }
-  try { activeSource.disconnect(); } catch { /* already disconnected */ }
-  try { activeGain?.disconnect(); } catch { /* already disconnected */ }
-  activeSource = null;
-  activeGain = null;
+export function stopCardAudio() {
+  soundRevision += 1;
+  stopActiveSources();
 }
 
-function loadAudioBuffer(audioContext) {
-  if (audioBufferPromise) return audioBufferPromise;
-  audioBufferPromise = fetchAudioBytes()
+function stopActiveSources() {
+  for (const source of activeSources) {
+    try { source.stop(); } catch { /* already ended */ }
+    try { source.disconnect(); } catch { /* already disconnected */ }
+  }
+  activeSources.clear();
+}
+
+function loadAudioBuffer(key, audioContext) {
+  if (audioBufferPromises.has(key)) return audioBufferPromises.get(key);
+  const promise = fetchAudioBytes(key)
     .then((data) => data ? audioContext.decodeAudioData(data.slice(0)) : null)
-    .then((buffer) => { if (!buffer) { audioBufferPromise = null; audioBytesPromise = null; } return buffer; })
-    .catch(() => { audioBufferPromise = null; audioBytesPromise = null; return null; });
-  return audioBufferPromise;
+    .then((buffer) => { if (!buffer) { audioBufferPromises.delete(key); audioBytesPromises.delete(key); } return buffer; })
+    .catch(() => { audioBufferPromises.delete(key); audioBytesPromises.delete(key); return null; });
+  audioBufferPromises.set(key, promise);
+  return promise;
 }
 
-export function playFlipSound() {
-  if (!enabled) return;
+function playAudioKey(key, gainValue = 0.72) {
+  if (!enabled || !AUDIO_URLS[key]) return;
   const revision = ++soundRevision;
   try {
     context ||= new (window.AudioContext || window.webkitAudioContext)();
     const start = (buffer) => {
       if (!buffer || !enabled || revision !== soundRevision) return;
-      stopActiveSource();
+      stopActiveSources();
       const source = context.createBufferSource();
       const gain = context.createGain();
-      gain.gain.value = 0.72;
+      gain.gain.value = gainValue;
       source.buffer = buffer;
       source.connect(gain).connect(context.destination);
-      activeSource = source;
-      activeGain = gain;
-      source.onended = () => {
-        try { source.disconnect(); gain.disconnect(); } catch { /* already disconnected */ }
-        if (activeSource === source) { activeSource = null; activeGain = null; }
-      };
-      try { source.start(); } catch {
-        try { source.disconnect(); gain.disconnect(); } catch { /* already disconnected */ }
-        if (activeSource === source) { activeSource = null; activeGain = null; }
-      }
+      activeSources.add(source);
+      source.onended = () => { try { source.disconnect(); gain.disconnect(); } catch { /* already disconnected */ } activeSources.delete(source); };
+      try { source.start(); } catch { activeSources.delete(source); try { source.disconnect(); gain.disconnect(); } catch { /* already disconnected */ } }
     };
-    const loadAndStart = () => { if (!enabled || revision !== soundRevision) return; loadAudioBuffer(context).then(start).catch(() => {}); };
+    const loadAndStart = () => { if (!enabled || revision !== soundRevision) return; loadAudioBuffer(key, context).then(start).catch(() => {}); };
     if (context.state === "suspended") context.resume().then(loadAndStart).catch(() => {});
     else loadAndStart();
   } catch {
-    // Audio is decorative; card play must continue when unsupported or blocked.
+    // Audio is decorative; the action must continue when unsupported or blocked.
   }
+}
+
+export function playFlipSound() { playAudioKey("flip"); }
+export function playUiClick() { playAudioKey("click", 0.25); }
+export function playThemeSelectSound() { playAudioKey("theme", 0.58); }
+export function playCompletionSound(variant) {
+  if (typeof variant !== "string") return;
+  playAudioKey(`celebration-${variant}`, 0.7);
 }
