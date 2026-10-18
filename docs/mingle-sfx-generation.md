@@ -64,7 +64,11 @@ Surprise has measurable material in the first 0.5 seconds (first-500-ms RMS -22.
 
 ## Current runtime note
 
-The current implementation uses reaction scheduling delay `0` for both reaction sounds; the earlier `now + 0.28 s` same and `now + 0.26 s` surprise values are historical QA measurements only. The current nine adopted assets are the long batch listed in the latest post-leveling audit above: click 1.760 s decoded, flip 1.480 s, theme 1.760 s, confetti/fireworks/ribbons/cards 5.000 s each, same/surprise 4.800 s each. The click prompt requested 1.8 s from ElevenLabs and decoded to 1.760 s. `artifacts/audio-preview/unused/mingle-next-person.mp3` and `artifacts/audio-preview/unused/_gen_next_person.py` are intermediate files from a separate next-person experiment, are not referenced by the current mapping, and remain excluded from staging.
+The current implementation uses reaction scheduling delay `0.28 s` for same and `0.26 s` for surprise. The current adopted assets are: click 1.760 s decoded (applause candidate), flip 0.800 s, theme 1.760 s, confetti/fireworks/ribbons/cards 5.000 s each, same 1.080 s, and surprise 1.200 s. The click prompt requested 1.8 s from ElevenLabs and decoded to 1.760 s. `artifacts/audio-preview/unused/mingle-next-person.mp3` and `artifacts/audio-preview/unused/_gen_next_person.py` are intermediate files from a separate next-person experiment, are not referenced by the current mapping, and remain excluded from staging.
+
+## Restored short reaction assets
+
+The long-batch flip and reaction assets were restored byte-for-byte from commit `f20e53116e45005ee23cd3007cf17d2caa8b08ef`: flip 0.800 s SHA-256 `22037C778186BD3AD9443E110525D7472BF0A2CFE5987B99864C794F915EE867`; same 1.080 s SHA-256 `DBEDD55E14BF14285B8FC7EDD17EB39B646B23730C0829849B538EF29A0E206B`; surprise 1.200 s SHA-256 `D6929BF8C2F9BD833E9EA91C33A86F129D7487ADC934DE41C9B6FA801924513D`. Their cache URLs use `v=23-short-20261018`; gains are unchanged.
 
 ## Applause click replacement
 

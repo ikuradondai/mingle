@@ -14,9 +14,9 @@
 .reaction-effect-card { width: 42px; height: 58px; border: 2px solid var(--reaction-navy, #14213d); border-radius: 7px; background: var(--reaction-cream, #fffaf0); box-shadow: 0 8px 12px rgb(20 33 61 / 18%), inset 0 0 0 1px rgb(255 255 255 / 60%); transform-origin: 50% 85%; }
 .reaction-effect-card::after { content: ""; position: absolute; inset: 8px 9px auto; height: 2px; border-radius: 2px; background: var(--reaction-blue, #1769e8); opacity: .7; }
 
-.conversation-reaction-effect-same .reaction-effect-card-left { left: 26px; top: 35px; transform: rotate(-13deg); background: var(--reaction-blue, #1769e8); border-color: var(--reaction-blue, #1769e8); animation: reaction-same-left 4.8s cubic-bezier(.2,.8,.2,1) both; }
-.conversation-reaction-effect-same .reaction-effect-card-right { right: 26px; top: 35px; transform: rotate(13deg); background: var(--reaction-coral, #ff6b72); border-color: var(--reaction-coral, #ff6b72); animation: reaction-same-right 4.8s cubic-bezier(.2,.8,.2,1) both; }
-.reaction-effect-rays { top: 57px; z-index: 2; width: 22px; height: 20px; opacity: 0; animation: reaction-same-rays 4.8s ease-out both; }
+.conversation-reaction-effect-same .reaction-effect-card-left { left: 26px; top: 35px; transform: rotate(-13deg); background: var(--reaction-blue, #1769e8); border-color: var(--reaction-blue, #1769e8); animation: reaction-same-left 1s cubic-bezier(.2,.8,.2,1) both; }
+.conversation-reaction-effect-same .reaction-effect-card-right { right: 26px; top: 35px; transform: rotate(13deg); background: var(--reaction-coral, #ff6b72); border-color: var(--reaction-coral, #ff6b72); animation: reaction-same-right 1s cubic-bezier(.2,.8,.2,1) both; }
+.reaction-effect-rays { top: 57px; z-index: 2; width: 22px; height: 20px; opacity: 0; animation: reaction-same-rays 1s ease-out both; }
 .reaction-effect-rays-left { left: 42px; transform: rotate(8deg); }
 .reaction-effect-rays-right { right: 42px; transform: rotate(-8deg); }
 .reaction-effect-rays i { position: absolute; width: 12px; height: 2px; border-radius: 2px; background: var(--reaction-cream, #fffaf0); transform-origin: 0 50%; }
@@ -43,31 +43,30 @@
   100% { opacity: 0; transform: translateX(-24px) rotate(5deg) scale(.96); }
 }
 @keyframes reaction-same-rays {
-  0%, 7% { opacity: 0; transform: scale(.55); }
-  12% { opacity: .9; transform: scale(1); }
-  28% { opacity: .45; transform: scale(1.04); }
-  76% { opacity: .3; transform: scale(1.08); }
-  100% { opacity: 0; transform: scale(1.14); }
+  0%, 35% { opacity: 0; transform: scale(.55); }
+  46% { opacity: .9; transform: scale(1); }
+  68% { opacity: .45; transform: scale(1.04); }
+  80%, 100% { opacity: 0; }
 }
 
 .conversation-reaction-effect-surprise .reaction-effect-hero { position:absolute; width:78px; height:108px; border:2px solid rgb(20 33 61 / 52%); border-radius:8px; background:var(--reaction-cream, #fffaf0) url('/assets/play/mingle-paper-back.webp') center/cover no-repeat; box-shadow:0 13px 22px rgb(20 33 61 / 28%), inset 0 0 0 1px rgb(255 255 255 / 62%); transform-origin:50% 88%; opacity:0; overflow:hidden; }
 .conversation-reaction-effect-surprise .reaction-effect-hero::after { content:""; position:absolute; inset:0; background:linear-gradient(138deg, rgb(255 255 255 / 20%), transparent 44%, rgb(20 33 61 / 16%)); }
-.conversation-reaction-effect-surprise .reaction-effect-hero-left { left:20px; top:70px; width:64px; height:90px; background-position:32% center; animation:reaction-surprise-hero-left 4.72s 80ms cubic-bezier(.16,.72,.2,1) both; }
-.conversation-reaction-effect-surprise .reaction-effect-hero-main { left:104px; top:48px; width:84px; height:116px; animation:reaction-surprise-hero-main 4.9s cubic-bezier(.16,.72,.2,1) both; z-index:3; }
+.conversation-reaction-effect-surprise .reaction-effect-hero-left { left:20px; top:70px; width:64px; height:90px; background-position:32% center; animation:reaction-surprise-hero-left 1.72s 80ms cubic-bezier(.16,.72,.2,1) both; }
+.conversation-reaction-effect-surprise .reaction-effect-hero-main { left:104px; top:48px; width:84px; height:116px; animation:reaction-surprise-hero-main 1.9s cubic-bezier(.16,.72,.2,1) both; z-index:3; }
 .conversation-reaction-effect-surprise .reaction-effect-hero-main::before { content:""; position:absolute; z-index:1; left:18%; top:35%; width:64%; height:28%; background:url('/assets/mingle-cards-masthead.png') center/contain no-repeat; opacity:.88; }
-.conversation-reaction-effect-surprise .reaction-effect-hero-right { left:140px; top:73px; width:64px; height:90px; background-position:68% center; animation:reaction-surprise-hero-right 4.78s 150ms cubic-bezier(.16,.72,.2,1) both; }
+.conversation-reaction-effect-surprise .reaction-effect-hero-right { left:140px; top:73px; width:64px; height:90px; background-position:68% center; animation:reaction-surprise-hero-right 1.78s 150ms cubic-bezier(.16,.72,.2,1) both; }
 .reaction-effect-paper { width: 18px; height: 26px; border: 1.5px solid var(--reaction-navy, #14213d); border-radius: 3px; box-shadow: 0 4px 7px rgb(20 33 61 / 18%); transform-origin: 50% 90%; opacity: 0; z-index:4; }
 .reaction-effect-paper::after { content: ""; position: absolute; left: 4px; right: 4px; top: 6px; height: 1.5px; border-radius: 2px; background: var(--reaction-cream, #fffaf0); opacity: .82; }
-.reaction-effect-paper-one { left:92px; top:54px; width:22px; height:30px; background:var(--reaction-coral, #ff6b72); animation:reaction-surprise-paper-one 4.72s 80ms cubic-bezier(.2,.72,.25,1) both; }
-.reaction-effect-paper-two { left:28px; top:83px; width:16px; height:25px; background:var(--reaction-cream, #fffaf0); clip-path:polygon(50% 0,100% 32%,72% 100%,0 76%); animation:reaction-surprise-paper-two 4.78s 170ms cubic-bezier(.2,.72,.25,1) both; }
-.reaction-effect-paper-three { left:212px; top:56px; width:17px; height:27px; background:#e6b84c; border-color:#bb8a22; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); animation:reaction-surprise-paper-three 4.84s 260ms cubic-bezier(.2,.72,.25,1) both; }
-.reaction-effect-paper-four { left:65px; top:28px; width:28px; height:7px; background:var(--reaction-blue, #1769e8); border-color:var(--reaction-blue, #1769e8); clip-path:polygon(0 20%,78% 0,100% 50%,78% 100%,0 80%,24% 50%); animation:reaction-surprise-paper-four 4.76s 360ms cubic-bezier(.2,.72,.25,1) both; }
-.reaction-effect-paper-five { left:228px; top:100px; width:11px; height:19px; background:var(--reaction-cream, #fffaf0); clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); animation:reaction-surprise-paper-five 4.9s 470ms cubic-bezier(.2,.72,.25,1) both; }
+.reaction-effect-paper-one { left:92px; top:54px; width:22px; height:30px; background:var(--reaction-coral, #ff6b72); animation:reaction-surprise-paper-one 1.72s 80ms cubic-bezier(.2,.72,.25,1) both; }
+.reaction-effect-paper-two { left:28px; top:83px; width:16px; height:25px; background:var(--reaction-cream, #fffaf0); clip-path:polygon(50% 0,100% 32%,72% 100%,0 76%); animation:reaction-surprise-paper-two 1.78s 170ms cubic-bezier(.2,.72,.25,1) both; }
+.reaction-effect-paper-three { left:212px; top:56px; width:17px; height:27px; background:#e6b84c; border-color:#bb8a22; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); animation:reaction-surprise-paper-three 1.84s 260ms cubic-bezier(.2,.72,.25,1) both; }
+.reaction-effect-paper-four { left:65px; top:28px; width:28px; height:7px; background:var(--reaction-blue, #1769e8); border-color:var(--reaction-blue, #1769e8); clip-path:polygon(0 20%,78% 0,100% 50%,78% 100%,0 80%,24% 50%); animation:reaction-surprise-paper-four 1.76s 360ms cubic-bezier(.2,.72,.25,1) both; }
+.reaction-effect-paper-five { left:228px; top:100px; width:11px; height:19px; background:var(--reaction-cream, #fffaf0); clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%); animation:reaction-surprise-paper-five 1.58s 470ms cubic-bezier(.2,.72,.25,1) both; }
 @keyframes reaction-surprise-hero-main {
   0% { opacity:0; transform:perspective(420px) translate(-30px,38px) rotateY(-72deg) rotate(-14deg) scale(.72); }
-  7% { opacity:1; transform:perspective(420px) translate(8px,-28px) rotateY(18deg) rotate(6deg) scale(1.1); }
   10% { opacity:.7; transform:perspective(420px) translate(-22px,18px) rotateY(-42deg) rotate(-9deg) scale(.84); }
-  13% { transform:perspective(420px) translate(0,0) rotateY(-6deg) rotate(-2deg) scale(1.02); box-shadow:0 18px 28px rgb(20 33 61 / 32%); }
+  18% { opacity:1; transform:perspective(420px) translate(8px,-28px) rotateY(18deg) rotate(6deg) scale(1.1); box-shadow:0 18px 28px rgb(20 33 61 / 32%); }
+  24% { transform:perspective(420px) translate(0,0) rotateY(-6deg) rotate(-2deg) scale(1.02); }
   32% { transform:perspective(420px) translate(6px,-7px) rotateY(4deg) rotate(2deg) scale(1.04); }
   72% { opacity:.98; transform:perspective(420px) translate(8px,0) rotateY(0deg) rotate(0deg) scale(1); }
   91% { opacity:.72; transform:perspective(420px) translate(15px,8px) rotateY(7deg) rotate(5deg) scale(.97); }

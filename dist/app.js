@@ -8,7 +8,7 @@ import { completionFeelingChoices, completionFeelingFor, completionFeelingKey } 
 import { completionReplyContext, completionReplyKey, completionReplyCopy } from "./completion-reply.js";
 import { completionRecallKey as recallMemoryKey, completionRecallCandidates, chooseRecallEntry } from "./completion-recall.js";
 import { startCompletionCelebration, stopCompletionCelebration } from "./completion-celebration.js";
-import { ROUND_SIZE, roundSizeFor, isTogetherCard, createSession, createMixedSession, createSavedSession, createSharedSession, createSoloSession, createSponsorSession, currentAnswerLikes, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, likeCurrentAnswer, nextAnswer, passAnswer, previousAnswer, previousCard, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS, summarizeLikes } from "./engine.js";
+import { ROUND_SIZE, roundSizeFor, isTogetherCard, createSession, createMixedSession, createSavedSession, createSharedSession, createSoloSession, createSponsorSession, currentCard, currentParticipantIndex, currentSpeaker, isFinished, isRoundComplete, nextAnswer, passAnswer, previousAnswer, previousCard, remaining, revealCard, continueRound, normalizeParticipants, MAX_NAME_LENGTH, MAX_PARTICIPANTS } from "./engine.js";
 import { themeGroups, groupLabels } from "./data/theme-groups.js";
 import { buildFeedbackPayload, feedbackKey, submitFeedback } from "./feedback.js";
 import { accountConfig, accountApi, cardPayload, discoverAccountConfig } from "./account.js";
@@ -66,7 +66,7 @@ const state = {
   session: null,
   continuePending: null,
   pendingCustomResume: null,
-  error: "", busy: false, sponsorItems: [], sponsorOrder: Object.create(null), sponsorLoaded: false, sponsorLoading: false, sponsorError: "", sponsorDetailLoading: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, roundLikeExpanded: false, roundLikeKey: null, themeLikePending: new Set(), themeLikeStatus: Object.create(null), lastAdvanceAt: 0, focusAction: null, focusSelector: null, helpOpen: false, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null, soloNoteDraft: "", soloNoteStatus: "", soloNoteError: "", soloSummaryDraft: "", soloSummaryStatus: "", soloDraftOwner: null, soloDraftRevision: 0, soloMemoOpen: false, soloMemoKey: "", soloHistoryOpen: false, soloHistory: [], soloHistoryCursor: null, soloHistoryHasMore: false, soloHistoryLoading: false, soloHistoryError: "", soloHistoryEditing: null, soloNoteDrafts: Object.create(null), soloNoteStatuses: Object.create(null), soloNoteErrors: Object.create(null), soloSummaryDrafts: Object.create(null), soloSummaryStatuses: Object.create(null), soloSummaryErrors: Object.create(null),
+  error: "", busy: false, sponsorItems: [], sponsorOrder: Object.create(null), sponsorLoaded: false, sponsorLoading: false, sponsorError: "", sponsorDetailLoading: false, feedbackBusy: false, feedbackRequestToken: 0, feedback: null, roundFeedbackExpanded: false, roundFavorite: null, themeLikePending: new Set(), themeLikeStatus: Object.create(null), lastAdvanceAt: 0, focusAction: null, focusSelector: null, helpOpen: false, shareDialogOpen: false, selectedDeckId: "friends", selectedMySetId: null, soloNoteDraft: "", soloNoteStatus: "", soloNoteError: "", soloSummaryDraft: "", soloSummaryStatus: "", soloDraftOwner: null, soloDraftRevision: 0, soloMemoOpen: false, soloMemoKey: "", soloHistoryOpen: false, soloHistory: [], soloHistoryCursor: null, soloHistoryHasMore: false, soloHistoryLoading: false, soloHistoryError: "", soloHistoryEditing: null, soloNoteDrafts: Object.create(null), soloNoteStatuses: Object.create(null), soloNoteErrors: Object.create(null), soloSummaryDrafts: Object.create(null), soloSummaryStatuses: Object.create(null), soloSummaryErrors: Object.create(null),
   selectedDeckIds: ["friends"],
   themeMode: "single", participantTab: "group", guestThemeHintDismissed: false,
   filter: "all", adultConfirmed: false, includeChallenges: false, resume: null, themeExplorerView: "cards", themeExplorerQuery: "", themeExplorerShelf: "all", themeExplorerTagFilter: "all", themeOptionsOpen: false, account: { enabled: accountConfig.enabled, authReady: false, google: accountConfig.google, user: null, favorites: new Set(), hiddenThemeIds: new Set(), savedHiddenThemeIds: new Set(), themeVisibilityRevision: 0, themeVisibilityReady: false, themeVisibilityAvailable: false, themeVisibilityError: "", themeVisibilityOpenCategories: new Set(['relationship', 'friends']), customCards: [], customCardsAvailable: false, sets: [], open: false, libraryOpen: false, settingsOpen: false, deleteOpen: false, deleteConfirmed: false,
@@ -1740,7 +1740,7 @@ function sharedPlayView(session) {
   // controls; inserting it after reveal moves the card and creates a visible
   // layout jump on both desktop and mobile.
   const reactions = !solo ? `<div class="answer-reactions${revealed ? " is-active" : " is-disabled"}" role="group" aria-label="答え方リアクション"><button type="button" class="answer-reaction-button answer-reaction-same" data-action="reaction" data-reaction="same" aria-label="同じ！" ${revealed ? "" : "disabled"}>${reactionIcon("same")}<span>同じ！</span></button><button type="button" class="answer-reaction-button answer-reaction-surprise" data-action="reaction" data-reaction="surprise" aria-label="意外！" ${revealed ? "" : "disabled"}>${reactionIcon("surprise")}<span>意外！</span></button>${reactionOverlay}</div>` : "";
-  const actions = solo ? `<div class="shared-actions" role="group" aria-label="操作">${previousCardButton}${primaryButton}<button class="pass-button" data-action="pass" aria-label="パス" title="パス" ${state.busy ? "disabled" : ""}>${actionIcon("skip")}</button></div>` : `<div class="shared-actions" role="group" aria-label="回答操作"><button class="secondary-button" data-action="previous-answer" aria-label="${session.answerIndex > 0 ? "前の人へ" : "前のカード"}" title="${session.answerIndex > 0 ? "前の人へ" : "前のカード"}" ${state.busy || (atSessionStart && session.answerIndex === 0) ? "disabled" : ""}>${actionIcon("left")}</button><button class="like-button" data-action="like" aria-label="いいね" ${state.busy || !revealed ? "disabled" : ""}>${actionIcon("heart")} <strong>${revealed ? currentAnswerLikes(session) : 0}</strong></button>${primaryButton}<button class="pass-button" data-action="pass" aria-label="パス" title="パス" ${state.busy ? "disabled" : ""}>${actionIcon("skip")}</button></div>`;
+  const actions = solo ? `<div class="shared-actions" role="group" aria-label="操作">${previousCardButton}${primaryButton}<button class="pass-button" data-action="pass" aria-label="パス" title="パス" ${state.busy ? "disabled" : ""}>${actionIcon("skip")}</button></div>` : `<div class="shared-actions" role="group" aria-label="回答操作"><button class="secondary-button" data-action="previous-answer" aria-label="${session.answerIndex > 0 ? "前の人へ" : "前のカード"}" title="${session.answerIndex > 0 ? "前の人へ" : "前のカード"}" ${state.busy || (atSessionStart && session.answerIndex === 0) ? "disabled" : ""}>${actionIcon("left")}</button>${primaryButton}<button class="pass-button" data-action="pass" aria-label="パス" title="パス" ${state.busy ? "disabled" : ""}>${actionIcon("skip")}</button></div>`;
   const otherParticipants = session.participants.filter((_, index) => index !== currentIndex).join("・");
   const speaker = solo ? "" : !revealed ? `<div class="shared-speaker shared-speaker-placeholder" aria-hidden="true"></div>` : together ? `<div class="shared-speaker is-together" aria-live="polite"><strong>${session.participants.length === 2 ? "ふたりで" : "みんなで"}</strong><span class="shared-participants">${esc(session.participants.join("・"))}</span></div>` : `<div class="shared-speaker${speakerChanged ? " is-speaker-changing" : ""}" data-speaker-index="${currentIndex}" aria-live="polite"><span class="shared-speaker-avatar" aria-hidden="true">${esc(Array.from((speakerName || "・").trim())[0] || "")}</span><strong>${esc(speakerName)}の番</strong>${otherParticipants ? `<span class="shared-participants">${esc(otherParticipants)}</span>` : ""}</div>`;
   const segments = Array.from({ length: roundTotal }, (_, index) => `<span class="round-segment ${index < roundPosition ? "is-done" : ""} ${index === roundPosition ? "is-current" : ""}"></span>`).join("");
@@ -1774,23 +1774,6 @@ function feedbackState(session) {
   return state.feedback;
 }
 function feedbackSubmitted(session) { return Array.isArray(session?.feedbackSubmitted) && session.feedbackSubmitted.includes(session.cursor); }
-function likeTotalsView(session) {
-  const all = summarizeLikes(session, 0, session.cursor);
-  const currentStart = Math.max(0, Math.min(session.cursor, session.roundStart ?? 0));
-  const current = summarizeLikes(session, currentStart, session.cursor);
-  const duplicateNames = new Set(session.participants.filter((name, index, names) => names.indexOf(name) !== index));
-  const rows = (totals) => totals.map((item) => `<li class="like-total-row participant-color-${item.index}"><span class="like-total-person"><i aria-hidden="true"></i>${esc(item.name)}${duplicateNames.has(item.name) ? `（${item.index + 1}人目）` : ""}</span><strong>${Number.isSafeInteger(item.likes) && item.likes >= 0 ? item.likes : 0}</strong><span aria-hidden="true">いいね</span></li>`).join("");
-  const total = session.questions.length; const isFinal = session.cursor >= total;
-  const body = isFinal
-    ? `<p class="like-total-label">今回の全${total}枚</p><ul>${rows(all)}</ul>${currentStart < session.cursor ? `<p class="like-total-label">最後の${session.cursor - currentStart}枚</p><ul>${rows(current)}</ul>` : ""}` : `<p class="like-total-label">今回の${session.cursor - currentStart}枚</p><ul>${rows(current)}</ul>${currentStart > 0 ? `<p class="like-total-label">これまでの合計（${session.cursor}枚）</p><ul>${rows(all)}</ul>` : ""}`;
-  const key = `${session.sessionId}:${session.cursor}`;
-  if (state.roundLikeKey !== key) { state.roundLikeKey = key; state.roundLikeExpanded = false; }
-  const displayCount = isFinal ? total : session.cursor - currentStart;
-  const compact = session.participants.length <= 2 ? `<ul>${rows(isFinal ? all : current)}</ul>` : `<p class="round-collapsed-copy">${session.participants.length}人分の集計</p>`;
-  const hasDetails = session.participants.length > 2 || currentStart > 0;
-  const detailsAction = hasDetails ? `<button type="button" class="round-section-toggle" data-action="round-like-toggle" aria-expanded="${state.roundLikeExpanded}">${state.roundLikeExpanded ? "閉じる" : "詳しく見る"}</button>` : "";
-  return `<section class="like-totals" aria-labelledby="like-totals-title"><div class="round-section-head"><h2 id="like-totals-title">いいね！の集計</h2><span class="round-section-count">${displayCount}枚</span></div>${state.roundLikeExpanded && hasDetails ? body : compact}${detailsAction}</section>`;
-}
 function roundSeenQuestionCards(session) {
   if (!session || session.sharedGuest || session.venueSession || (!isRoundComplete(session) && !isFinished(session))) return [];
   const history = new Set(Array.isArray(session.revealedQuestionIds) ? session.revealedQuestionIds : []);
@@ -2082,7 +2065,7 @@ function roundView() {
   const legacyIntro = completion ? '' : `${renderAd("round")}<img class="round-hero" src="/assets/friends-conversation-closeup.png" alt="会話を楽しむ人たち" width="1611" height="976" /><span class="round-badge">${session.cursor} / ${totalCards}</span><h1 tabindex="-1" data-focus>今回のミングルは<br>どうだった？</h1>`;
   const completionAd = completion ? renderAd("round") : "";
   const legacyActions = `<div class="break-actions">${!isFinal ? `<button class="primary-button" data-action="continue" ${state.busy || favoriteBusy ? "disabled" : ""}>${state.busy ? "確認中…" : `${actionIcon("right")}つづける`}</button>` : ""}<button class="secondary-button" data-action="finish" aria-label="プレイを終わる" title="終わる" ${favoriteBusy ? "disabled" : ""}>${actionIcon("stop")}終わる</button><button class="secondary-button social-share-button" data-action="social-share" aria-label="SNSでシェア" title="シェア" ${favoriteBusy ? "disabled" : ""}>${actionIcon("share")}シェア</button></div>`;
-  const completionExtras = completion ? `${session.mode === "solo" ? roundFavoriteView(session, { compact: true }) : ""}${completionSponsorView(session)}${roundThemeLikeView(session)}${endingLink}<p class="form-error" role="alert">${esc(state.error)}</p>` : `${likeTotalsView(session)}${feedbackForm}${completionAd}${endingLink}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更" ${favoriteBusy ? "disabled" : ""}>${actionIcon("grid")}テーマ</button>`;
+  const completionExtras = completion ? `${session.mode === "solo" ? roundFavoriteView(session, { compact: true }) : ""}${completionSponsorView(session)}${roundThemeLikeView(session)}${endingLink}<p class="form-error" role="alert">${esc(state.error)}</p>` : `${feedbackForm}${completionAd}${endingLink}${state.shareStatus ? `<p class="account-status" role="status">${esc(state.shareStatus)}</p>` : ""}${state.shareFallbackText ? `<label class="share-fallback-label">共有文<textarea readonly data-share-fallback rows="4">${esc(state.shareFallbackText)}</textarea></label>` : ""}<p class="form-error" role="alert">${esc(state.error)}</p><button class="back-link" data-action="decks" aria-label="テーマを変更" title="テーマを変更" ${favoriteBusy ? "disabled" : ""}>${actionIcon("grid")}テーマ</button>`;
   return frame(`<div class="round-break">${legacyIntro}${completion || roundThemeLikeView(session)}${completion ? completionExtras : `${legacyActions}${completionExtras}${roundFavoriteView(session)}`}</div>${completion ? "" : state.shareDialogOpen ? roundShareDialogView() : ""}${accountOverlay}`);
 }
 
@@ -2415,8 +2398,6 @@ async function startSharedSet() {
     state.feedback = null;
     state.feedbackBusy = false;
     state.roundFavorite = null;
-    state.roundLikeKey = null;
-    state.roundLikeExpanded = false;
     state.shareStatus = "";
     state.shareMenuOpen = false; state.shareFallbackText = "";
     const sharedParticipantRule = shared.participantRule === 'pair' || participantRuleForDeck(shared) === 'pair' || cards.some((card) => participantRuleForDeck(card) === 'pair') ? 'pair' : 'group';
@@ -2583,7 +2564,7 @@ async function continueCurrentRound() {
   state.shareMenuOpen = false;
   state.shareStatus = "";
   state.shareFallbackText = "";
-  state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.busy = true; state.error = ""; render();
+  state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null; state.busy = true; state.error = ""; render();
   try {
     const previous = ensureSession();
     clearCompletionRecall(previous); state.session = continueRound(state.session); persist(previous);
@@ -2777,7 +2758,7 @@ function finishToHome() {
   clearReactionState();
   stopCardAudio();
   const leavingExternalContext = Boolean(state.shared || state.venue || location.search.includes("share=") || location.search.includes("venue="));
-  clearCompletionRecallSession(state.session); state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
+  clearCompletionRecallSession(state.session); state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
   state.resume = loadResumeForCurrentUser();
   restoreGroupHomeState();
   state.screen = "participants";
@@ -2940,7 +2921,7 @@ async function handleAction(event) {
     historyReplaceNext = leavingExternalContext;
     if (location.search.includes("share=") || location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`);
     state.adultConfirmed = false;
-    state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null;
+    state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null;
     state.shareStatus = "";
     state.shareMenuOpen = false; state.shareFallbackText = "";
     if (state.session && !isFinished(state.session)) saveCurrentSession(state.session);
@@ -3293,11 +3274,6 @@ async function handleAction(event) {
   if (action === "share-menu-close") { state.shareMenuOpen = false; state.focusAction = "social-share"; render(); return; }
   if (action === "social-share-native") { shareRoundResult(); return; }
   if (action === "social-share-copy") { copyRoundShare(); return; }
-  if (action === "round-like-toggle") {
-    state.roundLikeExpanded = !state.roundLikeExpanded;
-    render();
-    return;
-  }
   if (action === "round-favorite-icon") {
     const context = state.roundFavorite; const session = state.session; const id = event.currentTarget.dataset.cardId;
     const card = context?.cards.find((item) => item.id === id);
@@ -3389,7 +3365,7 @@ async function handleAction(event) {
     state.shareStatus = "";
     state.shareFallbackText = "";
     const leavingVenue = Boolean(state.venue || state.session?.venueSession);
-    state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.screen = "decks";
+    state.roundFavorite = null; state.feedbackBusy = false; state.feedback = null; state.screen = "decks";
     if (leavingVenue) { state.venue = null; state.shared = null; state.selectedVenueSetId = null; state.session = null; if (location.search.includes("venue=")) history.replaceState({}, "", `${location.pathname}${location.hash}`); }
     state.error = "";
     state.busy = false;
@@ -3493,7 +3469,6 @@ async function handleAction(event) {
     }
     return;
   }
-  if (action === "like") { const previous = ensureSession(); state.session = likeCurrentAnswer(previous); persist(previous); render(); return; }
   if (action === "reaction") {
     const session = state.session;
     const reaction = event.currentTarget.dataset.reaction;
@@ -3510,7 +3485,7 @@ async function handleAction(event) {
       reactionState = null;
       reactionTimer = 0;
       root.querySelector('.conversation-reaction-overlay')?.remove();
-    }, reaction === "surprise" ? 5500 : 5100);
+    }, reaction === "surprise" ? 2150 : 1500);
     return;
   }
   if (action === "answer-style-dismiss") {
@@ -3580,7 +3555,7 @@ function registerWebMcp() {
   const register = (tool) => { try { return Promise.resolve(document.modelContext.registerTool(tool, { signal: lifecycle.signal })).catch(() => undefined); } catch { return undefined; } };
   const tools = [
     { name: "read_state",
-      description: "現在の画面とカード進行を読む", inputSchema: empty, annotations: { readOnlyHint: true, untrustedContentHint: true }, execute: (_input, { signal } = {}) => { if (signal?.aborted) throw new Error("中止されました"); const session = state.session; return { screen: state.screen, participants: state.participants, cursor: session?.cursor ?? 0, unlockedUntil: session?.unlockedUntil ?? 0, deckId: session?.deckId ?? null, deckIds: session?.deckIds ?? [], mixed: session?.mixed === true, includeR18: session?.includeR18 ?? false, includeChallenges: session?.includeChallenges ?? false, revealed: session?.revealed ?? false, currentSpeaker: session?.revealed ? currentSpeaker(session) : null, answerIndex: session?.answerIndex ?? 0, likes: session?.likes ?? {},
+      description: "現在の画面とカード進行を読む", inputSchema: empty, annotations: { readOnlyHint: true, untrustedContentHint: true }, execute: (_input, { signal } = {}) => { if (signal?.aborted) throw new Error("中止されました"); const session = state.session; return { screen: state.screen, participants: state.participants, cursor: session?.cursor ?? 0, unlockedUntil: session?.unlockedUntil ?? 0, deckId: session?.deckId ?? null, deckIds: session?.deckIds ?? [], mixed: session?.mixed === true, includeR18: session?.includeR18 ?? false, includeChallenges: session?.includeChallenges ?? false, revealed: session?.revealed ?? false, currentSpeaker: session?.revealed ? currentSpeaker(session) : null, answerIndex: session?.answerIndex ?? 0,
         };
       },
     },
@@ -3624,10 +3599,6 @@ function registerWebMcp() {
     {
       name: "reveal_card",
       description: "現在のカードをめくる", inputSchema: empty, annotations: { readOnlyHint: false, untrustedContentHint: true }, execute: (_input, { signal } = {}) => { if (signal?.aborted) throw new Error("中止されました"); const previous = ensureSession(); state.session = revealCard(previous); revealMotionPending = true; persist(previous); render(); return { ok: true, revealed: true }; },
-    },
-    {
-      name: "like_current_answer",
-      description: "現在の回答者にいいねする", inputSchema: empty, annotations: { readOnlyHint: false, untrustedContentHint: true }, execute: (_input, { signal } = {}) => { if (signal?.aborted) throw new Error("中止されました"); const previous = ensureSession(); state.session = likeCurrentAnswer(previous); persist(previous); render(); return { ok: true, likes: currentAnswerLikes(state.session) }; },
     },
     {
       name: "next_answer",
