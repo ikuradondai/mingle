@@ -63,3 +63,60 @@ test("sound effects share the card preference, default on, and map completion va
     restore("AudioContext", original.AudioContext);
   }
 });
+
+test("reaction decode cancellation suppresses only the cancelled pending sound", async () => {
+  const storage = new Map();
+  const starts = [];
+  const pending = [];
+  globalThis.localStorage = { getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) };
+  globalThis.fetch = async (url) => {
+    const key = String(url).split('/').pop().split('?')[0];
+    return { ok: true, arrayBuffer: async () => ({ key, slice() { return this; } }) };
+  };
+  class FakeContext {
+    constructor() { this.state = "running"; this.destination = {}; }
+    createBufferSource() {
+      const source = { buffer: null, connect: () => source, start: () => starts.push(source.buffer.key), stop() {}, disconnect() {} };
+      return source;
+    }
+    createGain() { return { gain: { value: 0 }, connect: (target) => target, disconnect() {} }; }
+    async decodeAudioData(bytes) {
+      return new Promise((resolve) => pending.push(() => resolve({ key: bytes.key })));
+    }
+    async resume() { this.state = "running"; }
+  }
+  globalThis.AudioContext = FakeContext;
+  globalThis.window = { AudioContext: FakeContext };
+  try {
+    const audio = await import(`../dist/card-audio.js?reaction=${Date.now()}`);
+    audio.playReactionSound("same");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    audio.stopReactionSound();
+    pending.splice(0).forEach((resolve) => resolve());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(starts, [], "cancelled pending reaction must not start");
+
+    audio.playReactionSound("surprise");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    pending.splice(0).forEach((resolve) => resolve());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(starts, ["mingle-card-reaction-surprise.mp3"], "new reaction starts after cancellation");
+
+    audio.playUiClick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    audio.stopReactionSound();
+    pending.splice(0).forEach((resolve) => resolve());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(starts, ["mingle-card-reaction-surprise.mp3", "mingle-card-click.mp3"], "reaction stop does not cancel pending generic click");
+
+    audio.toggleCardAudio();
+    audio.playReactionSound("same");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(starts, ["mingle-card-reaction-surprise.mp3", "mingle-card-click.mp3"], "disabled audio stays silent");
+  } finally {
+    restore("localStorage", original.localStorage);
+    restore("fetch", original.fetch);
+    restore("window", original.window);
+    restore("AudioContext", original.AudioContext);
+  }
+});

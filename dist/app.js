@@ -18,7 +18,9 @@ import { renderAd } from "./ad-config.js";
 import { playableSavedSets } from "./my-set.js";
 import { resetStudioEntryState } from "./studio-state.js";
 import { buildFacebookShareUrl, buildShareText, buildXShareUrl } from "./share-text.js";
-import { isCardAudioEnabled, toggleCardAudio, stopCardAudio, playFlipSound, playUiClick, playThemeSelectSound, playCompletionSound } from "./card-audio.js";
+import { isCardAudioEnabled, toggleCardAudio, stopCardAudio, stopReactionSound, playFlipSound, playUiClick, playThemeSelectSound, playCompletionSound, playReactionSound } from "./card-audio.js";
+import { answerStyleForCard } from "./answer-style.js";
+import { reactionIcon, reactionEffectMarkup } from "./conversation-reactions.js";
 import { cardDesignForSession, soloMotifForDeck } from "./card-design.js";
 import { CREATOR_PRESET_IDS, normalizeCreatorDesign, effectiveCreatorAdult } from "./creator-metadata.js";
 import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, rankThemeRecommendations, themeExplorerBookmarks, toggleThemeExplorerBookmark, themeExplorerExperienced, toggleThemeExplorerExperienced } from "./theme-explorer.js";
@@ -41,6 +43,9 @@ import { consumeSocialGameIntent, saveSocialGameIntent } from "./social-game-int
 const root = document.querySelector("#app");
 let completionFinishInFlight = false;
 let audioClickBound = false;
+let reactionTimer = 0;
+let reactionState = null;
+const dismissedAnswerStyles = new Set();
 const state = {
   torisetsu: null,
   shared: null,
@@ -208,6 +213,7 @@ function restoreNavigationHistory(event) {
   state.helpOpen = false;
   const sameDocument = entry.doc === historyDocumentId;
   historyRestoring = true;
+  clearReactionState();
   stopCompletionCelebration();
   stopCardAudio();
   completionFinishInFlight = false;
@@ -608,7 +614,7 @@ function render() {
     root.addEventListener("click", (event) => {
       const target = event.target?.closest?.("button,[data-action]");
       if (!target || !root.contains(target) || target.disabled || target.getAttribute("aria-disabled") === "true") return;
-      if (["reveal", "theme-select", "sponsor-select", "game-launch", "finish"].includes(target.dataset.action)) return;
+      if (["reveal", "theme-select", "sponsor-select", "game-launch", "finish", "reaction"].includes(target.dataset.action)) return;
       playUiClick();
     }, true);
     audioClickBound = true;
@@ -1664,6 +1670,27 @@ function decksView() {
 function participantChips(session) { return session.participants.map((name, index) => { const initial = Array.from(name.trim())[0] ?? '・'; return `<span class="participant-chip participant-color-${index} ${index === currentParticipantIndex(session) ? "is-current" : ""}"><i aria-hidden="true">${esc(initial)}</i>${esc(name)}</span>`;
     })
     .join(""); }
+function activeAnswerStyle(session) {
+  if (!session || session.mode === "solo") return null;
+  if (dismissedAnswerStyles.has(`${session.sessionId}:${session.cursor}`)) return null;
+  return answerStyleForCard(session, currentCard(session));
+}
+function advanceWithAnswerStyle(session, move) {
+  const style = activeAnswerStyle(session);
+  if (style === "together" && session.revealed === true) {
+    return move({ ...session, answerIndex: Math.max(0, session.participants.length - 1) });
+  }
+  return move(session);
+}
+function rememberAnswerForAdvance(session) {
+  if (activeAnswerStyle(session) === "together") {
+    for (let answerIndex = 0; answerIndex < session.participants.length; answerIndex += 1) {
+      rememberCompletedAnswer({ ...session, answerIndex });
+    }
+    return;
+  }
+  rememberCompletedAnswer(session);
+}
 function sharedPlayView(session) {
   if (venueR18Hidden(session)) return frame(venueR18Gate(session), "店舗カード", true);
   const revealed = session.revealed === true;
@@ -1685,9 +1712,13 @@ function sharedPlayView(session) {
   const cardThemeMark = card?.kind === "challenge" ? "" : solo ? soloMotifForDeck(sourceDeckId) : cardDeck ? topicIcon(cardDeck) : "";
   const baseDisplayText = activeCard ? displayQuestionText(activeCard.text, { participants: session.participants, participantIndex: currentIndex, rule: participantRuleForSession(session) }) : "";
   const displayText = solo ? personalizeSoloQuestion({ ...activeCard, text: baseDisplayText }, soloParticipantName(session)) : baseDisplayText;
+  const answerStyle = revealed && !solo ? activeAnswerStyle(session) : null;
+  const togetherAnswer = answerStyle === "together";
+  const reactionKey = `${session.sessionId}:${session.cursor}:${session.answerIndex}`;
+  const reactionOverlay = reactionState?.key === reactionKey ? `<div class="conversation-reaction-overlay" role="status" aria-live="polite"><strong>${reactionState.reaction === "same" ? "同じ！" : "意外！"}</strong>${reactionEffectMarkup(reactionState.reaction)}</div>` : "";
   const question = revealed ? esc(displayText || "カードを読み込んでいます…") : (solo ? "タップしてめくる" : "タップしてめくる");
   const isChallenge = Boolean(card?.kind === "challenge");
-  const together = !solo && isTogetherCard(card);
+  const together = !solo && (isTogetherCard(card) || togetherAnswer);
   const favorite = revealed && !solo && !session.sponsorSet && state.account.user && state.account.enabled && card?.kind !== "challenge" && !card?.custom ? `<button type="button" class="favorite-card-button ${state.account.favorites.has(card.id) ? "is-saved" : ""}" data-action="favorite-card" aria-pressed="${state.account.favorites.has(card.id)}" aria-label="${state.account.favorites.has(card.id) ? "保存済み" : "質問を保存"}" title="${state.account.favorites.has(card.id) ? "保存済み" : "質問を保存"}" ${state.account.busy ? "disabled" : ""}>${state.account.favorites.has(card.id) ? "★" : "☆"}</button>` : "";
   const cardClass = `shared-question-card ${revealed ? "is-revealed" : "is-face-down"} ${session.sponsorSet && cardDesign.sponsorCustomFront ? "sponsor-custom-front" : ""} ${session.sponsorSet && cardDesign.sponsorCustomBack ? "sponsor-custom-back" : ""}`;
   const primaryAction = revealed ? (solo ? "next-answer" : "next-answer") : "reveal";
@@ -1697,6 +1728,7 @@ function sharedPlayView(session) {
   const primaryButton = `<button class="primary-button play-action-button play-action-${primaryState}" data-action="${primaryAction}" ${state.busy ? "disabled" : ""}>${actionIcon(primaryIcon)}<span>${primaryLabel}</span></button>`;
   const atSessionStart = session.cursor === 0;
   const previousCardButton = `<button class="secondary-button" data-action="previous-card" aria-label="前のカード" title="前のカード" ${state.busy || atSessionStart ? "disabled" : ""}>${actionIcon("left")}</button>`;
+  const reactions = !solo && revealed ? `<div class="answer-reactions" role="group" aria-label="答え方リアクション"><button type="button" class="answer-reaction-button answer-reaction-same" data-action="reaction" data-reaction="same" aria-label="同じ！">${reactionIcon("same")}<span>同じ！</span></button><button type="button" class="answer-reaction-button answer-reaction-surprise" data-action="reaction" data-reaction="surprise" aria-label="意外！">${reactionIcon("surprise")}<span>意外！</span></button>${reactionOverlay}</div>` : "";
   const actions = solo ? `<div class="shared-actions" role="group" aria-label="操作">${previousCardButton}${primaryButton}<button class="pass-button" data-action="pass" aria-label="パス" title="パス" ${state.busy ? "disabled" : ""}>${actionIcon("skip")}</button></div>` : `<div class="shared-actions" role="group" aria-label="回答操作"><button class="secondary-button" data-action="previous-answer" aria-label="${session.answerIndex > 0 ? "前の人へ" : "前のカード"}" title="${session.answerIndex > 0 ? "前の人へ" : "前のカード"}" ${state.busy || (atSessionStart && session.answerIndex === 0) ? "disabled" : ""}>${actionIcon("left")}</button><button class="like-button" data-action="like" aria-label="いいね" ${state.busy || !revealed ? "disabled" : ""}>${actionIcon("heart")} <strong>${revealed ? currentAnswerLikes(session) : 0}</strong></button>${primaryButton}<button class="pass-button" data-action="pass" aria-label="パス" title="パス" ${state.busy ? "disabled" : ""}>${actionIcon("skip")}</button></div>`;
   const otherParticipants = session.participants.filter((_, index) => index !== currentIndex).join("・");
   const speaker = solo ? "" : together ? `<div class="shared-speaker is-together" aria-live="polite"><strong>${session.participants.length === 2 ? "ふたりで" : "みんなで"}</strong><span class="shared-participants">${esc(session.participants.join("・"))}</span></div>` : `<div class="shared-speaker${speakerChanged ? " is-speaker-changing" : ""}" data-speaker-index="${currentIndex}" aria-live="polite"><span class="shared-speaker-avatar" aria-hidden="true">${esc(Array.from((speakerName || "・").trim())[0] || "")}</span><strong>${esc(speakerName)}の番</strong>${otherParticipants ? `<span class="shared-participants">${esc(otherParticipants)}</span>` : ""}</div>`;
@@ -1704,7 +1736,9 @@ function sharedPlayView(session) {
   const accountOverlay = (state.account.open ? accountView({ overlayOnly: true }) : "") + (state.venue?.displayR18 === true && state.session?.venueSession && sessionHasR18(session) ? `<label class="adult-consent venue-play-toggle"><input type="checkbox" data-venue-play-r18 checked> <span>R18を表示する</span></label>` : "");
   const measurement = !revealed && displayText ? `<span class="shared-card-measure" aria-hidden="true">${esc(displayText)}</span>` : "";
   const soloAddress = revealed && solo && soloDisplayName(session) && !hasSoloQuestionPersonalization(activeCard) ? `<span class="solo-card-address">${esc(soloDisplayName(session))}へ</span>` : "";
-  return frame(`<div class="shared-play-shell ${solo ? "is-solo" : "is-group"}"><div class="shared-play-head"><div>${session.sponsorSet ? `<small class="theme-explorer-sponsor-label">スポンサー · ${esc(session.sponsor?.providerName || '公式提供')}の公式カード</small>` : ""}<p class="play-deck">${esc(playTitle)}</p><p class="progress-copy" aria-label="全${session.questions.length}枚中${session.cursor + 1}枚目">${roundPosition + 1} / ${roundTotal}</p></div><button type="button" class="icon-action theme-change-button" data-action="decks" aria-label="テーマを変更">${actionIcon("grid")}</button></div><div class="round-progress shared-round-progress" aria-label="今回の進み具合">${segments}</div><article style="${cardArtStyle}" data-card-family="${cardDesign.family}" class="${cardClass}" ${!revealed ? 'data-action="reveal" role="button" tabindex="0" aria-label="カードをめくる"' : ""} aria-live="polite"><span class="shared-art-rail" aria-hidden="true"></span><span class="shared-card-copy">${soloAddress}${isChallenge ? '<span class="challenge-badge">やってみて</span>' : ""}${question}</span>${measurement}<span class="shared-card-motif" aria-hidden="true">${cardThemeMark || ""}</span><span class="shared-bubbles" aria-hidden="true"><i></i><i></i></span>${favorite}</article>${speaker}${actions}<p class="shared-pass-hint">話したくない質問はパスしてOK</p>${solo && session.cursor === 0 ? soloStartNoteView(session.customSet ? null : soloDecks.find((item) => item.id === session.deckId)) : ""}<p class="form-error" role="alert">${esc(state.error)}</p>${accountOverlay}</div>`, "Mingle.Cards", true);
+  const styleHintKey = `${session.sessionId}:${session.cursor}`;
+  const styleHint = answerStyle && !dismissedAnswerStyles.has(styleHintKey) ? `<p class="answer-style-hint" role="status">${answerStyle === "predict" ? "いまの人の答えを予想してから、本人に聞こう" : "ひと言で、せーの！でもOK"}<button type="button" class="answer-style-dismiss" data-action="answer-style-dismiss" aria-label="いつも通り答える">いつも通り</button></p>` : "";
+  return frame(`<div class="shared-play-shell ${solo ? "is-solo" : "is-group"}"><div class="shared-play-head"><div>${session.sponsorSet ? `<small class="theme-explorer-sponsor-label">スポンサー · ${esc(session.sponsor?.providerName || '公式提供')}の公式カード</small>` : ""}<p class="play-deck">${esc(playTitle)}</p><p class="progress-copy" aria-label="全${session.questions.length}枚中${session.cursor + 1}枚目">${roundPosition + 1} / ${roundTotal}</p></div><button type="button" class="icon-action theme-change-button" data-action="decks" aria-label="テーマを変更">${actionIcon("grid")}</button></div><div class="round-progress shared-round-progress" aria-label="今回の進み具合">${segments}</div>${reactions}<article style="${cardArtStyle}" data-card-family="${cardDesign.family}" class="${cardClass}" ${!revealed ? 'data-action="reveal" role="button" tabindex="0" aria-label="カードをめくる"' : ""} aria-live="polite"><span class="shared-art-rail" aria-hidden="true"></span><span class="shared-card-copy">${soloAddress}${isChallenge ? '<span class="challenge-badge">やってみて</span>' : ""}${question}</span>${measurement}<span class="shared-card-motif" aria-hidden="true">${cardThemeMark || ""}</span><span class="shared-bubbles" aria-hidden="true"><i></i><i></i></span>${favorite}</article>${styleHint}${speaker}${actions}<p class="shared-pass-hint">話したくない質問はパスしてOK</p>${solo && session.cursor === 0 ? soloStartNoteView(session.customSet ? null : soloDecks.find((item) => item.id === session.deckId)) : ""}<p class="form-error" role="alert">${esc(state.error)}</p>${accountOverlay}</div>`, "Mingle.Cards", true);
 }
 
 function playView() {
@@ -2722,6 +2756,7 @@ function quickQuizRoster() {
   return state.participants.map((name) => name.trim());
 }
 function finishToHome() {
+  clearReactionState();
   stopCardAudio();
   const leavingExternalContext = Boolean(state.shared || state.venue || location.search.includes("share=") || location.search.includes("venue="));
   clearCompletionRecallSession(state.session); state.continuePending = null; state.shareMenuOpen = false; state.shareFallbackText = ""; state.roundFavorite = null; state.roundLikeKey = null; state.roundLikeExpanded = false; state.feedbackBusy = false; state.feedback = null; state.shareStatus = "";
@@ -2735,8 +2770,17 @@ function finishToHome() {
   state.error = ""; state.includeChallenges = false; state.adultConfirmed = false; render();
 }
 
+function clearReactionState() {
+  if (reactionTimer) window.clearTimeout(reactionTimer);
+  reactionTimer = 0;
+  stopReactionSound();
+  reactionState = null;
+  root.querySelector('.conversation-reaction-overlay')?.remove();
+}
+
 async function handleAction(event) {
   const action = event.currentTarget.dataset.action;
+  if (action !== "reaction") clearReactionState();
   if (action === "theme-visibility-all") { if (state.account.busy || !state.account.themeVisibilityReady || !state.account.themeVisibilityAvailable) return; state.account.hiddenThemeIds = new Set(); state.focusSelector = '[data-action="theme-visibility-all"]'; saveThemeVisibility(); return; }
   if (action === "theme-visibility-retry") { if (state.account.busy) return; state.account.themeVisibilityError = ''; loadAccount(); return; }
   if (typeof action === "string" && action.startsWith("torisetsu-")) { handleTorisetsuAction(event); return; }
@@ -3432,10 +3476,38 @@ async function handleAction(event) {
     return;
   }
   if (action === "like") { const previous = ensureSession(); state.session = likeCurrentAnswer(previous); persist(previous); render(); return; }
-  if (action === "next-answer") { try { advanceGuarded(nextAnswer, rememberCompletedAnswer); } catch (error) { state.error = error.message; render(); } return; }
+  if (action === "reaction") {
+    const session = state.session;
+    const reaction = event.currentTarget.dataset.reaction;
+    if (!session || session.mode === "solo" || session.revealed !== true || !["same", "surprise"].includes(reaction)) return;
+    const key = `${session.sessionId}:${session.cursor}:${session.answerIndex}`;
+    const now = Date.now();
+    if (reactionState?.key === key && now - (reactionState.at || 0) < 250) return;
+    clearReactionState();
+    reactionState = { key, reaction, at: now };
+    state.focusSelector = `[data-action="reaction"][data-reaction="${reaction}"]`;
+    playReactionSound(reaction);
+    render();
+    reactionTimer = window.setTimeout(() => {
+      reactionState = null;
+      reactionTimer = 0;
+      root.querySelector('.conversation-reaction-overlay')?.remove();
+    }, 1000);
+    return;
+  }
+  if (action === "answer-style-dismiss") {
+    const session = state.session;
+    if (session) {
+      dismissedAnswerStyles.add(`${session.sessionId}:${session.cursor}`);
+      state.focusSelector = '[data-action="next-answer"]';
+      render();
+    }
+    return;
+  }
+  if (action === "next-answer") { try { advanceGuarded((session) => advanceWithAnswerStyle(session, nextAnswer), rememberAnswerForAdvance); } catch (error) { state.error = error.message; render(); } return; }
   if (action === "previous-card") { const previous = ensureSession(); const next = previousCard(previous); if (next === previous) return; state.session = next; saveCurrentSession(state.session); render(); return; }
   if (action === "previous-answer") { const previous = ensureSession(); if (previous.answerIndex > 0) { state.session = previousAnswer(previous); persist(previous); } else { const next = previousCard(previous); if (next !== previous) { state.session = next; saveCurrentSession(state.session); } } render(); return; }
-  if (action === "pass") { try { advanceGuarded(passAnswer); } catch (error) { state.error = error.message; render(); } return; }
+  if (action === "pass") { try { advanceGuarded((session) => advanceWithAnswerStyle(session, passAnswer)); } catch (error) { state.error = error.message; render(); } return; }
   if (action === "completion-feeling") {
     const stage = event.currentTarget.closest('[data-feeling-stage]'); const session = state.session;
     const id = String(event.currentTarget.dataset.feeling || ''); const solo = session?.mode === 'solo'; const feeling = completionFeelingFor(solo, id);

@@ -3,6 +3,8 @@ const AUDIO_URLS = {
   flip: "/assets/audio/mingle-card-flip.mp3?v=17-cotton-table-fb811852",
   click: "/assets/audio/mingle-card-click.mp3?v=18-elevenlabs-20261017",
   theme: "/assets/audio/mingle-theme-select.mp3",
+  "reaction-same": "/assets/audio/mingle-card-reaction-same.mp3?v=1-reaction-20261018",
+  "reaction-surprise": "/assets/audio/mingle-card-reaction-surprise.mp3?v=1-reaction-20261018",
   "celebration-confetti": "/assets/audio/mingle-celebration-confetti.mp3?v=18-elevenlabs-20261017",
   "celebration-fireworks": "/assets/audio/mingle-celebration-fireworks.mp3?v=18-elevenlabs-20261017",
   "celebration-ribbons": "/assets/audio/mingle-celebration-ribbons.mp3?v=18-elevenlabs-20261017",
@@ -12,6 +14,8 @@ let enabled = true;
 let context = null;
 let soundRevision = 0;
 const activeSources = new Set();
+const activeSourceKeys = new Map();
+const cancelledKeys = new Set();
 const audioBytesPromises = new Map();
 const audioBufferPromises = new Map();
 
@@ -66,6 +70,7 @@ function stopActiveSources() {
   for (const source of activeSources) {
     try { source.stop(); } catch { /* already ended */ }
     try { source.disconnect(); } catch { /* already disconnected */ }
+    activeSourceKeys.delete(source);
   }
   activeSources.clear();
 }
@@ -82,11 +87,12 @@ function loadAudioBuffer(key, audioContext) {
 
 function playAudioKey(key, gainValue = 0.72) {
   if (!enabled || !AUDIO_URLS[key]) return;
+  cancelledKeys.delete(key);
   const revision = ++soundRevision;
   try {
     context ||= new (window.AudioContext || window.webkitAudioContext)();
     const start = (buffer) => {
-      if (!buffer || !enabled || revision !== soundRevision) return;
+      if (!buffer || !enabled || revision !== soundRevision || cancelledKeys.has(key)) return;
       stopActiveSources();
       const source = context.createBufferSource();
       const gain = context.createGain();
@@ -94,8 +100,9 @@ function playAudioKey(key, gainValue = 0.72) {
       source.buffer = buffer;
       source.connect(gain).connect(context.destination);
       activeSources.add(source);
-      source.onended = () => { try { source.disconnect(); gain.disconnect(); } catch { /* already disconnected */ } activeSources.delete(source); };
-      try { source.start(); } catch { activeSources.delete(source); try { source.disconnect(); gain.disconnect(); } catch { /* already disconnected */ } }
+      activeSourceKeys.set(source, key);
+      source.onended = () => { try { source.disconnect(); gain.disconnect(); } catch { /* already disconnected */ } activeSources.delete(source); activeSourceKeys.delete(source); };
+      try { source.start(); } catch { activeSources.delete(source); activeSourceKeys.delete(source); try { source.disconnect(); gain.disconnect(); } catch { /* already disconnected */ } }
     };
     const loadAndStart = () => { if (!enabled || revision !== soundRevision) return; loadAudioBuffer(key, context).then(start).catch(() => {}); };
     if (context.state === "suspended") context.resume().then(loadAndStart).catch(() => {});
@@ -108,6 +115,22 @@ function playAudioKey(key, gainValue = 0.72) {
 export function playFlipSound() { playAudioKey("flip"); }
 export function playUiClick() { playAudioKey("click", 0.42); }
 export function playThemeSelectSound() { playAudioKey("theme", 0.58); }
+export function playReactionSound(reaction) {
+  if (reaction === "same") playAudioKey("reaction-same", 0.85);
+  if (reaction === "surprise") playAudioKey("reaction-surprise", 0.70);
+}
+export function stopReactionSound() {
+  cancelledKeys.add("reaction-same");
+  cancelledKeys.add("reaction-surprise");
+  for (const source of [...activeSources]) {
+    const key = activeSourceKeys.get(source);
+    if (!key || !key.startsWith("reaction-")) continue;
+    try { source.stop(); } catch {}
+    try { source.disconnect(); } catch {}
+    activeSources.delete(source);
+    activeSourceKeys.delete(source);
+  }
+}
 export function playCompletionSound(variant) {
   if (typeof variant !== "string") return;
   playAudioKey(`celebration-${variant}`, 0.7);

@@ -40,5 +40,19 @@
     "duration_seconds": 2.9,
     "prompt_influence": 0.45,
     "prompt": "A bright 2.9 second celebration for illustrated cards floating down: recognizable close-up card shuffle and several distinct paper cards flipped rapidly, papery flicks and soft landings, followed by a short happy crowd cheer and light applause with no intelligible words. Tactile, playful and clean on a phone speaker. No music, melody, lyrics, spoken words, metal, casino sound, or loud fanfare."
+  },
+  {
+    "id": "reaction-same",
+    "file": "mingle-card-reaction-same.mp3",
+    "duration_seconds": 0.75,
+    "prompt_influence": 0.5,
+    "prompt": "A short bright reaction for two cards matching: two quick warm paper clicks approach, then meet in a centered rounded match chord with a tiny soft spring bounce and brief warm body. Blue and coral paper feeling, balanced stereo, clear on a phone speaker, playful and memorable, ending within 0.75 seconds. No voice, words, music, melody, long tail, harsh high frequencies, or metallic clang."
+  },
+  {
+    "id": "reaction-surprise",
+    "file": "mingle-card-reaction-surprise.mp3",
+    "duration_seconds": 0.75,
+    "prompt_influence": 0.5,
+    "prompt": "A short bright reaction sound for a surprising conversation card reveal: a quick upward airy whoop like a card opening, followed by a compact rounded cheerful pop at about 0.25 seconds and a tiny clean sparkle tail. Clear, playful, memorable on a phone speaker, finished within 0.75 seconds. No voice, no words, no music, no melody, no long tail, no harsh treble, no alarm, no metallic clang."
   }
 ]
