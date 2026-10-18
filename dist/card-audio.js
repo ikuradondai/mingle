@@ -116,8 +116,8 @@ export function playFlipSound() { playAudioKey("flip", 0.85); }
 export function playUiClick() { playAudioKey("click", 0.75); }
 export function playThemeSelectSound() { playAudioKey("theme", 0.85); }
 export function playReactionSound(reaction) {
-  if (reaction === "same") playAudioKey("reaction-same", 0.85, 0.28);
-  if (reaction === "surprise") playAudioKey("reaction-surprise", 0.65, 0.26);
+  if (reaction === "same") playAudioKey("reaction-same", 0.85);
+  if (reaction === "surprise") playAudioKey("reaction-surprise", 0.65);
 }
 export function stopReactionSound() {
   cancelledKeys.add("reaction-same");

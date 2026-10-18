@@ -2807,7 +2807,7 @@ function appendReactionBurst(burst) {
 }
 
 function scheduleReactionBurstExpiry(burst) {
-  const lifetime = burst.reaction === "surprise" ? 2100 : 1150;
+  const lifetime = 1050;
   const timer = window.setTimeout(() => {
     reactionExpiryTimers.delete(burst.id);
     reactionBursts = reactionBursts.filter((item) => item.id !== burst.id);

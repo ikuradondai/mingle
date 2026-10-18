@@ -17,10 +17,24 @@ export function reactionIcon(reaction) {
 export function reactionEffectMarkup(reaction, stage = 1) {
   const kind = normalizeReaction(reaction);
   const safeStage = Math.min(20, Math.max(1, Number(stage) || 1));
-  if (kind === REACTIONS.surprise) {
-    return `<span class="conversation-reaction-effect conversation-reaction-effect-surprise" data-reaction-effect="surprise" data-stage="${safeStage}" style="--reaction-stage:${safeStage}" aria-hidden="true"><strong class="reaction-surprise-word">WOW!</strong><span class="reaction-surprise-spark reaction-surprise-spark-one"></span><span class="reaction-surprise-spark reaction-surprise-spark-two"></span><span class="reaction-surprise-spark reaction-surprise-spark-three"></span><span class="reaction-surprise-spark reaction-surprise-spark-four"></span></span>`;
-  }
-  return `<span class="conversation-reaction-effect conversation-reaction-effect-same" data-reaction-effect="same" data-stage="${safeStage}" style="--reaction-stage:${safeStage}" aria-hidden="true"><span class="reaction-effect-card reaction-effect-card-left"></span><span class="reaction-effect-card reaction-effect-card-right"></span><span class="reaction-effect-rays reaction-effect-rays-left"><i></i><i></i><i></i></span><span class="reaction-effect-rays reaction-effect-rays-right"><i></i><i></i><i></i></span></span>`;
+  const scale = (1 + 0.85 * Math.sqrt((safeStage - 1) / 19)).toFixed(3);
+  const baseWidth = typeof window !== 'undefined' && window.innerWidth <= 520 ? Math.min(120, window.innerWidth * 0.31) : 188;
+  const imageWidth = (baseWidth * Number(scale)).toFixed(1);
+  const image = kind === REACTIONS.surprise ? '/assets/play/reaction-wow.webp' : '/assets/play/reaction-yes.webp';
+  return `<span class="conversation-reaction-effect conversation-reaction-effect-${kind}" data-reaction-effect="${kind}" data-stage="${safeStage}" style="--reaction-stage:${safeStage};--reaction-scale:${scale};--reaction-image-width:${imageWidth}px" aria-hidden="true"><img class="reaction-effect-image" src="${image}" alt="" decoding="async" draggable="false"></span>`;
 }
+
+// Begin decoding while the play screen is loading so the first tap is visual immediately.
+export function preloadReactionAssets() {
+  if (typeof Image === 'undefined') return;
+  for (const src of ['/assets/play/reaction-yes.webp', '/assets/play/reaction-wow.webp']) {
+    const image = new Image();
+    image.decoding = 'async';
+    image.src = src;
+    image.decode?.().catch(() => {});
+  }
+}
+
+preloadReactionAssets();
 
 export const conversationReactionKinds = REACTIONS;

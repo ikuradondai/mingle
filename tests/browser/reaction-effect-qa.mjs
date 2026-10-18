@@ -39,20 +39,20 @@ await page.locator('[data-action="reaction"][data-reaction="surprise"]').click()
 await page.locator('[data-reaction-effect="surprise"]').waitFor({ state: 'visible' });
 const effect = page.locator('[data-reaction-effect="surprise"]').first();
 assert.equal(await effect.evaluate((node) => getComputedStyle(node).pointerEvents), 'none');
-assert.equal(await effect.locator('.reaction-surprise-word').count(), 1);
-assert.equal(await effect.locator('.reaction-surprise-spark').count(), 4);
-assert.equal(await effect.locator('.reaction-surprise-word').first().textContent(), 'WOW!');
+assert.equal(await effect.locator('.reaction-effect-image').count(), 1);
+assert.equal(await effect.locator('.reaction-effect-image').first().getAttribute('src'), '/assets/play/reaction-wow.webp');
+assert.ok(await effect.locator('.reaction-effect-image').first().evaluate((node) => node.complete && node.naturalWidth > 0), 'generated WOW image should be decoded');
 for (let i = 0; i < 3; i += 1) await page.locator('[data-action="reaction"][data-reaction="surprise"]').click();
 assert.equal(await page.evaluate(() => [...document.querySelectorAll('[data-reaction-effect="surprise"]')].at(-1)?.dataset.stage), '4', 'repeated clicks should add larger bursts');
 const animationNames = await effect.locator(':scope > *').evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).animationName));
-assert.equal(animationNames.length, 5);
+assert.equal(animationNames.length, 1);
 assert.deepEqual(await rect('.shared-question-card'), cardBefore, 'reaction changed card geometry');
 const effectBounds = await effect.evaluate((node) => { const r = node.getBoundingClientRect(); return { left:r.left, right:r.right, top:r.top, bottom:r.bottom, width:r.width, height:r.height }; });
 assert.ok(effectBounds.left >= 16 && effectBounds.right <= viewport.width - 16, `effect escaped horizontal safe area: ${JSON.stringify(effectBounds)}`);
 for (const [name, delay] of [['early', 180], ['impact', 340], ['tail', 900], ['late', 1800]]) {
   await page.waitForTimeout(delay);
   await page.screenshot({ path: `${output}-${name}-mobile.png`, fullPage: false });
-  if (name === 'impact') await effect.screenshot({ path: `${output}-${name}-effect-crop.png`, animations: 'disabled' });
+  if (name === 'impact' && await effect.count()) await effect.screenshot({ path: `${output}-${name}-effect-crop.png`, animations: 'disabled' });
 }
 await page.waitForTimeout(2400);
 await page.screenshot({ path: `${output}-end-mobile.png`, fullPage: false });
@@ -61,7 +61,7 @@ await page.reload({ waitUntil: 'domcontentloaded' });
 if (await page.locator('[data-action="resume"]').count()) await page.locator('[data-action="resume"]').click();
 if (!(await page.locator('.shared-question-card.is-revealed').count())) await page.locator('.shared-question-card').click();
 await page.locator('[data-action="reaction"][data-reaction="surprise"]').click();
-const reducedAnimation = await page.locator('[data-reaction-effect="surprise"] .reaction-surprise-word').first().evaluate((node) => getComputedStyle(node).animationName);
+const reducedAnimation = await page.locator('[data-reaction-effect="surprise"] .reaction-effect-image').first().evaluate((node) => getComputedStyle(node).animationName);
 assert.equal(reducedAnimation, 'none');
 console.log(JSON.stringify({ ok: true, viewport: `${viewport.width}x${viewport.height}`, animationNames, effectBounds, screenshots: 5 }));
 } finally {

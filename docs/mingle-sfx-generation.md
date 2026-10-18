@@ -24,7 +24,7 @@ The reaction RMS values now sit within 2.7 dB, and every decoded peak is below -
 
 ## Reaction timing for motion sync
 
-Waveform inspection of the processed decoded files found the strongest 20 ms window of `reaction-same` around 0.10 seconds, with the broader card movement active through approximately 0.83 seconds; runtime schedules its source at `now + 0.28 s`. The strongest `reaction-surprise` window is around 0.08 seconds, with the main active material ending around 0.38 seconds and a quiet tail to 1.20 seconds; runtime schedules its source at `now + 0.26 s`. These are measured signal landmarks and scheduling values, not subjective listening judgments.
+Waveform inspection of the processed decoded files found the strongest 20 ms window of `reaction-same` around 0.10 seconds, with the broader card movement active through approximately 0.83 seconds; runtime starts its source at `now` so it stays aligned with the visual pop. The strongest `reaction-surprise` window is around 0.08 seconds, with the main active material ending around 0.38 seconds and a quiet tail to 1.20 seconds; runtime also starts its source at `now`. These are measured signal landmarks and scheduling values, not subjective listening judgments.
 
 ## Prior completion asset history
 
@@ -64,7 +64,7 @@ Surprise has measurable material in the first 0.5 seconds (first-500-ms RMS -22.
 
 ## Current runtime note
 
-The current implementation uses reaction scheduling delay `0.28 s` for same and `0.26 s` for surprise. The current adopted assets are: click 1.760 s decoded (applause candidate), flip 0.800 s, theme 1.760 s, confetti/fireworks/ribbons/cards 5.000 s each, same 1.080 s, and surprise 1.200 s. The click prompt requested 1.8 s from ElevenLabs and decoded to 1.760 s. `artifacts/audio-preview/unused/mingle-next-person.mp3` and `artifacts/audio-preview/unused/_gen_next_person.py` are intermediate files from a separate next-person experiment, are not referenced by the current mapping, and remain excluded from staging.
+The current implementation starts both reaction sounds immediately (`0 s` scheduling delay) so the audio impact stays aligned with the fast visual pop. The current adopted assets are: click 1.760 s decoded (applause candidate), flip 0.800 s, theme 1.760 s, confetti/fireworks/ribbons/cards 5.000 s each, same 1.080 s, and surprise 1.200 s. The click prompt requested 1.8 s from ElevenLabs and decoded to 1.760 s. `artifacts/audio-preview/unused/mingle-next-person.mp3` and `artifacts/audio-preview/unused/_gen_next_person.py` are intermediate files from a separate next-person experiment, are not referenced by the current mapping, and remain excluded from staging.
 
 ## Restored short reaction assets
 
