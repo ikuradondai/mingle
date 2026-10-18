@@ -1903,4 +1903,11 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .shared-question-card.is-revealed .shared-card-copy{animation:none}
 @media (prefers-reduced-motion: no-preference){.shared-question-card.reveal-motion .shared-card-copy{animation:shared-card-copy-reveal .32s cubic-bezier(.2,.75,.25,1) both}}
 
+/* The shared card art is the single full-face layer for ordinary reverse cards.
+   Older reverse rules also painted the card and a pseudo-element, which stacked
+   the same image vertically beneath the shared-card-art layer. */
+.shared-question-card.is-face-down:not(.sponsor-custom-back){background-image:none}
+.shared-question-card.is-face-down:not(.sponsor-custom-back)::before{display:none}
+.shared-question-card.is-face-down .shared-card-art{position:absolute;inset:0;width:auto;height:auto;grid-row:auto;border-radius:inherit;background-position:center;background-size:cover;background-repeat:no-repeat}
+
 @media (max-width:540px) and (min-height:741px) { .home-screen .home-illustration { height:128px; } }

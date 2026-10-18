@@ -1738,13 +1738,13 @@ function sharedPlayView(session) {
   const roundTotal = Math.min(roundSize, remaining(session) + roundPosition);
   const playTitle = session.sponsorSet ? (session.sponsor?.title || "スポンサー提供テーマ") : session.sharedGuest ? session.setName || "共有セット" : session.customSet ? "マイセット" : session.mixed ? `テーマミックス · ${session.deckIds.map((id) => [...decks, ...soloDecks].find((deck) => deck.id === id)?.title).filter(Boolean).join("・")}` : ([...decks, ...soloDecks].find((deck) => deck.id === session.deckId)?.title ?? "会話カード");
   const cardDesign = cardDesignForSession(session);
-  const cardBack = cardDesign.sponsorCustomBack || cardDesign.creatorPresetId ? cardDesign.back : "/assets/play/mingle-paper-back.webp";
   const currentIndex = currentParticipantIndex(session);
   const previousSpeakerIndex = root.querySelector(".shared-speaker[data-speaker-index]")?.getAttribute("data-speaker-index");
   const speakerChanged = previousSpeakerIndex !== undefined && previousSpeakerIndex !== String(currentIndex);
   const speakerName = currentSpeaker(session);
   const sourceDeckId = session.questions?.[session.cursor]?.sourceDeckId || session.deckId;
   const cardFront = cardDesign.sponsorCustomFront || cardDesign.creatorPresetId ? cardDesign.front : (themeExplorerImage(sourceDeckId) || cardDesign.front);
+  const cardBack = cardDesign.sponsorCustomBack || cardDesign.creatorPresetId ? cardDesign.back : cardDesign.sponsorCustomFront ? "/assets/play/mingle-paper-back.webp" : cardFront;
   const cardArtStyle = `--card-art-front:url('${cardFront}');--card-art-back:url('${cardBack}');--card-art-accent:${cardDesign.accent}`;
   const cardDeck = [...decks, ...soloDecks].find((item) => item.id === sourceDeckId);
   const cardThemeMark = card?.kind === "challenge" ? "" : solo ? soloMotifForDeck(sourceDeckId) : cardDeck ? topicIcon(cardDeck) : "";
