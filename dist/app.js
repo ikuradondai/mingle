@@ -3510,7 +3510,7 @@ async function handleAction(event) {
       reactionState = null;
       reactionTimer = 0;
       root.querySelector('.conversation-reaction-overlay')?.remove();
-    }, 1500);
+    }, reaction === "surprise" ? 5500 : 5100);
     return;
   }
   if (action === "answer-style-dismiss") {

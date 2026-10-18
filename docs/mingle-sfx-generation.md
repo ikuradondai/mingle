@@ -29,3 +29,39 @@ Waveform inspection of the processed decoded files found the strongest 20 ms win
 ## Prior completion asset history
 
 The four completion assets were generated in the 2026-10-17 ElevenLabs batch and were not changed in this regeneration. Their decoded durations were approximately 2.821 s (confetti), 3.265 s (fireworks), 2.952 s (ribbons), and 2.952 s (cards). The prior record measured post-adjustment active RMS values of -21.25, -20.59, -20.49, and -22.73 dBFS respectively, with decoded peaks between -6.52 and -3.61 dBFS. No listening-based judgment was made for those assets.
+
+## Card click bell replacement
+
+The prior click asset (SHA-256 `7EDBB318E52B80A470191B56AF4C9DF96827E3DF1ABA81227606994B565261F7`) was replaced on 2026-10-18 after the brief changed from physical card Foley to a short, clear, joyful bell cue. Two fresh ElevenLabs candidates were generated with the existing Sound Generation API workflow. Candidate A is available at `C:/Users/kuran/AppData/Local/Temp/mingle-click-bell-candidates/candidate-a.mp3` (SHA-256 `642E23947CEC95FFCEEC7CD279133144DF6EE632865E0103E0CFFDE2FF01AA92`, decoded 0.680 s, active RMS -25.52 dBFS, peak -2.76 dBFS). Candidate B is available at `C:/Users/kuran/AppData/Local/Temp/mingle-click-bell-candidates/candidate-b.mp3` (SHA-256 `6A8F4CED6020A48B878EAF677C336FFA48C2C5188F76AB0C2D292A48D60D0893`, decoded 0.680 s, active RMS -23.84 dBFS, peak -5.01 dBFS).
+
+Candidate B was adopted because its bell transient has safer headroom and a moderate active level for repeated clicks. It is now the runtime `dist/assets/audio/mingle-card-click.mp3` with the same adopted runtime gain `0.75`; `dist/card-audio.js` only received the cache-busting URL update `v=20-bell-20261018`. The final asset SHA-256 is `6A8F4CED6020A48B878EAF677C336FFA48C2C5188F76AB0C2D292A48D60D0893`. No subjective listening claim is made; the candidate paths are provided for human audition.
+
+## Long-tail 2026-10-18 replacement batch
+
+The complete nine-effect set was regenerated through the same ElevenLabs Sound Generation API workflow after feedback that the prior sounds were too short. The new target durations are click 1.5 s, flip 1.5 s, theme 1.8 s, same/surprise 4.8 s, and approximately 5 s for all four completion effects. The click prompt now describes only a short warm acoustic handbell blessing with natural attack and clean decay; it contains no click, UI, or card-selection language. Completion prompts retain the requested crowd cheer/applause and distinct fireworks, card shuffle, cracker/ribbon, and paper-confetti identities.
+
+Final decoded measurements after one ffmpeg loudness/headroom pass (44.1 kHz stereo, active RMS threshold -50 dBFS) are: click 1.480 s / -29.55 dBFS / -5.44 dBFS peak / main attack 0.14 s; flip 1.480 s / -27.32 / -6.18 / 0.72 s; theme 1.760 s / -28.82 / -4.45 / 1.44 s; confetti 5.000 s / -28.16 / -12.98 / 0.00 s; fireworks 5.000 s / -30.37 / -17.53 / 0.22 s; ribbons 5.000 s / -29.08 / -13.38 / 1.26 s; cards 5.000 s / -29.20 / -4.43 / 0.76 s; same 4.800 s / -27.72 / -4.44 / 0.40 s; surprise 4.800 s / -24.16 / -4.45 / 3.68 s. No decoded peak exceeds -3 dBFS. These are waveform measurements, not listening judgments. Runtime gain and cancellation behavior were not changed; cache-busting URLs are `v=21-long-20261018`.
+
+Final processed SHA-256 hashes: click `023E3576C35CCEA5C219CC00F8B09B7074FA655909E1E58063CF42718C2A09AB`; flip `4E1E8F84D0E68E14FBA59C9382C9C68986181B3429ADDCD19E3B9311115C2F38`; theme `90CD15ADAF9F8D27640CCB8020062C098CB183B485848807E8B00280C7822EBB`; confetti `98C53D987D19897556751D692F58ACF1FF7E203998B91FB33EDB2324F5A23E26`; fireworks `609CD668F4F7988AC5511FC9A250318C6F2A7C59E582C709B750EFE55EF38932`; ribbons `51EF353E76B8981A2B973A0B6F2ED1DFB10638C30C45B3E9479A6B96CA2C8DBF`; cards `AE56DD0BD54090A02ED6A438307B3785E7959BE94F057452E7DAE085A0C38641`; same `6FCC5095D51315CAFA36BC6F8C3C252E39F299BCE7CEF2DCAF59F6FEAC9075B9`; surprise `A75DA7066C0BF5745D3B5E1C16A0B7603475C0D4177FDD2494E1BD62A7302AB2`.
+
+### Latest post-leveling audit
+
+The subsequent light compression/makeup pass and per-file headroom correction produced the current values below; these supersede the initial long-batch measurements above. Active RMS uses the same -50 dBFS threshold, and peaks are decoded MP3 sample peaks.
+
+| asset | duration | active RMS | peak | first 0.5 s RMS | strongest 20 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| click | 1.480 s | -28.34 dBFS | -4.56 dBFS | -25.16 dBFS | 0.14 s |
+| flip | 1.480 s | -24.37 dBFS | -4.22 dBFS | -23.07 dBFS | 1.14 s |
+| theme | 1.760 s | -28.49 dBFS | -3.89 dBFS | -39.09 dBFS | 1.44 s |
+| confetti | 5.000 s | -21.78 dBFS | -7.13 dBFS | -19.08 dBFS | 0.86 s |
+| fireworks | 5.000 s | -20.54 dBFS | -6.88 dBFS | -17.69 dBFS | 0.22 s |
+| ribbons | 5.000 s | -20.94 dBFS | -4.06 dBFS | -36.04 dBFS | 1.26 s |
+| cards | 5.000 s | -27.96 dBFS | -4.89 dBFS | -27.90 dBFS | 2.54 s |
+| same | 4.800 s | -28.62 dBFS | -5.60 dBFS | -27.31 dBFS | 0.68 s |
+| surprise | 4.800 s | -25.80 dBFS | -5.26 dBFS | -22.21 dBFS | 3.68 s |
+
+Surprise has measurable material in the first 0.5 seconds (first-500-ms RMS -22.21 dBFS), so it was retained; its strongest later resonance is at 3.68 seconds. No subjective listening judgment is implied. Current final SHA-256 values are click `B642F16AAE4D5D2D8376B6AB1202EBE36A9037F576AE81FFADB0181F0807CF6A`, flip `F34E3BB1D0322A32980A88E2943A681EA7B3443284F516D50829969A092385A4`, theme `E7F3906C14E478A93AEC110FC19759606776335155486A81C388BB57D7853E73`, confetti `4978B4A580820B180CB8772BBA05538625340DDFC79AA3BBA236DE14190CF84B`, fireworks `6AFA020C56AE9F7CFE161450A6D9A04B7B6ABBE7B6DE88C65E85B699DB7ED2F7`, ribbons `1C168A156FE5EB4B453C9B81C8C1DC8B7C186D2B31D399A1ACFF3FB5215835C5`, cards `D37EC391DBB80CE2611D6F917C83BBAD9B1E5DE5BD8011DC908C2309DF884AB7`, same `D495BE378788EB6117BCED36983075A95068FF4EB63B64B7731937C9786DF25E`, surprise `E03B2F35B1D4D61315405EDDED6487E60553E426805882BFA54675CA4F49E217`.
+
+## Current runtime note
+
+The current implementation uses reaction scheduling delay `0` for both reaction sounds; the earlier `now + 0.28 s` same and `now + 0.26 s` surprise values are historical QA measurements only. The current nine adopted assets are the long batch listed in the latest post-leveling audit above: click 1.480 s, flip 1.480 s, theme 1.760 s, confetti/fireworks/ribbons/cards 5.000 s each, same/surprise 4.800 s each. `artifacts/audio-preview/unused/mingle-next-person.mp3` and `artifacts/audio-preview/unused/_gen_next_person.py` are intermediate files from a separate next-person experiment, are not referenced by the current mapping, and remain excluded from staging.

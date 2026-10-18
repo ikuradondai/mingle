@@ -17,7 +17,7 @@ export function reactionIcon(reaction) {
 export function reactionEffectMarkup(reaction) {
   const kind = normalizeReaction(reaction);
   if (kind === REACTIONS.surprise) {
-    return `<span class="conversation-reaction-effect conversation-reaction-effect-surprise" data-reaction-effect="surprise" aria-hidden="true"><span class="reaction-effect-card"><i></i><i></i><i></i></span><span class="reaction-effect-burst"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></span>`;
+    return `<span class="conversation-reaction-effect conversation-reaction-effect-surprise" data-reaction-effect="surprise" aria-hidden="true"><span class="reaction-effect-hero reaction-effect-hero-left"></span><span class="reaction-effect-hero reaction-effect-hero-main"></span><span class="reaction-effect-hero reaction-effect-hero-right"></span><span class="reaction-effect-paper reaction-effect-paper-one"></span><span class="reaction-effect-paper reaction-effect-paper-two"></span><span class="reaction-effect-paper reaction-effect-paper-three"></span><span class="reaction-effect-paper reaction-effect-paper-four"></span><span class="reaction-effect-paper reaction-effect-paper-five"></span></span>`;
   }
   return `<span class="conversation-reaction-effect conversation-reaction-effect-same" data-reaction-effect="same" aria-hidden="true"><span class="reaction-effect-card reaction-effect-card-left"></span><span class="reaction-effect-card reaction-effect-card-right"></span><span class="reaction-effect-rays reaction-effect-rays-left"><i></i><i></i><i></i></span><span class="reaction-effect-rays reaction-effect-rays-right"><i></i><i></i><i></i></span></span>`;
 }
