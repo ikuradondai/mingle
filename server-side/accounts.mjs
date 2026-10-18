@@ -148,25 +148,46 @@ export function createAccountService({ env = process.env, fetchImpl = fetch, rat
   }
   async function account(req) {
     const { user, authorization } = await requireUser(req);
-    const [favorites, sets] = await Promise.all([rows('favorites', user.id, authorization, '&select=card_id,created_at&order=created_at.desc'), rows('my_sets', user.id, authorization, '&select=*&order=created_at.asc')]);
-    let customCards = []; let customCardsAvailable = true;
-    try { customCards = (await customRows(user.id, authorization)).map(mapCustom); } catch (error) { if (missingCustomTable(error)) customCardsAvailable = false; else throw error; }
-    let adultState = { available: true, confirmedAt: null }; try { adultState = await readAdultConfirmation({ config, userId: user.id, authorization, fetchImpl }); } catch { adultState = { available: false, confirmedAt: null }; /* Unreadable: treated as not confirmed and flagged unavailable; /me stays available. */ }
-    let hiddenThemeIds = []; let themeVisibilityAvailable = true; try {
-      const profileRows = await supabaseFetch(config, `/rest/v1/account_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=hidden_theme_ids,theme_visibility_initialized`, { headers: { Authorization: authorization } }, fetchImpl);
-      const profile = profileRows?.[0];
-      const raw = profile?.hidden_theme_ids;
-      hiddenThemeIds = profile?.theme_visibility_initialized === true
-        ? (Array.isArray(raw) ? raw.filter((id) => typeof id === 'string' && THEME_IDS.has(id)) : [])
-        : [...DEFAULT_HIDDEN_THEME_IDS];
-    } catch { themeVisibilityAvailable = false; /* Older deployments without the visibility migration are unavailable, never an empty preference. */ }
-    let avatarUrlValue = null; try { avatarUrlValue = await avatarUrl(user.id, authorization); } catch { /* Storage may not be configured; account data remains available. */ }
-    let drafts = []; let draftsAvailable = true;
-    try {
-      const draftRows = await rows('my_set_drafts', user.id, authorization, '&select=*&order=updated_at.desc');
-      drafts = draftRows.map(mapDraft);
-    } catch (error) { if (missingDraftTable(error)) draftsAvailable = false; else throw error; }
-    let hasVenue = false; try { const ownedVenues = await supabaseFetch(config, `/rest/v1/venues?owner_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, { headers: { Authorization: authorization } }, fetchImpl); hasVenue = Array.isArray(ownedVenues) && ownedVenues.length > 0; } catch { /* Older deployments without venue tables keep the generic menu. */ }
+    // Authentication/user lookup above is the only prerequisite. Keep each
+    // read's existing fallback local while avoiding a serial optional-read chain.
+    const [favorites, sets, customResult, adultState, visibilityResult, avatarUrlValue, draftResult, hasVenue] = await Promise.all([
+      rows('favorites', user.id, authorization, '&select=card_id,created_at&order=created_at.desc'),
+      rows('my_sets', user.id, authorization, '&select=*&order=created_at.asc'),
+      (async () => {
+        let customCards = []; let customCardsAvailable = true;
+        try { customCards = (await customRows(user.id, authorization)).map(mapCustom); } catch (error) { if (missingCustomTable(error)) customCardsAvailable = false; else throw error; }
+        return { customCards, customCardsAvailable };
+      })(),
+      (async () => {
+        try { return await readAdultConfirmation({ config, userId: user.id, authorization, fetchImpl }); }
+        catch { return { available: false, confirmedAt: null }; /* Unreadable: treated as not confirmed and flagged unavailable; /me stays available. */ }
+      })(),
+      (async () => {
+        let hiddenThemeIds = []; let themeVisibilityAvailable = true;
+        try {
+          const profileRows = await supabaseFetch(config, `/rest/v1/account_profiles?user_id=eq.${encodeURIComponent(user.id)}&select=hidden_theme_ids,theme_visibility_initialized`, { headers: { Authorization: authorization } }, fetchImpl);
+          const profile = profileRows?.[0];
+          const raw = profile?.hidden_theme_ids;
+          hiddenThemeIds = profile?.theme_visibility_initialized === true
+            ? (Array.isArray(raw) ? raw.filter((id) => typeof id === 'string' && THEME_IDS.has(id)) : [])
+            : [...DEFAULT_HIDDEN_THEME_IDS];
+        } catch { themeVisibilityAvailable = false; /* Older deployments without the visibility migration are unavailable, never an empty preference. */ }
+        return { hiddenThemeIds, themeVisibilityAvailable };
+      })(),
+      (async () => { try { return await avatarUrl(user.id, authorization); } catch { return null; /* Storage may not be configured; account data remains available. */ } })(),
+      (async () => {
+        let drafts = []; let draftsAvailable = true;
+        try {
+          const draftRows = await rows('my_set_drafts', user.id, authorization, '&select=*&order=updated_at.desc');
+          drafts = draftRows.map(mapDraft);
+        } catch (error) { if (missingDraftTable(error)) draftsAvailable = false; else throw error; }
+        return { drafts, draftsAvailable };
+      })(),
+      (async () => { try { const ownedVenues = await supabaseFetch(config, `/rest/v1/venues?owner_id=eq.${encodeURIComponent(user.id)}&select=id&limit=1`, { headers: { Authorization: authorization } }, fetchImpl); return Array.isArray(ownedVenues) && ownedVenues.length > 0; } catch { return false; /* Older deployments without venue tables keep the generic menu. */ } })(),
+    ]);
+    const { customCards, customCardsAvailable } = customResult;
+    const { hiddenThemeIds, themeVisibilityAvailable } = visibilityResult;
+    const { drafts, draftsAvailable } = draftResult;
     const normalizedSets = sets.map((row) => mapSet(row, customCards));
     return { user: { id: user.id, email: user.email || null, displayName: userDisplayName(user), avatarUrl: avatarUrlValue }, account: { deletionAvailable: Boolean(config.serviceKey), completionAvailable: Boolean(config.serviceKey), adultConfirmedAt: adultState.confirmedAt, adultConfirmationAvailable: adultState.available, hiddenThemeIds, themeVisibilityAvailable, hasVenue }, favorites, sets: normalizedSets, customCards, customCardsAvailable, drafts, draftsAvailable, aiGenerationAvailable: Boolean(openAiKey && (persistentStoreAvailable() || rateLimitImpl !== consumeAiQuota)) };
   }

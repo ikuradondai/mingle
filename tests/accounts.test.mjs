@@ -41,6 +41,42 @@ test('account service validates user through auth endpoint and scopes REST reque
   await assert.rejects(() => service.favorite(request('/api/account/favorites/not-a-card'), 'not-a-card'), (error) => error.status === 400);
 });
 
+test('/me starts independent reads together after auth user lookup', async () => {
+  const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
+  let authStarted; const authGate = new Promise((resolve) => { authStarted = resolve; });
+  let releaseAuth; const authRelease = new Promise((resolve) => { releaseAuth = resolve; });
+  let visibilityStarted; const visibilityGate = new Promise((resolve) => { visibilityStarted = resolve; });
+  let releaseVisibility; const visibilityRelease = new Promise((resolve) => { releaseVisibility = resolve; });
+  const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url) => {
+    calls.push(url);
+    if (url.endsWith('/auth/v1/user')) { authStarted(); await authRelease; return response(200, { id: 'parallel-user' }); }
+    if (url.includes('select=hidden_theme_ids,theme_visibility_initialized')) { visibilityStarted(); await visibilityRelease; }
+    return response(200, []);
+  } });
+  const pending = service.account(request('/api/account/me'));
+  let completed = false;
+  const completion = pending.then(() => { completed = true; });
+  try {
+    await authGate;
+    assert.deepEqual(calls, ['https://project.supabase.co/auth/v1/user']);
+    releaseAuth();
+    await visibilityGate;
+    assert.ok(calls.some((url) => url.includes('/favorites?')));
+    assert.ok(calls.some((url) => url.includes('/my_sets?')));
+    assert.ok(calls.some((url) => url.includes('/custom_cards?')));
+    assert.ok(calls.some((url) => url.includes('select=adult_confirmed_at')));
+    assert.ok(calls.some((url) => url.includes('/storage/v1/object/sign/')));
+    assert.ok(calls.some((url) => url.includes('/my_set_drafts?')));
+    assert.ok(calls.some((url) => url.includes('/venues?')));
+    await Promise.resolve();
+    assert.equal(completed, false);
+  } finally {
+    releaseAuth();
+    releaseVisibility();
+    await completion;
+  }
+});
+
 test('avatar upload validates JPEG bytes, uses owner storage path, and returns signed URL', async () => {
   const calls = []; const anonKey = `x.${Buffer.from(JSON.stringify({ role: 'anon' })).toString('base64url')}.x`;
   const service = createAccountService({ env: { SUPABASE_URL: 'https://project.supabase.co', SUPABASE_ANON_KEY: anonKey }, fetchImpl: async (url, options) => {
