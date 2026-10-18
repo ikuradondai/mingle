@@ -32,8 +32,9 @@ test("sound effects share the card preference, default on, and map completion va
     assert.equal(audio.isCardAudioEnabled(), true);
     audio.playUiClick(); await new Promise((resolve) => setTimeout(resolve, 0));
     audio.playThemeSelectSound(); await new Promise((resolve) => setTimeout(resolve, 0));
+    audio.playHomeThemeFanfare(); await new Promise((resolve) => setTimeout(resolve, 0));
     audio.playCompletionSound("fireworks"); await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.deepEqual(starts.map((buffer) => buffer.key), ["mingle-card-click.mp3", "mingle-theme-select.mp3", "mingle-celebration-fireworks.mp3"]);
+    assert.deepEqual(starts.map((buffer) => buffer.key), ["mingle-card-click.mp3", "mingle-theme-select.mp3", "mingle-home-theme-fanfare-v1.mp3", "mingle-celebration-fireworks.mp3"]);
     const requestCount = requests.length;
     const startCount = starts.length;
     audio.stopCardAudio();
@@ -42,6 +43,7 @@ test("sound effects share the card preference, default on, and map completion va
     assert.equal(audio.isCardAudioEnabled(), false);
     assert.equal(storage.get("mingle.cardAudio.enabled"), "0");
     audio.playCompletionSound("confetti");
+    audio.playHomeThemeFanfare();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(starts.length, startCount);
     assert.ok(requests.length >= requestCount);

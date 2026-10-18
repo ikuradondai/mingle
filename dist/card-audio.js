@@ -3,6 +3,7 @@ const AUDIO_URLS = {
   flip: "/assets/audio/mingle-card-flip.mp3?v=23-short-20261018",
   click: "/assets/audio/mingle-card-click.mp3?v=22-applause-20261018",
   theme: "/assets/audio/mingle-theme-select.mp3?v=21-long-20261018",
+  "home-theme-fanfare": "/assets/audio/mingle-home-theme-fanfare-v1.mp3?v=1-20261019",
   "reaction-same": "/assets/audio/mingle-card-reaction-same.mp3?v=24-cheer-20261019",
   "reaction-surprise": "/assets/audio/mingle-card-reaction-surprise.mp3?v=26-packed-crowd-20261019",
   "celebration-confetti": "/assets/audio/mingle-celebration-confetti.mp3?v=21-long-20261018",
@@ -115,6 +116,7 @@ function playAudioKey(key, gainValue = 0.72, delaySeconds = 0) {
 export function playFlipSound() { playAudioKey("flip", 0.85); }
 export function playUiClick() { playAudioKey("click", 0.75); }
 export function playThemeSelectSound() { playAudioKey("theme", 0.85); }
+export function playHomeThemeFanfare() { playAudioKey("home-theme-fanfare", 0.82); }
 export function playReactionSound(reaction) {
   if (reaction === "same") playAudioKey("reaction-same", 0.85);
   if (reaction === "surprise") playAudioKey("reaction-surprise", 0.65);
