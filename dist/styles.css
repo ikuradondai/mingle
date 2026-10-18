@@ -637,6 +637,8 @@ button:focus-visible,input:focus-visible,.card-back:focus-visible,.deck-option:h
 .home-screen .participant-count-stepper output{min-width:58px;text-align:center;font-variant-numeric:tabular-nums}
 .home-screen .participant-count-button{display:grid;place-items:center;width:44px;height:44px;padding:0;border:1px solid var(--line);border-radius:12px;background:#fff;color:var(--blue);font:inherit;font-size:22px;line-height:1;cursor:pointer}
 .home-screen .participant-count-button:disabled{opacity:.45;cursor:not-allowed}
+.home-primary-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:0}
+.home-primary-actions .primary-button{width:100%;min-width:0;padding-inline:10px}
 @media(max-width:360px){.solo-theme-screen .screen-brand{flex-wrap:wrap;row-gap:4px}.solo-theme-screen .screen-brand>strong{flex:0 0 auto;white-space:nowrap}.solo-theme-screen .screen-brand>a{margin-left:auto}.solo-theme-screen .screen-brand>button[data-action="group-mode"]{order:4;margin-left:auto}}
 
 /* Solo theme chooser: isolated card structure and compact hierarchy. */
@@ -1900,3 +1902,5 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 .answer-style-slot{height:32px;min-height:32px;box-sizing:border-box}
 .shared-question-card.is-revealed .shared-card-copy{animation:none}
 @media (prefers-reduced-motion: no-preference){.shared-question-card.reveal-motion .shared-card-copy{animation:shared-card-copy-reveal .32s cubic-bezier(.2,.75,.25,1) both}}
+
+@media (max-width:540px) and (min-height:741px) { .home-screen .home-illustration { height:128px; } }
