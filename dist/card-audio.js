@@ -1,7 +1,7 @@
 const STORAGE_KEY = "mingle.cardAudio.enabled";
 const AUDIO_URLS = {
   flip: "/assets/audio/mingle-card-flip.mp3?v=21-long-20261018",
-  click: "/assets/audio/mingle-card-click.mp3?v=21-long-20261018",
+  click: "/assets/audio/mingle-card-click.mp3?v=22-applause-20261018",
   theme: "/assets/audio/mingle-theme-select.mp3?v=21-long-20261018",
   "reaction-same": "/assets/audio/mingle-card-reaction-same.mp3?v=21-long-20261018",
   "reaction-surprise": "/assets/audio/mingle-card-reaction-surprise.mp3?v=21-long-20261018",
