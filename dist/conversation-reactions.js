@@ -17,11 +17,19 @@ export function reactionIcon(reaction) {
 export function reactionEffectMarkup(reaction, stage = 1) {
   const kind = normalizeReaction(reaction);
   const safeStage = Math.min(20, Math.max(1, Number(stage) || 1));
-  const scale = (1 + 0.85 * Math.sqrt((safeStage - 1) / 19)).toFixed(3);
-  const baseWidth = typeof window !== 'undefined' && window.innerWidth <= 520 ? Math.min(120, window.innerWidth * 0.31) : 188;
-  const imageWidth = (baseWidth * Number(scale)).toFixed(1);
+  // Reallocate the full base-to-target range across all 20 stages so even the
+  // late taps keep growing instead of flattening against a hard clamp.
+  const progress = (safeStage - 1) / 19;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 520;
+  const baseWidth = isMobile ? Math.min(120, window.innerWidth * 0.31) : 188;
+  const targetWidth = isMobile ? window.innerWidth * 0.90 : (typeof window !== 'undefined' ? Math.min(940, window.innerWidth * 0.8) : 940);
+  const imageWidthValue = baseWidth + (targetWidth - baseWidth) * Math.pow(progress, 0.75);
+  const scale = (imageWidthValue / baseWidth).toFixed(3);
+  const imageWidth = imageWidthValue.toFixed(1);
+  const liftMax = isMobile ? 80 : 180;
+  const lift = (liftMax * Math.pow(progress, 1.5)).toFixed(1);
   const image = kind === REACTIONS.surprise ? '/assets/play/reaction-wow.webp' : '/assets/play/reaction-yes.webp';
-  return `<span class="conversation-reaction-effect conversation-reaction-effect-${kind}" data-reaction-effect="${kind}" data-stage="${safeStage}" style="--reaction-stage:${safeStage};--reaction-scale:${scale};--reaction-image-width:${imageWidth}px" aria-hidden="true"><img class="reaction-effect-image" src="${image}" alt="" decoding="async" draggable="false"></span>`;
+  return `<span class="conversation-reaction-effect conversation-reaction-effect-${kind}" data-reaction-effect="${kind}" data-stage="${safeStage}" style="--reaction-stage:${safeStage};--reaction-scale:${scale};--reaction-image-width:${imageWidth}px;--reaction-lift:${lift}px" aria-hidden="true"><img class="reaction-effect-image" src="${image}" alt="" decoding="async" draggable="false"></span>`;
 }
 
 // Begin decoding while the play screen is loading so the first tap is visual immediately.
