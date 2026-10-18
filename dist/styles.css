@@ -1,6 +1,7 @@
 :root { color-scheme:light; --ink:#14213d; --muted:#667085; --blue:#1769e8; --coral:#ff6b72; --lime:#ffd160; --paper:#fff; --wash:#fffaf3; --line:#e5ded4; --shadow:0 18px 46px rgba(20,33,61,.10); --shadow-lift:0 24px 60px rgba(20,33,61,.16); --cream:#fffaf0; --blue-soft:#edf4ff; --coral-soft:#fff0ed; --participant-0-bg:#fff1b8; --participant-0-soft:#fff8dc; --participant-0-fg:#7a5600; --participant-1-bg:#ffd6ad; --participant-1-soft:#fff0e1; --participant-1-fg:#8a4b12; --participant-2-bg:#cfeccf; --participant-2-soft:#edf9ed; --participant-2-fg:#2f6b45; --participant-3-bg:#e5d9ff; --participant-3-soft:#f5f0ff; --participant-3-fg:#59418f; --participant-4-bg:#c9eef0; --participant-4-soft:#eafafb; --participant-4-fg:#256b70; --participant-5-bg:#d6e8ff; --participant-5-soft:#eff6ff; --participant-5-fg:#295a8a; --participant-6-bg:#e8f3b8; --participant-6-soft:#f5f9df; --participant-6-fg:#557020; --participant-7-bg:#f4d8ec; --participant-7-soft:#fcf0f8; --participant-7-fg:#8a426e; font-family:ui-rounded, "Hiragino Maru Gothic ProN", "Yu Gothic", system-ui, sans-serif; }
 * { box-sizing:border-box; }
 html,body { margin:0; min-width:320px; overflow-x:hidden; background:var(--wash); color:var(--ink); font-size:16px; }
+html:has(.app-shell[data-screen="play"]) { scrollbar-gutter: stable; }
 body { min-height:100vh; }
 button,input { font:inherit; }
 button { cursor:pointer; }
@@ -723,7 +724,7 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 /* Shared play shell: one stable geometry for unrevealed and revealed cards. */
 .play-frame-topbar,.play-frame-content{width:min(100%,792px);margin-inline:auto;padding-inline:16px}
 .play-frame-content{display:block!important;grid-template-columns:none!important;grid-template-rows:none!important;gap:0!important}
-.shared-play-shell{width:min(100%,760px);margin-inline:auto}
+.shared-play-shell{width:min(760px,calc(100vw - 32px));margin-inline:auto}
 .shared-play-head{display:flex;align-items:center;justify-content:space-between;min-height:44px}
 .solo-nickname-context{display:block;margin:6px 0 0;color:var(--muted);font-size:14px;font-weight:700;line-height:1.35}
 .solo-card-address{display:block;margin:0 0 10px;color:var(--muted);font-size:13px;font-weight:800;line-height:1.2;text-align:center}
@@ -1839,6 +1840,45 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
   .ts-contents .ts-chapter-subtitle, .ts-contents .ts-chapter-copy .ts-teaser { font-size:11px; }
   .ts-contents .ts-chapter-button { min-width:76px; font-size:12px; }
 }
-.answer-reactions{position:relative;display:flex;justify-content:center;gap:8px;min-height:48px;margin:6px auto 0;pointer-events:auto}.answer-reaction-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:108px;min-height:48px;padding:8px 14px;border:1px solid transparent;border-radius:16px;font:inherit;font-weight:900;cursor:pointer;transition:transform .16s ease,filter .16s ease,box-shadow .16s ease}.answer-reaction-button span{font-size:14px}.answer-reaction-same{color:var(--ink);background:#eaf2ff;border-color:#b9d1ff;box-shadow:0 8px 18px rgba(23,105,232,.14)}.answer-reaction-surprise{color:var(--ink);background:#fff0f1;border-color:#ffc4c8;box-shadow:0 8px 18px rgba(255,107,114,.14)}.answer-reaction-button:hover{filter:brightness(.95);transform:translateY(-1px)}.answer-reaction-button:active{transform:translateY(1px) scale(.98)}.answer-reaction-button:focus-visible{outline:3px solid var(--lime);outline-offset:3px}.conversation-reaction-overlay{position:absolute;z-index:5;left:50%;top:50%;width:min(180px,52vw);height:min(110px,32vw);pointer-events:none;transform:translate(-50%,-54%)}.conversation-reaction-overlay strong{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.conversation-reaction-effect{z-index:1}.answer-style-hint{margin:5px auto 0;color:var(--muted);font-size:13px;text-align:center}.answer-style-dismiss{margin-left:8px;min-height:32px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);font-size:12px;font-weight:800;cursor:pointer}.answer-style-dismiss:focus-visible{outline:3px solid var(--lime);outline-offset:2px}
-@media(max-width:680px){.answer-reactions{gap:6px}.answer-reaction-button{min-width:0;flex:1;padding-inline:10px}.answer-style-hint{font-size:12px}.conversation-reaction-overlay{top:34%}}
+.answer-reactions{position:relative;display:flex;justify-content:center;gap:8px;min-height:40px;margin:6px auto 0;pointer-events:auto}.answer-reactions.is-disabled{pointer-events:none}.answer-reaction-button{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:92px;min-height:40px;padding:6px 11px;border:1px solid transparent;border-radius:12px;font:inherit;font-size:13px;font-weight:900;cursor:pointer;transition:transform .16s ease,filter .16s ease,box-shadow .16s ease}.answer-reaction-button span{font-size:13px}.answer-reaction-same{color:var(--ink);background:#eaf2ff;border-color:#b9d1ff;box-shadow:0 5px 12px rgba(23,105,232,.12)}.answer-reaction-surprise{color:var(--ink);background:#fff0f1;border-color:#ffc4c8;box-shadow:0 5px 12px rgba(255,107,114,.12)}.answer-reactions.is-disabled .answer-reaction-button{opacity:.42;filter:saturate(.35);box-shadow:none}.answer-reaction-button:hover{filter:brightness(.95);transform:translateY(-1px)}.answer-reaction-button:active{transform:translateY(1px) scale(.98)}.answer-reaction-button:focus-visible{outline:3px solid var(--lime);outline-offset:3px}.conversation-reaction-overlay{position:absolute;z-index:5;left:50%;top:50%;width:min(180px,52vw);height:min(110px,32vw);pointer-events:none;transform:translate(-50%,-54%)}.conversation-reaction-overlay strong{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.conversation-reaction-effect{z-index:1}.answer-style-slot{min-height:32px;margin-top:5px;display:flex;align-items:center;justify-content:center}.answer-style-hint{margin:0;color:var(--muted);font-size:13px;text-align:center}.answer-style-dismiss{margin-left:8px;min-height:32px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);font-size:12px;font-weight:800;cursor:pointer}.answer-style-dismiss:focus-visible{outline:3px solid var(--lime);outline-offset:2px}.shared-speaker-placeholder{visibility:hidden}
+@media(max-width:680px){.answer-reactions{gap:6px}.answer-reaction-button{min-width:0;flex:1;padding-inline:9px}.answer-style-slot{min-height:30px}.answer-style-hint{font-size:12px}.conversation-reaction-overlay{top:34%}}
 @media(prefers-reduced-motion:reduce){.answer-reaction-button{transition:none}.conversation-reaction-effect *{animation:none!important}.conversation-reaction-overlay strong{opacity:1}}
+
+/* V2 shared play card: a generous theme image band keeps the question as the
+   visual lead while using the existing family art on every standard theme. */
+.shared-question-card{grid-template-rows:clamp(88px,16vw,136px) minmax(0,1fr);min-height:360px;border-radius:18px;box-shadow:0 7px 18px rgba(20,33,61,.08);background:#fffaf3}
+.shared-card-art{grid-column:1;grid-row:1;align-self:stretch;display:block;width:100%;height:100%;position:relative;z-index:0;min-height:0;border-radius:17px 17px 0 0;background-image:var(--card-art-front);background-position:center;background-size:cover;background-repeat:no-repeat;overflow:hidden}
+.shared-card-art::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(20,33,61,.12));pointer-events:none}
+.shared-card-back-logo{display:none;grid-column:1;grid-row:1;position:absolute;z-index:2;left:50%;top:50%;width:132px;height:52px;transform:translate(-50%,-50%);opacity:.92;pointer-events:none}.shared-card-back-logo img{display:block;width:100%;height:100%;object-fit:contain;object-position:center}
+.shared-card-back-logo.is-custom{display:none!important}
+.shared-question-card.is-face-down .shared-card-art{background-image:var(--card-art-back)}
+.shared-question-card.is-face-down .shared-card-back-logo{display:block}
+.shared-art-rail{display:none}
+.shared-card-copy,.shared-card-measure{grid-column:1;grid-row:2;width:auto;margin:0;padding:30px clamp(24px,7%,58px) 52px;text-align:left;font-size:clamp(27px,3vw,42px);line-height:1.28;letter-spacing:-.04em}
+.shared-question-card.is-face-down .shared-card-copy{display:none}
+.shared-question-card.is-face-down .shared-card-measure{display:block}
+.shared-card-measure{visibility:hidden}
+.shared-card-motif{top:auto;left:auto;right:18px;bottom:18px}
+.shared-bubbles{display:none}
+.shared-question-card.sponsor-custom-front.is-revealed .shared-card-art,.shared-question-card.sponsor-custom-back.is-face-down .shared-card-art{display:none}
+.shared-question-card.sponsor-custom-front.is-revealed .shared-card-copy{grid-row:1 / -1}
+.shared-question-card.sponsor-custom-front.is-revealed .shared-card-measure{grid-row:2}
+.shared-question-card.sponsor-custom-front.is-revealed{background-position:center;background-size:cover}
+.shared-play-shell.is-group .answer-reactions{margin-top:6px}
+.shared-play-shell.is-group .answer-style-slot{margin-top:4px}
+.shared-question-card.is-revealed .shared-card-copy{animation:shared-card-copy-reveal .32s cubic-bezier(.2,.75,.25,1) both}
+@keyframes shared-card-copy-reveal{0%{opacity:.42;transform:translateY(5px)}100%{opacity:1;transform:translateY(0)}}
+@media(max-width:680px){
+ .shared-question-card{grid-template-rows:88px minmax(0,1fr);min-height:330px;border-radius:16px}
+ .shared-card-art{border-radius:15px 15px 0 0}
+ .shared-card-copy,.shared-card-measure{padding:24px 22px 46px;font-size:clamp(26px,7.4vw,32px);line-height:1.3}
+ .shared-card-motif{right:14px;bottom:12px}
+}
+@media(prefers-reduced-motion:reduce){.shared-question-card.is-revealed .shared-card-copy{animation:none}}
+
+/* Keep every answer state on the same vivid Mingle action color and reserve
+   the hint row exactly, including when the hint text becomes visible. */
+.shared-actions .play-action-reveal,.shared-actions .play-action-next-person,.shared-actions .play-action-next-card{background:var(--blue);box-shadow:0 8px 18px rgba(23,105,232,.16)}
+.answer-style-slot{height:32px;min-height:32px;box-sizing:border-box}
+.shared-question-card.is-revealed .shared-card-copy{animation:none}
+@media (prefers-reduced-motion: no-preference){.shared-question-card.reveal-motion .shared-card-copy{animation:shared-card-copy-reveal .32s cubic-bezier(.2,.75,.25,1) both}}

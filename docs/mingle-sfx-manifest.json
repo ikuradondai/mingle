@@ -2,12 +2,17 @@
   "card-click": {
     "src": "assets/audio/mingle-card-click.mp3",
     "duration": 0.522,
-    "prompt": "A single short, unmistakable playful UI pop for selecting a conversation card: bright rounded bubble-pop transient with a tiny warm wooden click and a cheerful upward sparkle, punchy and memorable, clean attack and quick tail, satisfying on phone speakers. No voice, no speech, no words, no music, no melody, no notification ding, no metallic clang, no harsh high frequencies."
+    "prompt": "Close-mic Foley of one illustrated paper card tapped decisively on a wooden tabletop: crisp card-stock tick, warm wood body, tiny paper scrape on release, and a short natural room reflection. Dry, tactile, intimate, lively. One physical event only. No electronic tone, synth, pitch sweep, melody, chime, sparkle, arcade sound, notification, voice, speech, or metallic click."
+  },
+  "card-flip": {
+    "src": "assets/audio/mingle-card-flip.mp3",
+    "duration": 0.836,
+    "prompt": "Close-mic Foley of one thick illustrated paper card flipping over in a hand above a wooden table: fast paper air movement, flexible card-stock flap, soft fingertip grip release, and a warm natural landing with a short room reflection. Clear physical motion, intimate and tactile. No pitched tone, synth, whoosh effect, melody, chime, sparkle, arcade/game sound, notification, voice, speech, or metal."
   },
   "theme-select": {
     "src": "assets/audio/mingle-theme-select.mp3",
-    "duration": 0.6,
-    "prompt": "A short optimistic sound for choosing a conversation theme: two soft rounded plucks rising gently, warm analog mallet and subtle airy sparkle, friendly and thoughtful, bright Mingle.cards brand feeling, clear ending, suitable for a calm interface. No voice, no speech, no lyrics, no background music, no long melody, no alarm, no harsh treble, no giant game fanfare."
+    "duration": 1.045,
+    "prompt": "Close-mic Foley of a hand selecting a card theme from a small stack on wood: two paper cards slide and settle, a warm fingertip tap on card stock, layered paper movement, soft table resonance, and a brief room tail. Human and tactile. No pitched notes, musical interval, synth, pluck instrument, chime, sparkle, melody, arcade/game sound, notification, voice, speech, or metal."
   },
   "celebration-confetti": {
     "src": "assets/audio/mingle-celebration-confetti.mp3",
@@ -31,12 +36,12 @@
   },
   "reaction-same": {
     "src": "assets/audio/mingle-card-reaction-same.mp3",
-    "duration": 0.81,
-    "prompt": "A short bright reaction for two cards matching: two quick warm paper clicks approach, then meet in a centered rounded match chord with a tiny soft spring bounce and brief warm body. Blue and coral paper feeling, balanced stereo, clear on a phone speaker, playful and memorable, ending within 0.75 seconds. No voice, words, music, melody, long tail, harsh high frequencies, or metallic clang."
+    "duration": 1.123,
+    "prompt": "Close-mic Foley of two sturdy illustrated cards meeting on wood: left card slides with paper friction, right card answers, then one centered card-stock impact with warm wood body and tiny paper rebound. Add only a subtle breathy, wordless human smile if natural, behind the impact. Short room reflection, tactile and celebratory. No notes, chord, synth, melody, sparkle, arcade sound, metal clang, or intelligible speech."
   },
   "reaction-surprise": {
     "src": "assets/audio/mingle-card-reaction-surprise.mp3",
-    "duration": 0.72,
-    "prompt": "A short bright reaction sound for a surprising conversation card reveal: a quick upward airy whoop like a card opening, followed by a compact rounded cheerful pop at about 0.25 seconds and a tiny clean sparkle tail. Clear, playful, memorable on a phone speaker, finished within 0.75 seconds. No voice, no words, no music, no melody, no long tail, no harsh treble, no alarm, no metallic clang."
+    "duration": 1.228,
+    "prompt": "Close-mic Foley of a conversation card revealed with surprise: fast paper lift and air movement, clean card flip, then a soft card slap onto wood with rich paper body and tiny room reflection. Add only a very small breathy, entirely wordless gasp if natural. Physical, warm, cinematic, tactile. No rising tone, synth whoosh, musical pitch, melody, sparkle, arcade/game sound, metal hit, or intelligible speech."
   }
 }

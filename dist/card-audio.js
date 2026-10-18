@@ -1,10 +1,10 @@
 const STORAGE_KEY = "mingle.cardAudio.enabled";
 const AUDIO_URLS = {
-  flip: "/assets/audio/mingle-card-flip.mp3?v=17-cotton-table-fb811852",
-  click: "/assets/audio/mingle-card-click.mp3?v=18-elevenlabs-20261017",
-  theme: "/assets/audio/mingle-theme-select.mp3",
-  "reaction-same": "/assets/audio/mingle-card-reaction-same.mp3?v=1-reaction-20261018",
-  "reaction-surprise": "/assets/audio/mingle-card-reaction-surprise.mp3?v=1-reaction-20261018",
+  flip: "/assets/audio/mingle-card-flip.mp3?v=19-final-20261018",
+  click: "/assets/audio/mingle-card-click.mp3?v=19-final-20261018",
+  theme: "/assets/audio/mingle-theme-select.mp3?v=19-final-20261018",
+  "reaction-same": "/assets/audio/mingle-card-reaction-same.mp3?v=19-final-20261018",
+  "reaction-surprise": "/assets/audio/mingle-card-reaction-surprise.mp3?v=19-final-20261018",
   "celebration-confetti": "/assets/audio/mingle-celebration-confetti.mp3?v=18-elevenlabs-20261017",
   "celebration-fireworks": "/assets/audio/mingle-celebration-fireworks.mp3?v=18-elevenlabs-20261017",
   "celebration-ribbons": "/assets/audio/mingle-celebration-ribbons.mp3?v=18-elevenlabs-20261017",
@@ -85,7 +85,7 @@ function loadAudioBuffer(key, audioContext) {
   return promise;
 }
 
-function playAudioKey(key, gainValue = 0.72) {
+function playAudioKey(key, gainValue = 0.72, delaySeconds = 0) {
   if (!enabled || !AUDIO_URLS[key]) return;
   cancelledKeys.delete(key);
   const revision = ++soundRevision;
@@ -102,7 +102,7 @@ function playAudioKey(key, gainValue = 0.72) {
       activeSources.add(source);
       activeSourceKeys.set(source, key);
       source.onended = () => { try { source.disconnect(); gain.disconnect(); } catch { /* already disconnected */ } activeSources.delete(source); activeSourceKeys.delete(source); };
-      try { source.start(); } catch { activeSources.delete(source); activeSourceKeys.delete(source); try { source.disconnect(); gain.disconnect(); } catch { /* already disconnected */ } }
+      try { source.start(context.currentTime + Math.max(0, delaySeconds)); } catch { activeSources.delete(source); activeSourceKeys.delete(source); try { source.disconnect(); gain.disconnect(); } catch { /* already disconnected */ } }
     };
     const loadAndStart = () => { if (!enabled || revision !== soundRevision) return; loadAudioBuffer(key, context).then(start).catch(() => {}); };
     if (context.state === "suspended") context.resume().then(loadAndStart).catch(() => {});
@@ -112,12 +112,12 @@ function playAudioKey(key, gainValue = 0.72) {
   }
 }
 
-export function playFlipSound() { playAudioKey("flip"); }
-export function playUiClick() { playAudioKey("click", 0.42); }
-export function playThemeSelectSound() { playAudioKey("theme", 0.58); }
+export function playFlipSound() { playAudioKey("flip", 0.85); }
+export function playUiClick() { playAudioKey("click", 0.75); }
+export function playThemeSelectSound() { playAudioKey("theme", 0.85); }
 export function playReactionSound(reaction) {
-  if (reaction === "same") playAudioKey("reaction-same", 0.85);
-  if (reaction === "surprise") playAudioKey("reaction-surprise", 0.70);
+  if (reaction === "same") playAudioKey("reaction-same", 0.85, 0.28);
+  if (reaction === "surprise") playAudioKey("reaction-surprise", 0.65, 0.26);
 }
 export function stopReactionSound() {
   cancelledKeys.add("reaction-same");
