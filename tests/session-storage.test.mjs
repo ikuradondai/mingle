@@ -123,6 +123,19 @@ test('session storage reloads progress, likes, and round boundaries without card
   now += 86400001; assert.equal(loadSession({ storage, now }), null);
 });
 
+test('reaction counts persist independently, remain compatible with old saves, and reject invalid values', () => {
+  const session = createSession({ participants: ['A', 'B'], deck: pick('friends'), random: () => 0.5 });
+  session.reactionCounts = { same: 7, surprise: 20 };
+  const storage = memory();
+  assert.equal(saveSession(session, { storage, now: 1000 }), true);
+  assert.deepEqual(JSON.parse(storage.value).reactionCounts, { same: 7, surprise: 20 });
+  assert.deepEqual(loadSession({ storage, now: 1000 }).reactionCounts, { same: 7, surprise: 20 });
+  const legacy = JSON.parse(storage.value); delete legacy.reactionCounts; storage.value = JSON.stringify(legacy);
+  assert.deepEqual(loadSession({ storage, now: 1000 }).reactionCounts, { same: 0, surprise: 0 });
+  legacy.reactionCounts = { same: -1, surprise: 1 }; storage.value = JSON.stringify(legacy);
+  assert.equal(loadSession({ storage, now: 1000 }), null);
+});
+
 test('valid single adult, date-R18, and mixed challenge sessions restore', () => {
   for (const session of [
     createSession({ participants: ['A', 'B'], deck: pick('intimacy'), adultConfirmed: true, random: () => 0.5 }),

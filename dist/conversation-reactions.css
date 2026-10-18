@@ -126,3 +126,69 @@
   .conversation-reaction-effect::after { content: "同じ！"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--reaction-navy, #14213d); font-size: .95rem; font-weight: 900; white-space: nowrap; }
   .conversation-reaction-effect-surprise::after { content: "意外！"; color: var(--reaction-coral, #c84d57); }
 }
+
+/* Surprise reaction: a readable WOW/AHA burst with an asymmetric spark trail. */
+.conversation-reaction-effect {
+  --reaction-scale: calc(.62 + min(var(--reaction-stage, 1), 20) * .054);
+  transition: transform .16s cubic-bezier(.2,.8,.2,1);
+  transform: translate(-50%, -50%) scale(var(--reaction-scale));
+}
+.conversation-reaction-effect-surprise {
+  width: 240px;
+  height: 138px;
+  color: var(--reaction-coral, #ff6b72);
+  overflow: visible;
+}
+.conversation-reaction-effect-surprise .reaction-surprise-word {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  z-index: 3;
+  margin: 0;
+  color: var(--reaction-coral, #ff6b72);
+  font-size: clamp(34px, 10vw, 58px);
+  font-weight: 1000;
+  letter-spacing: -.08em;
+  line-height: .85;
+  text-shadow: 2px 3px 0 var(--reaction-navy, #14213d), 0 8px 16px rgb(20 33 61 / 20%);
+  transform: translate(-50%, -50%) rotate(-8deg) scale(.3);
+  opacity: 0;
+  animation: reaction-wow-pop 1.25s cubic-bezier(.18,.8,.2,1) both;
+}
+.conversation-reaction-effect-surprise .reaction-surprise-spark {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  width: 28px;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--reaction-gold, #e6b84c);
+  box-shadow: 0 2px 0 rgb(20 33 61 / 20%);
+  opacity: 0;
+  transform-origin: 0 50%;
+}
+.reaction-surprise-spark-one { left: 18px; top: 52px; transform: rotate(-28deg) scaleX(.2); animation: reaction-wow-spark-one 1.48s 70ms ease-out both; }
+.reaction-surprise-spark-two { left: 180px; top: 24px; width: 22px; transform: rotate(33deg) scaleX(.2); animation: reaction-wow-spark-two 1.55s 170ms ease-out both; }
+.reaction-surprise-spark-three { left: 192px; top: 96px; width: 34px; height: 5px; background: var(--reaction-blue, #1769e8); transform: rotate(-24deg) scaleX(.2); animation: reaction-wow-spark-three 1.7s 240ms ease-out both; }
+.reaction-surprise-spark-four { left: 64px; top: 13px; width: 13px; height: 13px; border-radius: 3px; background: transparent; border: 4px solid var(--reaction-gold, #e6b84c); transform: rotate(22deg) scale(.2); animation: reaction-wow-spark-four 1.5s 120ms ease-out both; }
+@keyframes reaction-wow-pop { 0% { opacity:0; transform:translate(-50%,-50%) rotate(-14deg) scale(.28); } 16% { opacity:1; transform:translate(-50%,-50%) rotate(-7deg) scale(1.12); } 28% { opacity:.92; transform:translate(-50%,-53%) rotate(-4deg) scale(.98); } 48% { opacity:.34; transform:translate(-50%,-58%) rotate(-2deg) scale(.92); } 100% { opacity:0; transform:translate(-50%,-74%) rotate(5deg) scale(.78); } }
+@keyframes reaction-wow-spark-one { 0% { opacity:0; transform:rotate(-28deg) scaleX(.2); } 26% { opacity:1; transform:rotate(-28deg) scaleX(1); } 100% { opacity:0; transform:rotate(-49deg) translate(-12px,-14px) scaleX(.35); } }
+@keyframes reaction-wow-spark-two { 0% { opacity:0; transform:rotate(33deg) scaleX(.2); } 28% { opacity:1; transform:rotate(33deg) scaleX(1); } 100% { opacity:0; transform:rotate(58deg) translate(14px,-8px) scaleX(.3); } }
+@keyframes reaction-wow-spark-three { 0% { opacity:0; transform:rotate(-24deg) scaleX(.2); } 32% { opacity:.9; transform:rotate(-24deg) scaleX(1); } 100% { opacity:0; transform:rotate(-38deg) translate(18px,9px) scaleX(.25); } }
+@keyframes reaction-wow-spark-four { 0% { opacity:0; transform:rotate(22deg) scale(.2); } 30% { opacity:1; transform:rotate(38deg) scale(1); } 100% { opacity:0; transform:rotate(72deg) translate(12px,-12px) scale(.25); } }
+.conversation-reaction-effect.is-stage-bump { transition-duration: .1s; }
+@media (max-width: 520px) {
+  .conversation-reaction-effect { --reaction-scale: calc(.58 + min(var(--reaction-stage, 1), 20) * .043); width: min(180px, calc(100vw - 32px)); height: min(116px, 36vw); }
+  .conversation-reaction-effect-surprise { width: min(180px, calc(100vw - 32px)); height: min(116px, 36vw); }
+  .conversation-reaction-effect-surprise .reaction-surprise-word { font-size: clamp(30px, 10vw, 50px); }
+  .conversation-reaction-effect-surprise .reaction-surprise-spark-one { left: 8%; top: 45%; }
+  .conversation-reaction-effect-surprise .reaction-surprise-spark-two { left: 68%; top: 18%; }
+  .conversation-reaction-effect-surprise .reaction-surprise-spark-three { left: 70%; top: 76%; width: 22px; }
+  .conversation-reaction-effect-surprise .reaction-surprise-spark-four { left: 28%; top: 8%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conversation-reaction-effect { transform: translate(-50%, -50%) scale(var(--reaction-scale)); }
+  .conversation-reaction-effect > * { display: none; }
+  .conversation-reaction-effect::after { content: "同じ！"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--reaction-navy, #14213d); font-size: 1.1rem; font-weight: 900; white-space: nowrap; }
+  .conversation-reaction-effect-surprise::after { content: "WOW!"; color: var(--reaction-coral, #ff6b72); font-size: clamp(34px, 10vw, 58px); text-shadow: 2px 3px 0 var(--reaction-navy, #14213d); }
+}

@@ -14,12 +14,13 @@ export function reactionIcon(reaction) {
 }
 
 /** Pointer-transparent, absolutely-positioned effect. Parent should provide a positioned root. */
-export function reactionEffectMarkup(reaction) {
+export function reactionEffectMarkup(reaction, stage = 1) {
   const kind = normalizeReaction(reaction);
+  const safeStage = Math.min(20, Math.max(1, Number(stage) || 1));
   if (kind === REACTIONS.surprise) {
-    return `<span class="conversation-reaction-effect conversation-reaction-effect-surprise" data-reaction-effect="surprise" aria-hidden="true"><span class="reaction-effect-hero reaction-effect-hero-left"></span><span class="reaction-effect-hero reaction-effect-hero-main"></span><span class="reaction-effect-hero reaction-effect-hero-right"></span><span class="reaction-effect-paper reaction-effect-paper-one"></span><span class="reaction-effect-paper reaction-effect-paper-two"></span><span class="reaction-effect-paper reaction-effect-paper-three"></span><span class="reaction-effect-paper reaction-effect-paper-four"></span><span class="reaction-effect-paper reaction-effect-paper-five"></span></span>`;
+    return `<span class="conversation-reaction-effect conversation-reaction-effect-surprise" data-reaction-effect="surprise" data-stage="${safeStage}" style="--reaction-stage:${safeStage}" aria-hidden="true"><strong class="reaction-surprise-word">WOW!</strong><span class="reaction-surprise-spark reaction-surprise-spark-one"></span><span class="reaction-surprise-spark reaction-surprise-spark-two"></span><span class="reaction-surprise-spark reaction-surprise-spark-three"></span><span class="reaction-surprise-spark reaction-surprise-spark-four"></span></span>`;
   }
-  return `<span class="conversation-reaction-effect conversation-reaction-effect-same" data-reaction-effect="same" aria-hidden="true"><span class="reaction-effect-card reaction-effect-card-left"></span><span class="reaction-effect-card reaction-effect-card-right"></span><span class="reaction-effect-rays reaction-effect-rays-left"><i></i><i></i><i></i></span><span class="reaction-effect-rays reaction-effect-rays-right"><i></i><i></i><i></i></span></span>`;
+  return `<span class="conversation-reaction-effect conversation-reaction-effect-same" data-reaction-effect="same" data-stage="${safeStage}" style="--reaction-stage:${safeStage}" aria-hidden="true"><span class="reaction-effect-card reaction-effect-card-left"></span><span class="reaction-effect-card reaction-effect-card-right"></span><span class="reaction-effect-rays reaction-effect-rays-left"><i></i><i></i><i></i></span><span class="reaction-effect-rays reaction-effect-rays-right"><i></i><i></i><i></i></span></span>`;
 }
 
 export const conversationReactionKinds = REACTIONS;

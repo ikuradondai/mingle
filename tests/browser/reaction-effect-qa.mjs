@@ -28,28 +28,31 @@ async function seed() {
 function rect(selector) {
   return page.locator(selector).first().evaluate((node) => {
     const r = node.getBoundingClientRect();
-    return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+    return { left: r.left + window.scrollX, top: r.top + window.scrollY, right: r.right + window.scrollX, bottom: r.bottom + window.scrollY, width: r.width, height: r.height };
   });
 }
 
+try {
 await seed();
 const cardBefore = await rect('.shared-question-card');
 await page.locator('[data-action="reaction"][data-reaction="surprise"]').click();
 await page.locator('[data-reaction-effect="surprise"]').waitFor({ state: 'visible' });
-const effect = page.locator('[data-reaction-effect="surprise"]');
+const effect = page.locator('[data-reaction-effect="surprise"]').first();
 assert.equal(await effect.evaluate((node) => getComputedStyle(node).pointerEvents), 'none');
-assert.equal(await effect.locator('.reaction-effect-paper').count(), 5);
+assert.equal(await effect.locator('.reaction-surprise-word').count(), 1);
+assert.equal(await effect.locator('.reaction-surprise-spark').count(), 4);
+assert.equal(await effect.locator('.reaction-surprise-word').first().textContent(), 'WOW!');
+for (let i = 0; i < 3; i += 1) await page.locator('[data-action="reaction"][data-reaction="surprise"]').click();
+assert.equal(await page.evaluate(() => [...document.querySelectorAll('[data-reaction-effect="surprise"]')].at(-1)?.dataset.stage), '4', 'repeated clicks should add larger bursts');
 const animationNames = await effect.locator(':scope > *').evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).animationName));
-assert.deepEqual(animationNames, ['reaction-surprise-hero-left', 'reaction-surprise-hero-main', 'reaction-surprise-hero-right', 'reaction-surprise-paper-one', 'reaction-surprise-paper-two', 'reaction-surprise-paper-three', 'reaction-surprise-paper-four', 'reaction-surprise-paper-five']);
+assert.equal(animationNames.length, 5);
 assert.deepEqual(await rect('.shared-question-card'), cardBefore, 'reaction changed card geometry');
+const effectBounds = await effect.evaluate((node) => { const r = node.getBoundingClientRect(); return { left:r.left, right:r.right, top:r.top, bottom:r.bottom, width:r.width, height:r.height }; });
+assert.ok(effectBounds.left >= 16 && effectBounds.right <= viewport.width - 16, `effect escaped horizontal safe area: ${JSON.stringify(effectBounds)}`);
 for (const [name, delay] of [['early', 180], ['impact', 340], ['tail', 900], ['late', 1800]]) {
   await page.waitForTimeout(delay);
   await page.screenshot({ path: `${output}-${name}-mobile.png`, fullPage: false });
-  if (name === 'impact') await effect.screenshot({ path: `${output}-${name}-effect-crop.png` });
-}
-const heroBounds = await effect.locator('.reaction-effect-hero').evaluateAll((nodes) => nodes.map((node) => { const r = node.getBoundingClientRect(); return { left:r.left, right:r.right, top:r.top, bottom:r.bottom, width:r.width, height:r.height }; }));
-for (const bounds of heroBounds) {
-  assert.ok(bounds.left >= 16 && bounds.right <= viewport.width - 16, `hero escaped horizontal safe area: ${JSON.stringify(bounds)}`);
+  if (name === 'impact') await effect.screenshot({ path: `${output}-${name}-effect-crop.png`, animations: 'disabled' });
 }
 await page.waitForTimeout(2400);
 await page.screenshot({ path: `${output}-end-mobile.png`, fullPage: false });
@@ -58,8 +61,10 @@ await page.reload({ waitUntil: 'domcontentloaded' });
 if (await page.locator('[data-action="resume"]').count()) await page.locator('[data-action="resume"]').click();
 if (!(await page.locator('.shared-question-card.is-revealed').count())) await page.locator('.shared-question-card').click();
 await page.locator('[data-action="reaction"][data-reaction="surprise"]').click();
-const reducedAnimation = await page.locator('[data-reaction-effect="surprise"] .reaction-effect-hero-main').evaluate((node) => getComputedStyle(node).animationName);
+const reducedAnimation = await page.locator('[data-reaction-effect="surprise"] .reaction-surprise-word').first().evaluate((node) => getComputedStyle(node).animationName);
 assert.equal(reducedAnimation, 'none');
-await context.close();
-await browser.close();
-console.log(JSON.stringify({ ok: true, viewport: `${viewport.width}x${viewport.height}`, animationNames, heroBounds, screenshots: 5 }));
+console.log(JSON.stringify({ ok: true, viewport: `${viewport.width}x${viewport.height}`, animationNames, effectBounds, screenshots: 5 }));
+} finally {
+  await context.close().catch(() => {});
+  await browser.close().catch(() => {});
+}

@@ -43,8 +43,11 @@ import { consumeSocialGameIntent, saveSocialGameIntent } from "./social-game-int
 const root = document.querySelector("#app");
 let completionFinishInFlight = false;
 let audioClickBound = false;
-let reactionTimer = 0;
 let reactionState = null;
+let reactionBursts = [];
+let reactionBurstId = 0;
+const reactionExpiryTimers = new Map();
+const REACTION_KINDS = new Set(["same", "surprise"]);
 let revealMotionPending = false;
 const dismissedAnswerStyles = new Set();
 const state = {
@@ -1723,7 +1726,7 @@ function sharedPlayView(session) {
   const answerStyle = revealed && !solo ? activeAnswerStyle(session) : null;
   const togetherAnswer = answerStyle === "together";
   const reactionKey = `${session.sessionId}:${session.cursor}:${session.answerIndex}`;
-  const reactionOverlay = reactionState?.key === reactionKey ? `<div class="conversation-reaction-overlay" role="status" aria-live="polite"><strong>${reactionState.reaction === "same" ? "同じ！" : "意外！"}</strong>${reactionEffectMarkup(reactionState.reaction)}</div>` : "";
+  const reactionOverlay = reactionState?.key === reactionKey ? `<div class="conversation-reaction-overlay" role="status" aria-live="polite"><strong>${reactionState.reaction === "same" ? "同じ！" : "意外！"}</strong>${reactionBursts.map((burst) => reactionBurstMarkup(burst)).join("")}</div>` : "";
   const question = revealed ? esc(displayText || "カードを読み込んでいます…") : (solo ? "タップしてめくる" : "タップしてめくる");
   const isChallenge = Boolean(card?.kind === "challenge");
   const together = !solo && (isTogetherCard(card) || togetherAnswer);
@@ -2770,11 +2773,51 @@ function finishToHome() {
 }
 
 function clearReactionState() {
-  if (reactionTimer) window.clearTimeout(reactionTimer);
-  reactionTimer = 0;
+  for (const timer of reactionExpiryTimers.values()) window.clearTimeout(timer);
+  reactionExpiryTimers.clear();
   stopReactionSound();
   reactionState = null;
+  reactionBursts = [];
   root.querySelector('.conversation-reaction-overlay')?.remove();
+}
+
+function reactionCountsFor(session) {
+  if (!session || session.mode === "solo") return { same: 0, surprise: 0 };
+  const counts = session.reactionCounts;
+  if (!counts || typeof counts !== "object" || Array.isArray(counts)) session.reactionCounts = { same: 0, surprise: 0 };
+  else {
+    for (const kind of REACTION_KINDS) if (!Number.isSafeInteger(counts[kind]) || counts[kind] < 0) counts[kind] = 0;
+  }
+  return session.reactionCounts;
+}
+
+function reactionBurstMarkup(burst) {
+  return reactionEffectMarkup(burst.reaction, burst.stage).replace(" aria-hidden=\"true\">", ` data-reaction-burst-id="${burst.id}" aria-hidden="true">`);
+}
+
+function appendReactionBurst(burst) {
+  const overlay = root.querySelector(".conversation-reaction-overlay");
+  if (!overlay) return false;
+  const label = overlay.querySelector(":scope > strong");
+  if (label) label.textContent = burst.reaction === "same" ? "同じ！" : "意外！";
+  overlay.insertAdjacentHTML("beforeend", reactionBurstMarkup(burst));
+  const bursts = overlay.querySelectorAll("[data-reaction-effect]");
+  for (let i = 0; i < bursts.length - 8; i += 1) bursts[i].remove();
+  return true;
+}
+
+function scheduleReactionBurstExpiry(burst) {
+  const lifetime = burst.reaction === "surprise" ? 2100 : 1150;
+  const timer = window.setTimeout(() => {
+    reactionExpiryTimers.delete(burst.id);
+    reactionBursts = reactionBursts.filter((item) => item.id !== burst.id);
+    root.querySelector(`[data-reaction-burst-id="${burst.id}"]`)?.remove();
+    if (!reactionBursts.length) {
+      reactionState = null;
+      root.querySelector('.conversation-reaction-overlay')?.remove();
+    }
+  }, lifetime);
+  reactionExpiryTimers.set(burst.id, timer);
 }
 
 async function handleAction(event) {
@@ -3474,18 +3517,34 @@ async function handleAction(event) {
     const reaction = event.currentTarget.dataset.reaction;
     if (!session || session.mode === "solo" || session.revealed !== true || !["same", "surprise"].includes(reaction)) return;
     const key = `${session.sessionId}:${session.cursor}:${session.answerIndex}`;
-    const now = Date.now();
-    if (reactionState?.key === key && now - (reactionState.at || 0) < 250) return;
-    clearReactionState();
-    reactionState = { key, reaction, at: now };
+    const counts = reactionCountsFor(session);
+    counts[reaction] += 1;
+    const stage = Math.min(20, counts[reaction]);
+    const burst = { id: `reaction-${++reactionBurstId}`, reaction, stage };
     state.focusSelector = `[data-action="reaction"][data-reaction="${reaction}"]`;
+    if (reactionState?.key === key) {
+      reactionState.reaction = reaction;
+      reactionBursts.push(burst);
+      if (reactionBursts.length > 8) {
+        const evicted = reactionBursts.shift();
+        const timer = reactionExpiryTimers.get(evicted.id);
+        if (timer) window.clearTimeout(timer);
+        reactionExpiryTimers.delete(evicted.id);
+      }
+      appendReactionBurst(burst);
+    } else {
+      clearReactionState();
+      reactionState = { key, reaction };
+      reactionBursts = [burst];
+      const reactionsRoot = root.querySelector(".answer-reactions");
+      if (reactionsRoot) {
+        reactionsRoot.insertAdjacentHTML("beforeend", `<div class="conversation-reaction-overlay" role="status" aria-live="polite"><strong>${reaction === "same" ? "同じ！" : "意外！"}</strong></div>`);
+        appendReactionBurst(burst);
+      } else render();
+    }
+    scheduleReactionBurstExpiry(burst);
+    persist();
     playReactionSound(reaction);
-    render();
-    reactionTimer = window.setTimeout(() => {
-      reactionState = null;
-      reactionTimer = 0;
-      root.querySelector('.conversation-reaction-overlay')?.remove();
-    }, reaction === "surprise" ? 2150 : 1500);
     return;
   }
   if (action === "answer-style-dismiss") {
