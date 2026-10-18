@@ -30,6 +30,14 @@ test("sound effects share the card preference, default on, and map completion va
   try {
     const audio = await import(`../dist/card-audio.js?test=${Date.now()}`);
     assert.equal(audio.isCardAudioEnabled(), true);
+    assert.deepEqual([...new Set(requests)].sort(), [
+      "mingle-card-click.mp3",
+      "mingle-home-theme-fanfare-v1.mp3",
+      "mingle-theme-select.mp3",
+    ].sort(), "only first-navigation sounds are warmed before interaction");
+    const beforePlayWarmup = requests.length;
+    audio.warmCardAudio(["flip", "reaction-same", "reaction-surprise", "flip"]);
+    assert.equal(requests.length, beforePlayWarmup + 3, "play warmup deduplicates short sounds");
     audio.playUiClick(); await new Promise((resolve) => setTimeout(resolve, 0));
     audio.playThemeSelectSound(); await new Promise((resolve) => setTimeout(resolve, 0));
     audio.playHomeThemeFanfare(); await new Promise((resolve) => setTimeout(resolve, 0));
@@ -58,6 +66,9 @@ test("sound effects share the card preference, default on, and map completion va
     storage.set("mingle.cardAudio.enabled", "0");
     const disabled = await import(`../dist/card-audio.js?disabled=${Date.now()}`);
     assert.equal(disabled.isCardAudioEnabled(), false);
+    const disabledRequests = requests.length;
+    disabled.warmCardAudio(["celebration-confetti", "celebration-fireworks"]);
+    assert.equal(requests.length, disabledRequests, "disabled audio does not warm sounds");
   } finally {
     restore("localStorage", original.localStorage);
     restore("fetch", original.fetch);

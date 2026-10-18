@@ -28,7 +28,12 @@ try {
   // Storage can be unavailable in private or restricted browsing modes.
 }
 
-if (enabled) Object.keys(AUDIO_URLS).forEach((key) => { fetchAudioBytes(key); });
+// Keep the first navigation responsive: only sounds that can fire before the
+// first theme card is shown are warmed up. Other sounds warm up when their
+// screen becomes relevant, then fall back to fetching on playback if needed,
+// so they cannot compete with theme explorer images during initial rendering.
+const INITIAL_AUDIO_KEYS = ["click", "theme", "home-theme-fanfare"];
+if (enabled) INITIAL_AUDIO_KEYS.forEach((key) => { fetchAudioBytes(key); });
 
 function fetchAudioBytes(key) {
   if (audioBytesPromises.has(key)) return audioBytesPromises.get(key);
@@ -44,6 +49,11 @@ function fetchAudioBytes(key) {
   }
   audioBytesPromises.set(key, promise);
   return promise;
+}
+
+export function warmCardAudio(keys = []) {
+  if (!enabled || !Array.isArray(keys)) return;
+  keys.forEach((key) => { if (typeof key === 'string') fetchAudioBytes(key); });
 }
 
 export function isCardAudioEnabled() {

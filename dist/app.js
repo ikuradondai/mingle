@@ -18,7 +18,7 @@ import { renderAd } from "./ad-config.js";
 import { playableSavedSets } from "./my-set.js";
 import { resetStudioEntryState } from "./studio-state.js";
 import { buildFacebookShareUrl, buildShareText, buildXShareUrl } from "./share-text.js";
-import { isCardAudioEnabled, toggleCardAudio, stopCardAudio, stopReactionSound, playFlipSound, playUiClick, playThemeSelectSound, playHomeThemeFanfare, playCompletionSound, playReactionSound } from "./card-audio.js";
+import { isCardAudioEnabled, toggleCardAudio, stopCardAudio, stopReactionSound, playFlipSound, playUiClick, playThemeSelectSound, playHomeThemeFanfare, playCompletionSound, playReactionSound, warmCardAudio } from "./card-audio.js";
 import { answerStyleForCard } from "./answer-style.js";
 import { reactionIcon, reactionEffectMarkup } from "./conversation-reactions.js";
 import { cardDesignForSession, soloMotifForDeck } from "./card-design.js";
@@ -44,6 +44,7 @@ const root = document.querySelector("#app");
 let completionFinishInFlight = false;
 let audioClickBound = false;
 let reactionState = null;
+let themeImageObserver = null;
 let reactionBursts = [];
 let reactionBurstId = 0;
 const reactionExpiryTimers = new Map();
@@ -670,6 +671,12 @@ function render() {
   // surface. Record the resulting UI, never the pre-enforcement request.
   syncNavigationHistory();
   root.innerHTML = state.shared ? sharedView() : state.screen === "torisetsu" ? torisetsuScreenView() : state.screen === "participants" ? participantsView() : state.screen === "decks" ? decksView() : playView();
+  bindThemeExplorerImages();
+  if (state.screen === "play" && state.session) {
+    warmCardAudio(isRoundComplete(state.session) || isFinished(state.session)
+      ? ["celebration-confetti", "celebration-fireworks", "celebration-ribbons", "celebration-cards"]
+      : ["flip", "reaction-same", "reaction-surprise"]);
+  }
   if (revealMotionPending) {
     const motionCard = root.querySelector('.shared-question-card.reveal-motion');
     window.setTimeout(() => motionCard?.classList.remove('reveal-motion'), 380);
@@ -1436,6 +1443,25 @@ async function startSponsorSet(id) {
 function startsThemeOnSelect(deck, { solo = false, mixed = false, set = false } = {}) {
   return !set && !mixed && Boolean(deck) && !deck.adultOnly && !canOfferR18(deck);
 }
+function bindThemeExplorerImages() {
+  const images = [...root.querySelectorAll('img[data-theme-image-src]')];
+  themeImageObserver?.disconnect();
+  themeImageObserver = null;
+  if (!images.length) return;
+  const load = (image) => {
+    if (!root.contains(image)) return;
+    const src = image.dataset.themeImageSrc;
+    if (!src) return;
+    image.src = src;
+    delete image.dataset.themeImageSrc;
+    themeImageObserver?.unobserve(image);
+  };
+  if (!('IntersectionObserver' in window)) { images.forEach(load); return; }
+  themeImageObserver = new IntersectionObserver((entries) => {
+    entries.filter((entry) => entry.isIntersecting).forEach((entry) => load(entry.target));
+  }, { rootMargin: '0px' });
+  images.forEach((image) => themeImageObserver.observe(image));
+}
 function themeExplorerCard(deck, { solo = false, mixed = false, selectedMySet = null, shelfId = 'main' } = {}) {
   const set = deck.__mySet || null;
   const sponsor = deck.__sponsor || null;
@@ -1458,7 +1484,7 @@ function themeExplorerCard(deck, { solo = false, mixed = false, selectedMySet = 
   const labelTitle = labelKind === 'yesterday_top' ? '昨日のテーマ開始数で1位' : labelKind === 'rising' ? '昨日のテーマ開始数が一昨日より増加' : '';
   const startsOnSelect = !sponsor && startsThemeOnSelect(deck, { solo, mixed, set: Boolean(set) });
   const cardSelected = startsOnSelect ? false : selected;
-  const imageMarkup = image ? `<span class="theme-explorer-image-wrap"><img class="theme-explorer-image" src="${esc(image)}" alt="" loading="lazy" width="320" height="213" />${showRecommendationNode ? `<span class="theme-explorer-label" data-theme-recommendation-label="${esc(deck.id)}" title="${esc(labelTitle)}">${label}</span>` : ''}</span>` : '';
+  const imageMarkup = image ? `<span class="theme-explorer-image-wrap"><img class="theme-explorer-image" data-theme-image-src="${esc(image)}" alt="" loading="lazy" width="320" height="213" />${showRecommendationNode ? `<span class="theme-explorer-label" data-theme-recommendation-label="${esc(deck.id)}" title="${esc(labelTitle)}">${label}</span>` : ''}</span>` : '';
   const bookmark = `<button type="button" class="theme-explorer-bookmark ${bookmarked ? 'is-active' : ''}" data-action="theme-bookmark" data-bookmark-id="${esc(bookmarkId)}" aria-pressed="${bookmarked}" aria-label="${bookmarked ? '保存を外す' : 'テーマを保存'}：${esc(title)}" title="${bookmarked ? '保存を外す' : 'テーマを保存'}：${esc(title)}">${actionIcon('bookmark')}</button>`;
   const experiencedToggle = `<button type="button" class="theme-explorer-experienced ${experienced ? 'is-active' : ''}" data-action="theme-experienced" data-experienced-id="${esc(bookmarkId)}" aria-pressed="${experienced}" aria-label="${experienced ? '体験済みを外す' : '体験済みにする'}：${esc(title)}">${experienced ? '✓ 体験済み' : '体験済みにする'}</button>`;
   const settings = startsOnSelect && !solo && !locked ? `<button type="button" class="theme-explorer-card-settings" data-action="theme-card-settings" data-theme-id="${esc(deck.id)}" data-theme-key="${esc(shelfId)}:${esc(deck.id)}" aria-label="${esc(title)}の詳細設定" title="詳細設定">${actionIcon('settings')}</button>` : '';
@@ -1476,7 +1502,7 @@ function themeGameCard(game, shelfId = 'game') {
   const gate = gameParticipantGate(game, state.participants.length);
   if (!gate.valid) return '';
   const meta = game.meta;
-  const imageSrc = gameCardImage(game.id); const image = imageSrc ? `<span class="theme-explorer-image-wrap theme-game-image-wrap"><img class="theme-explorer-image theme-game-image" src="${esc(imageSrc)}" alt="" loading="lazy" decoding="async" width="960" height="640" /></span>` : `<span class="theme-explorer-image-wrap theme-game-icon" aria-hidden="true">${icon}</span>`;
+  const imageSrc = gameCardImage(game.id); const image = imageSrc ? `<span class="theme-explorer-image-wrap theme-game-image-wrap"><img class="theme-explorer-image theme-game-image" data-theme-image-src="${esc(imageSrc)}" alt="" loading="lazy" decoding="async" width="960" height="640" /></span>` : `<span class="theme-explorer-image-wrap theme-game-icon" aria-hidden="true">${icon}</span>`;
   return `<div class="theme-explorer-card-wrap"><button type="button" class="theme-explorer-card theme-game-card" data-action="game-launch" data-game-id="${esc(game.id)}" data-theme-key="${esc(shelfId)}:${esc(game.id)}">${image}<span class="theme-explorer-card-body"><strong>${esc(game.title)}</strong><small>${esc(game.subtitle)}</small><span class="theme-explorer-meta">${esc(meta)}</span></span></button></div>`;
 }
 function themeGameShelf(games) {
