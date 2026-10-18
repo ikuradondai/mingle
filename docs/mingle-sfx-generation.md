@@ -64,7 +64,7 @@ Surprise has measurable material in the first 0.5 seconds (first-500-ms RMS -22.
 
 ## Current runtime note
 
-The current implementation starts both reaction sounds immediately (`0 s` scheduling delay) so the audio impact stays aligned with the fast visual pop. The current adopted assets are: click 1.760 s decoded (applause candidate), flip 0.800 s, theme 1.760 s, confetti/fireworks/ribbons/cards 5.000 s each, same 1.080 s, and surprise 1.200 s. The click prompt requested 1.8 s from ElevenLabs and decoded to 1.760 s. `artifacts/audio-preview/unused/mingle-next-person.mp3` and `artifacts/audio-preview/unused/_gen_next_person.py` are intermediate files from a separate next-person experiment, are not referenced by the current mapping, and remain excluded from staging.
+The current implementation starts both reaction sounds immediately (`0 s` scheduling delay) so the audio impact stays aligned with the fast visual pop. The current adopted assets are: click 1.760 s decoded (applause candidate), flip 0.800 s, theme 1.760 s, confetti/fireworks/ribbons/cards 5.000 s each, same 1.200 s (latest cheer replacement), and surprise 1.200 s (latest cheer replacement). The click prompt requested 1.8 s from ElevenLabs and decoded to 1.760 s. `artifacts/audio-preview/unused/mingle-next-person.mp3` and `artifacts/audio-preview/unused/_gen_next_person.py` are intermediate files from a separate next-person experiment, are not referenced by the current mapping, and remain excluded from staging.
 
 ## Restored short reaction assets
 
@@ -73,3 +73,16 @@ The long-batch flip and reaction assets were restored byte-for-byte from commit 
 ## Applause click replacement
 
 The selected click replacement is the audience applause candidate `artifacts/audio-audition/applause-20261018/05-audience-blessing.mp3`, copied byte-for-byte to `dist/assets/audio/mingle-card-click.mp3`. It is 1.760 seconds, active RMS -27.82 dBFS, decoded peak -9.46 dBFS, and SHA-256 `6F3912B83CCC7A4F4DF1ADF43048D7A45CAB09E5AA03B70E03D75557355B54E8`. The adopted runtime gain remains `0.75`; only the click cache URL changed to `v=22-applause-20261018`. The original five applause candidates and measurements remain in `artifacts/audio-audition/applause-20261018/manifest.json`. No subjective listening claim is made.
+
+## Reaction cheer replacement
+
+Generated 2026-10-19 with the existing ElevenLabs Sound Generation API workflow from `C:/dev/king-quests/tools/generate_sfx_elevenlabs.py`, using the existing `C:/dev/king-quests/.env` key without recording its value. Only the two reaction assets were regenerated. `reaction-same` requests an immediate bright multi-person “Yeah/Yes” cheer for joyful agreement; `reaction-surprise` requests a distinct positive multi-person “Whoa/Ooh/Wow” exclamation for happy surprise. Both prompts exclude applause, instruments, electronic/metal sounds, fear, screams, and booing.
+
+The generated MP3s were decoded and leveled offline with PyAV/libmp3lame to a decoded peak near -4.5 dBFS, preserving the requested short duration and 44.1 kHz stereo format. Measurements below use decoded PCM and mono active RMS; they are waveform measurements, not subjective listening judgments.
+
+| asset | decoded duration | active RMS | peak | first 0.5 s RMS | SHA-256 |
+| --- | ---: | ---: | ---: | ---: | --- |
+| reaction-same | 1.200 s | -22.17 dBFS | -4.50 dBFS | -18.97 dBFS | `18D1B51F31FA0A1C53E9377B29FF0EAEDEAB7676615A1219612C3B98448A4B26` |
+| reaction-surprise | 1.200 s | -17.97 dBFS | -4.54 dBFS | -14.58 dBFS | `BE0A1EBE582DC864E3AFB34CE8ADA8540CBD24CFF66934D7C8174991908CF78F` |
+
+The existing reaction runtime gains remain unchanged at `0.85` for same and `0.65` for surprise; all other audio assets and behavior remain unchanged. The reaction URLs now use cache-buster `v=24-cheer-20261019`. No local audio playback/listen tool was available in the current environment (no native audio app or browser tab was exposed), so no subjective audition claim is made.
