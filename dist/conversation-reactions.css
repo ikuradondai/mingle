@@ -5,9 +5,41 @@
 .conversation-reaction-icon-surprise .reaction-card-main { fill: var(--reaction-blue, #1769e8); stroke: var(--reaction-blue, #1769e8); }
 .conversation-reaction-icon .reaction-spark { fill: none; stroke: var(--reaction-coral, #ff6b72); stroke-width: 1.5; stroke-linecap: round; }
 .conversation-reaction-effect { position: absolute; z-index: 4; inset: 50% auto auto 50%; width: 220px; height: 150px; transform: translate(-50%, -50%); pointer-events: none; user-select: none; overflow: visible; }
-.reaction-effect-image { position: absolute; left: 50%; top: 50%; display: block; width: var(--reaction-image-width, 188px); max-width: none; height: auto; transform: translate(-50%, calc(20% - var(--reaction-lift, 0px))) scale(.48) rotate(-8deg); transform-origin: 50% 55%; opacity: 0; will-change: transform, opacity; user-select: none; pointer-events: none; animation: reaction-image-pop 980ms cubic-bezier(.18,.82,.2,1) both; }
+.reaction-effect-image { position: absolute; z-index: 2; left: 50%; top: 50%; display: block; width: var(--reaction-image-width, 188px); max-width: none; height: auto; transform: translate(-50%, calc(20% - var(--reaction-lift, 0px))) scale(.48) rotate(-8deg); transform-origin: 50% 55%; opacity: 0; will-change: transform, opacity; user-select: none; pointer-events: none; animation: reaction-image-pop 980ms cubic-bezier(.18,.82,.2,1) both; }
 .conversation-reaction-effect-surprise .reaction-effect-image { transform: translate(-50%, calc(20% - var(--reaction-lift, 0px))) scale(.48) rotate(9deg); animation-name: reaction-image-pop-wow; }
 @keyframes reaction-image-pop { 0% { opacity: 0; transform: translate(-50%, calc(20% - var(--reaction-lift, 0px))) scale(.48) rotate(-8deg); } 10% { opacity: 1; transform: translate(-50%, calc(-56% - var(--reaction-lift, 0px))) scale(1.05) rotate(-4deg); } 18% { opacity: 1; transform: translate(-50%, calc(-50% - var(--reaction-lift, 0px))) scale(1) rotate(-2deg); } 58% { opacity: .96; transform: translate(-50%, calc(-54% - var(--reaction-lift, 0px))) scale(.96) rotate(1deg); } 70% { opacity: .3; transform: translate(-50%, calc(-66% - var(--reaction-lift, 0px))) scale(.9) rotate(4deg); } 100% { opacity: 0; transform: translate(-50%, calc(-92% - var(--reaction-lift, 0px))) scale(.78) rotate(8deg); } }
 @keyframes reaction-image-pop-wow { 0% { opacity: 0; transform: translate(-50%, calc(20% - var(--reaction-lift, 0px))) scale(.48) rotate(9deg); } 10% { opacity: 1; transform: translate(-50%, calc(-56% - var(--reaction-lift, 0px))) scale(1.08) rotate(5deg); } 18% { opacity: 1; transform: translate(-50%, calc(-50% - var(--reaction-lift, 0px))) scale(1) rotate(2deg); } 58% { opacity: .96; transform: translate(-50%, calc(-54% - var(--reaction-lift, 0px))) scale(.96) rotate(-1deg); } 70% { opacity: .3; transform: translate(-50%, calc(-66% - var(--reaction-lift, 0px))) scale(.9) rotate(-4deg); } 100% { opacity: 0; transform: translate(-50%, calc(-92% - var(--reaction-lift, 0px))) scale(.78) rotate(-8deg); } }
 @media (max-width: 520px) { .conversation-reaction-effect { width: min(220px, calc(100vw - 32px)); height: 132px; } }
-@media (prefers-reduced-motion: reduce) { .conversation-reaction-effect { transform: translate(-50%, -50%); } .reaction-effect-image, .conversation-reaction-effect-surprise .reaction-effect-image { display: block; opacity: 1; animation: none; transform: translate(-50%, calc(-50% - var(--reaction-lift, 0px))) scale(1) rotate(0); } }
+/* Dynamic reaction particles stay inside the existing pointer-transparent overlay. */
+.reaction-effect-content { position:absolute; inset:0; display:block; overflow:visible; }
+.reaction-particles { position:absolute; z-index:1; inset:50% auto auto 50%; width:1px; height:1px; overflow:visible; pointer-events:none; }
+.reaction-particle { position:absolute; left:0; top:0; display:block; width:var(--particle-size); height:var(--particle-size); color:#ff6b72; opacity:0; transform:translate(-50%,-50%) rotate(var(--particle-rotate)) scale(.18); animation:reaction-particle-flight .76s cubic-bezier(.12,.78,.2,1) var(--particle-delay) both; filter:drop-shadow(0 2px 3px rgba(27,42,73,.16)); will-change:transform,opacity; }
+.reaction-particle svg { display:block; width:100%; height:100%; fill:currentColor; }
+.reaction-particle-heart { color:#ff5572; }
+.conversation-reaction-effect-heart .reaction-particle-heart { color:#f04a78; }
+.reaction-particle-heart:nth-child(3n) { color:#ff3f72; }
+.reaction-particle-heart:nth-child(4n) { color:#ff86a7; }
+.reaction-particle-heart svg { filter:drop-shadow(0 1px 0 rgba(255,255,255,.38)); }
+.reaction-particle-heart .particle-highlight { fill:rgba(255,255,255,.68); stroke:none; }
+.reaction-particle-sparkle { color:#ffd160; }
+.reaction-particle-sparkle:nth-child(3n) { color:#e5a51b; }
+.reaction-particle-sparkle svg { fill:#fff0a8; stroke:#fff8d1; stroke-width:.8; }
+.reaction-particle-sparkle:nth-child(3n) svg { fill:#f4bd35; stroke:#ffe29a; }
+.reaction-particle-dot { color:#63c6b2; }
+.conversation-reaction-effect-calm .reaction-particle { color:#9b8be8; }
+.conversation-reaction-effect-calm .reaction-particle-dot { color:#79a8d8; }
+.conversation-reaction-effect-confetti .reaction-particle { color:#ff7f66; }
+.conversation-reaction-effect-confetti .reaction-particle:nth-child(3n) { color:#ffd160; }
+.conversation-reaction-effect-confetti .reaction-particle:nth-child(4n) { color:#63c6b2; }
+@keyframes reaction-particle-flight {
+  0% { opacity:0; transform:translate(-50%,calc(-50% - var(--reaction-lift, 0px))) rotate(var(--particle-rotate)) scale(.18); }
+  12% { opacity:1; transform:translate(calc(-50% + var(--particle-x) * .16),calc(-50% - var(--reaction-lift, 0px) + var(--particle-y) * .16)) rotate(calc(var(--particle-rotate) * .35)) scale(.86); }
+  42% { opacity:1; transform:translate(calc(-50% + var(--particle-x) * .58),calc(-50% - var(--reaction-lift, 0px) + var(--particle-y) * .58)) rotate(calc(var(--particle-rotate) * .85)) scale(1.08); }
+  72% { opacity:.86; transform:translate(calc(-50% + var(--particle-drift-x) * .86),calc(-50% - var(--reaction-lift, 0px) + var(--particle-drift-y) * .82)) rotate(calc(var(--particle-rotate) * 1.25)) scale(.94); }
+  100% { opacity:0; transform:translate(calc(-50% + var(--particle-drift-x)),calc(-50% - var(--reaction-lift, 0px) + var(--particle-drift-y))) rotate(calc(var(--particle-rotate) * 1.7)) scale(.56); }
+}
+@media(prefers-reduced-motion:reduce) {
+  .conversation-reaction-effect { transform:translate(-50%,-50%); }
+  .reaction-particle { animation:none; opacity:0; display:none; }
+  .reaction-effect-image,.conversation-reaction-effect-surprise .reaction-effect-image { display:block; animation:none; opacity:1; transform:translate(-50%,calc(-50% - var(--reaction-lift, 0px))) scale(1) rotate(0); }
+}
