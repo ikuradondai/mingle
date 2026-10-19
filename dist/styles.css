@@ -1896,9 +1896,7 @@ body.solo-play .app-shell[data-screen="play"] .solo-answer-actions{display:grid;
 }
 @media(prefers-reduced-motion:reduce){.shared-question-card.is-revealed .shared-card-copy{animation:none}}
 
-/* Keep every answer state on the same vivid Mingle action color and reserve
-   the hint row exactly, including when the hint text becomes visible. */
-.shared-actions .play-action-reveal,.shared-actions .play-action-next-person,.shared-actions .play-action-next-card{background:var(--blue);box-shadow:0 8px 18px rgba(23,105,232,.16)}
+/* Reserve the hint row exactly, including when the hint text becomes visible. */
 .answer-style-slot{height:32px;min-height:32px;box-sizing:border-box}
 .shared-question-card.is-revealed .shared-card-copy{animation:none}
 @media (prefers-reduced-motion: no-preference){.shared-question-card.reveal-motion .shared-card-copy{animation:shared-card-copy-reveal .32s cubic-bezier(.2,.75,.25,1) both}}
