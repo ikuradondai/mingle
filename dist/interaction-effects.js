@@ -1,6 +1,13 @@
 // Short, canvas-based feedback for successful interactions. This module has no
 // app dependencies so it can be imported by both the browser bundle and SSR.
 const TONES = new Set(['bright', 'confetti', 'heart', 'calm']);
+const VARIANTS = {
+  bright: new Set(['crossfan', 'fountain', 'swoosh']),
+  confetti: new Set(['crossfan', 'fountain', 'ribbon']),
+  heart: new Set(['bloom', 'swoosh', 'fountain']),
+  calm: new Set(['bloom', 'swoosh']),
+};
+const DEFAULT_VARIANT = { bright: 'crossfan', confetti: 'ribbon', heart: 'bloom', calm: 'swoosh' };
 const MAX_DPR = 2;
 const MAX_PARTICLES = 96;
 const MAX_ACTIVE = 4;
@@ -23,6 +30,7 @@ const palette = {
 
 function random() { return Math.random(); }
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+function normalizeVariant(tone, variant) { return VARIANTS[tone]?.has(variant) ? variant : DEFAULT_VARIANT[tone]; }
 function reducedMotion() {
   try { return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true; } catch { return false; }
 }
@@ -92,23 +100,36 @@ function drawParticle(particle) {
   }
   context.restore();
 }
-function particleKinds(tone) {
+function particleKinds(tone, variant) {
+  if (variant === 'fountain') return tone === 'heart' ? ['heart', 'heart', 'spark', 'spark'] : ['spark', 'confetti', 'spark', 'ribbon'];
+  if (variant === 'swoosh' || variant === 'ribbon') return tone === 'heart' ? ['heart', 'ribbon', 'spark', 'heart'] : ['ribbon', 'ribbon', 'spark', 'confetti'];
+  if (variant === 'bloom') return tone === 'heart' ? ['heart', 'heart', 'heart', 'spark'] : ['spark', 'spark', 'ribbon'];
   if (tone === 'heart') return ['heart', 'heart', 'spark', 'ribbon'];
   if (tone === 'confetti') return ['confetti', 'confetti', 'ribbon', 'spark'];
   if (tone === 'calm') return ['spark', 'spark', 'ribbon'];
   return ['spark', 'spark', 'confetti', 'heart', 'ribbon'];
 }
-function createParticles({ x, y, tone, participantCount, width, quiet }) {
+function createParticles({ x, y, tone, participantCount, width, variant, quiet }) {
   const baseCount = tone === 'calm' ? (participantCount >= 2 ? 24 : 16) : participantCount >= 2 ? 52 : 30;
   const count = quiet ? 1 : clamp(Math.round(baseCount * clamp(width / 300, .75, 1.5)), tone === 'calm' ? 10 : 18, MAX_PARTICLES);
   const colors = palette[tone];
-  const kinds = particleKinds(tone);
+  const kinds = particleKinds(tone, variant);
   const spread = quiet ? Math.min(70, width * .2) : clamp(width * (participantCount >= 2 ? 0.55 : 0.4), 100, 260);
   return Array.from({ length: count }, (_, index) => {
-    const angle = -Math.PI / 2 + (random() - .5) * (participantCount >= 2 ? 1.45 : 1.05);
-    const speed = quiet ? 0 : 2.8 + random() * (participantCount >= 2 ? 5.8 : 4.2);
+    const side = index % 2 === 0 ? -1 : 1;
+    const angle = variant === 'bloom'
+      ? random() * Math.PI * 2
+      : variant === 'swoosh' || variant === 'ribbon'
+        ? (side < 0 ? Math.PI * .92 : Math.PI * .08) + (random() - .5) * .48
+        : variant === 'crossfan'
+          ? (side < 0 ? -.2 : Math.PI + .2) + (random() - .5) * .9
+          : -Math.PI / 2 + (random() - .5) * (participantCount >= 2 ? 1.45 : 1.05);
+    const speed = quiet ? 0 : variant === 'bloom' ? 2.5 + random() * 5.4 : 2.8 + random() * (participantCount >= 2 ? 5.8 : 4.2);
+    const originX = variant === 'crossfan' ? x + side * (8 + random() * 10) : x + (random() - .5) * 16;
+    const originY = variant === 'fountain' ? y + 4 + random() * 8 : y + (random() - .5) * 12;
     const kind = kinds[index % kinds.length];
-    return { x: x + (random() - .5) * 16, y: y + (random() - .5) * 12, vx: Math.cos(angle) * speed * (random() > .56 ? 1.18 : .82), vy: Math.sin(angle) * speed, gravity: quiet ? 0 : .035 + random() * .045, drag: .985 + random() * .01, sway: (random() - .5) * .08, size: quiet ? 8 : 4 + random() * (participantCount >= 2 ? 10 : 7), rotation: random() * Math.PI, spin: (random() - .5) * .18, alpha: .9, age: random() * 35, life: quiet ? REDUCED_DURATION : DURATION, color: colors[Math.floor(random() * colors.length)], kind, spread };
+    const gravity = quiet ? 0 : variant === 'fountain' ? .09 + random() * .07 : variant === 'bloom' ? .018 + random() * .028 : .035 + random() * .045;
+    return { x: originX, y: originY, vx: Math.cos(angle) * speed * (random() > .56 ? 1.18 : .82), vy: Math.sin(angle) * speed, gravity, drag: .985 + random() * .01, sway: variant === 'swoosh' || variant === 'ribbon' ? (random() > .5 ? 1 : -1) * (.12 + random() * .13) : (random() - .5) * .08, size: quiet ? 8 : 4 + random() * (participantCount >= 2 ? 10 : 7), rotation: random() * Math.PI, spin: (random() - .5) * .18, alpha: .9, age: random() * 35, life: quiet ? REDUCED_DURATION : DURATION, color: colors[Math.floor(random() * colors.length)], kind, spread, variant };
   });
 }
 function draw(now) {
@@ -148,18 +169,19 @@ function cleanupOverlay(width = getViewport().width, height = getViewport().heig
   overlay?.remove?.(); overlay = null; context = null;
 }
 
-export function playInteractionBurst({ x, y, tone = 'bright', participantCount = 1, width = 200 } = {}) {
+export function playInteractionBurst({ x, y, tone = 'bright', participantCount = 1, width = 200, variant } = {}) {
   const canvas = ensureOverlay();
   if (!canvas || !context) return null;
   const { width: viewportWidth, height: viewportHeight } = getViewport();
   const quiet = reducedMotion();
   const safeTone = TONES.has(tone) ? tone : 'bright';
+  const safeVariant = normalizeVariant(safeTone, variant);
   const safeCount = Number.isFinite(participantCount) ? participantCount : 1;
   const safeWidth = Number.isFinite(width) ? clamp(width, 120, 500) : 200;
   const id = ++burstId;
   while (bursts.size >= (quiet ? 2 : MAX_ACTIVE)) bursts.delete(bursts.keys().next().value);
   const origin = { x: clamp(Number.isFinite(Number(x)) ? Number(x) : viewportWidth / 2, 0, viewportWidth), y: clamp(Number.isFinite(Number(y)) ? Number(y) : viewportHeight / 2, 0, viewportHeight) };
-  const burst = { started: globalThis.performance?.now?.() || Date.now(), duration: quiet ? REDUCED_DURATION : DURATION, particles: createParticles({ ...origin, tone: safeTone, participantCount: safeCount, width: safeWidth, quiet }) };
+  const burst = { started: globalThis.performance?.now?.() || Date.now(), duration: quiet ? REDUCED_DURATION : DURATION, variant: safeVariant, particles: createParticles({ ...origin, tone: safeTone, participantCount: safeCount, width: safeWidth, variant: safeVariant, quiet }) };
   bursts.set(id, burst);
   scheduleDraw();
   return () => { bursts.delete(id); if (!bursts.size) cleanupOverlay(viewportWidth, viewportHeight); };

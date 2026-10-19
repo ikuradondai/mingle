@@ -1,0 +1,17 @@
+{
+  "provider": "ElevenLabs Sound Generation API",
+  "model": "eleven_text_to_sound_v2",
+  "generatedAt": "2026-10-19",
+  "generationWorkflow": "C:/dev/king-quests/tools/generate_sfx_elevenlabs.py",
+  "promptSource": "C:/temp/mingle-feedback-prompts.json",
+  "providerSuccessObserved": true,
+  "providerRequestIdsRecorded": false,
+  "postProcess": "MP3 decode measurement; group-applause and confetti-pop attenuated 6 dB; sparkle-clap boosted 9 dB; calm-air boosted 12 dB and re-encoded for decoded headroom",
+  "assets": {
+    "feedback-group-applause": {"src":"/assets/audio/interaction-feedback/feedback-group-applause.mp3?v=2-20261019","requestedDurationSeconds":1.35,"decodedDurationSeconds":1.32,"sampleRate":44100,"channels":2,"activeRmsDbfs":-22.77,"peakDbfs":-5.37,"leadingSilenceSeconds":0,"sha256":"733ee54ee552b515594694c428c8c1a1f517841f5956fa5a54f44c7ec0054b93","prompt":"Short bright real acoustic applause from a small cheerful group, several distinct hand claps with natural uneven timing, warm joyful celebration, quick clean tail, no speech, no music, no electronic sounds, no bell, no metal, no retro game sound"},
+    "feedback-confetti-pop": {"src":"/assets/audio/interaction-feedback/feedback-confetti-pop.mp3?v=2-20261019","requestedDurationSeconds":1.2,"decodedDurationSeconds":1.2,"sampleRate":44100,"channels":2,"activeRmsDbfs":-27.88,"peakDbfs":-5.35,"leadingSilenceSeconds":0.009,"sha256":"50cd61de7ec69763fa31358dacd9f31d6c68331c182629fd86c52eb54be5bac1","prompt":"Short real party confetti pop: a small paper cracker pop followed by light paper streamers fluttering, playful bright celebration, natural acoustic texture, quick clean tail, no speech, no music, no electronic sounds, no explosion, no gunshot"},
+    "feedback-sparkle-clap": {"src":"/assets/audio/interaction-feedback/feedback-sparkle-clap.mp3?v=2-20261019","requestedDurationSeconds":1.25,"decodedDurationSeconds":1.24,"sampleRate":44100,"channels":2,"activeRmsDbfs":-24.52,"peakDbfs":-11.72,"leadingSilenceSeconds":0,"sha256":"2ee791ad20ea87cca68f703cb7826de1f912c3c441a437aecdd2b093f9453066","prompt":"Soft airy celebratory shimmer made from delicate glassy sparkle and one light human clap, warm and uplifting, subtle natural room tail, short sound effect, no speech, no melody, no synthetic bell, no retro game sound"},
+    "feedback-heart-pop": {"src":"/assets/audio/interaction-feedback/feedback-heart-pop.mp3?v=2-20261019","requestedDurationSeconds":1.2,"decodedDurationSeconds":1.2,"sampleRate":44100,"channels":2,"activeRmsDbfs":-23.37,"peakDbfs":-5.16,"leadingSilenceSeconds":0,"sha256":"1dd7e117e09ae2e9d4ff320105b2c685c121735a11bc6628eb4f213908fb5988","prompt":"Soft joyful heart-like pop: a gentle airy puff and rounded playful pop with a tiny warm human clap, affectionate celebration, natural organic sound, short clean decay, no speech, no melody, no synthetic bell, no electronic UI sound"},
+    "feedback-calm-air": {"src":"/assets/audio/interaction-feedback/feedback-calm-air.mp3?v=2-20261019","requestedDurationSeconds":1.05,"decodedDurationSeconds":1.04,"sampleRate":44100,"channels":2,"activeRmsDbfs":-31.42,"peakDbfs":-8.78,"leadingSilenceSeconds":0,"sha256":"8c60c299c51065deb21558b8c13fe30d630a98377708a50b06cb6429af217b62","prompt":"Very gentle calming paper and air movement, one soft natural rustle with a quiet warm breath-like whoosh, reassuring and understated, short clean fade, no speech, no music, no bell, no electronic sound"}
+  }
+}

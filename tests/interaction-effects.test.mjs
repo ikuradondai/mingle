@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { playInteractionBurst, __resetInteractionEffectsForTest } from '../dist/interaction-effects.js';
 
 function installDom({ reduced = false } = {}) {
-  const calls = { append: 0, raf: [], cancel: 0, clear: 0, draw: 0, fill: 0, stroke: 0, resize: 0, removed: 0 };
+  const calls = { append: 0, raf: [], cancel: 0, clear: 0, draw: 0, fill: 0, stroke: 0, resize: 0, removed: 0, translate: [] };
   const context = {
     setTransform() {}, clearRect() { calls.clear += 1; }, save() {}, restore() {},
-    translate() {}, rotate() {}, beginPath() {}, closePath() {}, moveTo() {}, lineTo() {},
+    translate(x, y) { calls.translate.push([x, y]); }, rotate() {}, beginPath() {}, closePath() {}, moveTo() {}, lineTo() {},
     bezierCurveTo() {}, quadraticCurveTo() {}, fill() { calls.fill += 1; }, fillRect() { calls.fill += 1; }, stroke() { calls.stroke += 1; },
   };
   const canvas = { isConnected: true, dataset: {}, style: {}, setAttribute() {}, getContext() { return context; }, remove() { this.isConnected = false; calls.removed += 1; } };
@@ -69,5 +69,20 @@ test('reduced motion uses a quiet burst and rapid taps remain bounded', () => {
     assert.ok(calls.fill <= 2, 'reduced motion should draw only quiet sparkles');
     calls.raf.at(-1)?.(1200);
     assert.equal(calls.removed, 1, 'reduced motion should clean up quickly');
+  } finally { __resetInteractionEffectsForTest(); }
+});
+
+test('explicit variants produce distinct trajectories and unknown variants fall back safely', () => {
+  const { calls } = installDom();
+  try {
+    playInteractionBurst({ x: 195, y: 300, tone: 'bright', participantCount: 3, width: 420, variant: 'crossfan' });
+    calls.raf.at(-1)?.(1000);
+    const crossfanXs = calls.translate.slice(0, 8).map(([x]) => x);
+    assert.ok(crossfanXs.some((x) => x < 195) && crossfanXs.some((x) => x > 195), 'crossfan should leave both sides of the origin');
+    __resetInteractionEffectsForTest();
+    const fallback = playInteractionBurst({ x: 195, y: 300, tone: 'heart', variant: 'not-a-real-variant' });
+    assert.equal(typeof fallback, 'function', 'unknown variants should use the tone default');
+    calls.raf.at(-1)?.(1000);
+    assert.ok(calls.translate.length > 8, 'fallback burst should still render particles');
   } finally { __resetInteractionEffectsForTest(); }
 });

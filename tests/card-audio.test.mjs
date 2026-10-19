@@ -42,7 +42,16 @@ test("sound effects share the card preference, default on, and map completion va
     audio.playThemeSelectSound(); await new Promise((resolve) => setTimeout(resolve, 0));
     audio.playHomeThemeFanfare(); await new Promise((resolve) => setTimeout(resolve, 0));
     audio.playCompletionSound("fireworks"); await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.deepEqual(starts.map((buffer) => buffer.key), ["mingle-card-click.mp3", "mingle-theme-select.mp3", "mingle-home-theme-fanfare-v1.mp3", "mingle-celebration-fireworks.mp3"]);
+    audio.playInteractionSound("feedback-group", { tone: "bright", participantCount: 2 }); await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(starts.map((buffer) => buffer.key), ["mingle-card-click.mp3", "mingle-theme-select.mp3", "mingle-home-theme-fanfare-v1.mp3", "mingle-celebration-fireworks.mp3", "feedback-group-applause.mp3"]);
+    const interactionRequestCount = requests.length;
+    audio.playInteractionSound("unknown-feedback-key", { tone: "bright", participantCount: 2 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(requests.length, interactionRequestCount, "unknown interaction variants are silent");
+    audio.warmCardAudio(["feedback-group"]);
+    assert.equal(requests.length, interactionRequestCount, "repeated canonical key shares one byte cache");
+    audio.playInteractionSound("feedback-calm", { tone: "calm", participantCount: 1 }); await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(starts.at(-1).key, "feedback-calm-air.mp3", "calm interaction resolves to the quiet asset");
     const requestCount = requests.length;
     const startCount = starts.length;
     audio.stopCardAudio();

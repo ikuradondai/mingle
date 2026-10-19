@@ -11,6 +11,13 @@ const AUDIO_URLS = {
   "celebration-ribbons": "/assets/audio/mingle-celebration-ribbons.mp3?v=21-long-20261018",
   "celebration-cards": "/assets/audio/mingle-celebration-cards.mp3?v=21-long-20261018",
 };
+const INTERACTION_AUDIO_URLS = {
+  "feedback-group": "/assets/audio/interaction-feedback/feedback-group-applause.mp3?v=2-20261019",
+  "feedback-confetti": "/assets/audio/interaction-feedback/feedback-confetti-pop.mp3?v=2-20261019",
+  "feedback-sparkle": "/assets/audio/interaction-feedback/feedback-sparkle-clap.mp3?v=2-20261019",
+  "feedback-heart": "/assets/audio/interaction-feedback/feedback-heart-pop.mp3?v=2-20261019",
+  "feedback-calm": "/assets/audio/interaction-feedback/feedback-calm-air.mp3?v=2-20261019",
+};
 let enabled = true;
 let context = null;
 let soundRevision = 0;
@@ -19,6 +26,8 @@ const activeSourceKeys = new Map();
 const cancelledKeys = new Set();
 const audioBytesPromises = new Map();
 const audioBufferPromises = new Map();
+
+function audioUrlForKey(key) { return AUDIO_URLS[key] || INTERACTION_AUDIO_URLS[key] || null; }
 
 try {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -36,18 +45,18 @@ const INITIAL_AUDIO_KEYS = ["click", "theme", "home-theme-fanfare"];
 if (enabled) INITIAL_AUDIO_KEYS.forEach((key) => { fetchAudioBytes(key); });
 
 function fetchAudioBytes(key) {
-  if (audioBytesPromises.has(key)) return audioBytesPromises.get(key);
-  const url = AUDIO_URLS[key];
+  const url = audioUrlForKey(key);
   if (!url) return Promise.resolve(null);
+  if (audioBytesPromises.has(url)) return audioBytesPromises.get(url);
   let promise;
   try {
     promise = fetch(url, { cache: "force-cache" })
       .then((response) => { if (!response.ok) throw new Error(`audio-${response.status}`); return response.arrayBuffer(); })
-      .catch(() => { audioBytesPromises.delete(key); return null; });
+      .catch(() => { audioBytesPromises.delete(url); return null; });
   } catch {
     promise = Promise.resolve(null);
   }
-  audioBytesPromises.set(key, promise);
+  audioBytesPromises.set(url, promise);
   return promise;
 }
 
@@ -87,17 +96,19 @@ function stopActiveSources() {
 }
 
 function loadAudioBuffer(key, audioContext) {
-  if (audioBufferPromises.has(key)) return audioBufferPromises.get(key);
+  const url = audioUrlForKey(key);
+  if (!url) return Promise.resolve(null);
+  if (audioBufferPromises.has(url)) return audioBufferPromises.get(url);
   const promise = fetchAudioBytes(key)
     .then((data) => data ? audioContext.decodeAudioData(data.slice(0)) : null)
-    .then((buffer) => { if (!buffer) { audioBufferPromises.delete(key); audioBytesPromises.delete(key); } return buffer; })
-    .catch(() => { audioBufferPromises.delete(key); audioBytesPromises.delete(key); return null; });
-  audioBufferPromises.set(key, promise);
+    .then((buffer) => { if (!buffer) { audioBufferPromises.delete(url); audioBytesPromises.delete(url); } return buffer; })
+    .catch(() => { audioBufferPromises.delete(url); audioBytesPromises.delete(url); return null; });
+  audioBufferPromises.set(url, promise);
   return promise;
 }
 
 function playAudioKey(key, gainValue = 0.72, delaySeconds = 0) {
-  if (!enabled || !AUDIO_URLS[key]) return;
+  if (!enabled || !audioUrlForKey(key)) return;
   cancelledKeys.delete(key);
   const revision = ++soundRevision;
   try {
@@ -146,4 +157,12 @@ export function stopReactionSound() {
 export function playCompletionSound(variant) {
   if (typeof variant !== "string") return;
   playAudioKey(`celebration-${variant}`, 0.7);
+}
+
+export function playInteractionSound(key, profile = {}) {
+  if (typeof key !== "string" || !audioUrlForKey(key)?.includes("/interaction-feedback/")) return;
+  const count = Number(profile?.participantCount) || 1;
+  const tone = profile?.tone;
+  const gain = tone === "calm" ? (count >= 2 ? 0.48 : 0.34) : count >= 2 ? 0.78 : 0.56;
+  playAudioKey(key, gain);
 }

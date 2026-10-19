@@ -18,10 +18,11 @@ import { renderAd } from "./ad-config.js";
 import { playableSavedSets } from "./my-set.js";
 import { resetStudioEntryState } from "./studio-state.js";
 import { buildFacebookShareUrl, buildShareText, buildXShareUrl } from "./share-text.js";
-import { isCardAudioEnabled, toggleCardAudio, stopCardAudio, stopReactionSound, playFlipSound, playUiClick, playThemeSelectSound, playHomeThemeFanfare, playCompletionSound, playReactionSound, warmCardAudio } from "./card-audio.js";
+import { isCardAudioEnabled, toggleCardAudio, stopCardAudio, stopReactionSound, playFlipSound, playUiClick, playThemeSelectSound, playHomeThemeFanfare, playCompletionSound, playReactionSound, playInteractionSound, warmCardAudio } from "./card-audio.js";
 import { answerStyleForCard } from "./answer-style.js";
 import { reactionIcon, reactionEffectMarkup } from "./conversation-reactions.js";
 import { playInteractionBurst } from "./interaction-effects.js";
+import { interactionFeedbackFor } from "./interaction-feedback.js";
 import { cardDesignForSession, soloMotifForDeck } from "./card-design.js";
 import { CREATOR_PRESET_IDS, normalizeCreatorDesign, effectiveCreatorAdult } from "./creator-metadata.js";
 import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, rankThemeRecommendations, themeExplorerBookmarks, toggleThemeExplorerBookmark, themeExplorerExperienced, toggleThemeExplorerExperienced } from "./theme-explorer.js";
@@ -622,7 +623,7 @@ function render() {
       const target = event.target?.closest?.("button,[data-action]");
       if (!target || !root.contains(target) || target.disabled || target.getAttribute("aria-disabled") === "true") return;
       if (target.dataset.audio === "home-theme-fanfare") return;
-      if (["reveal", "theme-select", "sponsor-select", "game-launch", "finish", "reaction"].includes(target.dataset.action)) return;
+      if (["reveal", "theme-select", "sponsor-select", "game-launch", "finish", "reaction", "next-answer", "pass", "choose-deck", "solo-start", "choose-myset-start"].includes(target.dataset.action)) return;
       playUiClick();
     }, true);
     audioClickBound = true;
@@ -677,7 +678,7 @@ function render() {
   if (state.screen === "play" && state.session) {
     warmCardAudio(isRoundComplete(state.session) || isFinished(state.session)
       ? ["celebration-confetti", "celebration-fireworks", "celebration-ribbons", "celebration-cards"]
-      : ["flip", "reaction-same", "reaction-surprise"]);
+      : ["flip", "reaction-same", "reaction-surprise", "feedback-group", "feedback-confetti", "feedback-sparkle", "feedback-heart", "feedback-calm"]);
   }
   if (revealMotionPending) {
     const motionCard = root.querySelector('.shared-question-card.reveal-motion');
@@ -2831,19 +2832,24 @@ function reactionVisualProfile(session) {
 }
 function triggerPlayActionBurst(action, session, target = null) {
   if (!session) return;
-  if (session.mode === "solo" && action !== "reveal") return;
+  if (session.mode === "solo" && !["reveal", "theme"].includes(action)) {
+    try { playUiClick(); } catch {}
+    return;
+  }
   try {
     const rect = target && typeof target.left === 'number' ? target : target?.getBoundingClientRect?.();
     const profile = reactionVisualProfile(session);
-    playInteractionBurst({ x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2, y: rect ? rect.top + rect.height / 2 : window.innerHeight / 2, tone: profile.tone, participantCount: profile.participantCount, width: rect?.width || 200 });
+    const feedback = interactionFeedbackFor({ tone: profile.tone, action, participantCount: profile.participantCount });
+    playInteractionBurst({ x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2, y: rect ? rect.top + rect.height / 2 : window.innerHeight / 2, tone: feedback.tone, participantCount: feedback.participantCount, width: rect?.width || 200, variant: feedback.variant });
+    if (action !== "reveal") playInteractionSound(feedback.soundKey, feedback);
   } catch {}
 }
-function queueThemeBurst(target) {
-  try { const rect = target?.getBoundingClientRect?.(); pendingThemeBurst = rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height } : null; const queued = pendingThemeBurst; window.setTimeout(() => { if (pendingThemeBurst === queued) pendingThemeBurst = null; }, 1200); } catch { pendingThemeBurst = null; }
+function queueThemeBurst(target, action = "theme") {
+  try { const rect = target?.getBoundingClientRect?.(); pendingThemeBurst = rect ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height, action } : null; const queued = pendingThemeBurst; window.setTimeout(() => { if (pendingThemeBurst === queued) pendingThemeBurst = null; }, 1200); } catch { pendingThemeBurst = null; }
 }
 function emitPendingThemeBurst(session) {
-  const rect = pendingThemeBurst; pendingThemeBurst = null;
-  if (session && rect) triggerPlayActionBurst("reveal", session, rect);
+  const pending = pendingThemeBurst; pendingThemeBurst = null;
+  if (session && pending) triggerPlayActionBurst(pending.action || "theme", session, pending);
 }
 function reactionBurstMarkup(burst) {
   return reactionEffectMarkup(burst.reaction, burst.stage, reactionVisualProfile(state.session)).replace(" aria-hidden=\"true\">", ` data-reaction-burst-id="${burst.id}" aria-hidden="true">`);
@@ -2988,14 +2994,15 @@ async function handleAction(event) {
         state.selectedDeckId = state.selectedDeckIds[0] || id;
       } else { state.selectedDeckId = id; state.selectedDeckIds = [id]; state.selectedMySetId = null; state.participantTab = participantRuleForDeck(deck) === 'pair' ? 'pair' : 'group'; }
     }
-    playThemeSelectSound();
     state.adultConfirmed = false; state.themeOptionsOpen = state.themeMode !== "mixed" && Boolean(selectedDeck?.adultOnly || (selectedDeck && canOfferR18(selectedDeck))); state.error = "";
-    if (startsThemeOnSelect(selectedDeck, { solo: state.themeMode === "solo", mixed: state.themeMode === "mixed" })) {
-      queueThemeBurst(event.currentTarget);
+    const startsImmediately = startsThemeOnSelect(selectedDeck, { solo: state.themeMode === "solo", mixed: state.themeMode === "mixed" });
+    if (startsImmediately) {
+      queueThemeBurst(event.currentTarget, "theme");
       if (state.themeMode === "solo") startSelectedSoloDeck();
       else startSelectedGroupDeck(id);
       return;
     }
+    playThemeSelectSound();
     state.focusSelector = `[data-theme-key="${event.currentTarget.dataset.themeKey}"]`; render(); return;
   }
   if (action === "sponsor-select") {
@@ -3003,7 +3010,7 @@ async function handleAction(event) {
     await startSponsorSet(event.currentTarget.dataset.sponsorId || '');
     return;
   }
-  if (action === "reveal") { const previous = ensureSession(); const actionRect = event.currentTarget.getBoundingClientRect(); playFlipSound(); const next = revealCard(previous); if (next === previous) return; state.session = next; revealMotionPending = true; persist(previous); render(); triggerPlayActionBurst("reveal", next, actionRect); return; }
+  if (action === "reveal") { const previous = ensureSession(); const actionRect = event.currentTarget.getBoundingClientRect(); const next = revealCard(previous); if (next === previous) return; playFlipSound(); state.session = next; revealMotionPending = true; persist(previous); render(); triggerPlayActionBurst("reveal", next, actionRect); return; }
   if (action === "home") {
     const leavingExternalContext = Boolean(state.shared || state.venue || location.search.includes("share=") || location.search.includes("venue="));
     clearCompletionRecallSession(state.session);
@@ -3476,8 +3483,8 @@ async function handleAction(event) {
     render();
     return;
   }
-  if (action === "choose-deck") { queueThemeBurst(event.currentTarget); startSelectedGroupDeck(event.currentTarget.dataset.deck); return; }
-  if (action === "solo-start") { queueThemeBurst(event.currentTarget); startSelectedSoloDeck(); return; }
+  if (action === "choose-deck") { queueThemeBurst(event.currentTarget, "theme"); startSelectedGroupDeck(event.currentTarget.dataset.deck); return; }
+  if (action === "solo-start") { queueThemeBurst(event.currentTarget, "theme"); startSelectedSoloDeck(); return; }
   if (action === "solo-history-open") { state.soloHistoryOpen = true; state.soloHistory = []; state.soloHistoryCursor = null; state.soloHistoryHasMore = false; if (state.account.user) loadSoloHistory(false); else { state.account.returnAfterAuth = true; state.account.open = state.account.enabled; state.account.status = "ログイン後に保存したメモを読み込みます。"; render(); } return; }
   if (action === "solo-history-close") { state.soloHistoryOpen = false; state.soloHistoryEditing = null; render(); return; }
   if (action === "solo-history-more") { loadSoloHistory(true); return; }
@@ -3538,7 +3545,7 @@ async function handleAction(event) {
     const pendingHasR18 = set.hasR18 === true || (Array.isArray(set.card_ids) && set.card_ids.some((id) => canonicalCard(id, state.account.customCards)?.r18 === true));
     if (state.themeMode !== 'solo' && participantRuleForSavedSet(set, 'group') === 'pair' && state.participants.length !== 2) { state.error = "2人専用です。参加者を変更してください。"; render(); return; }
     state.error = ""; state.account.pendingSet = pendingHasR18 ? { set: { ...set, hasR18: true }, consented: state.adultConfirmed === true } : null;
-    queueThemeBurst(event.currentTarget);
+    queueThemeBurst(event.currentTarget, "theme");
     try { playSavedSet(set); if (state.screen === "play" && state.session) emitPendingThemeBurst(state.session); else pendingThemeBurst = null; } catch (error) { state.error = error.message; render(); }
     return;
   }
