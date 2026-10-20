@@ -98,7 +98,8 @@ function themeFits(theme) {
   return participantCountAllowed(rule, state.count);
 }
 function base(content) {
-  root.innerHTML = `<style>.speaker-fade{animation:business-speaker-fade .22s ease-out}@keyframes business-speaker-fade{from{opacity:.45;transform:translateY(3px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.speaker-fade{animation:none}}</style><div class="shell play"><header class="topbar"><a class="brand" href="/business.html?orgId=${encodeURIComponent(state.orgId)}">Mingle.Cards</a><span>企業プレイ</span><span class="spacer"></span><a href="/business.html?orgId=${encodeURIComponent(state.orgId)}">管理へ戻る</a></header>${state.error ? `<div class="notice error" role="alert">${esc(state.error)}</div>` : ""}${content}</div>`;
+  const orgName = state.workspace?.organization?.name || "法人スペース";
+  root.innerHTML = `<style>.speaker-fade{animation:business-speaker-fade .22s ease-out}@keyframes business-speaker-fade{from{opacity:.45;transform:translateY(3px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){.speaker-fade{animation:none}}</style><div class="shell play"><header class="topbar"><a class="brand" href="/business.html?orgId=${encodeURIComponent(state.orgId)}" aria-label="Mingle.Cards ホーム"><img class="brand-logo" src="/assets/mingle-cards-masthead.png" alt="Mingle.Cards" /></a><span class="workspace-name">${esc(orgName)}</span><a class="play-label" href="/business-play.html?orgId=${encodeURIComponent(state.orgId)}" aria-current="page">企業プレイ</a><span class="spacer"></span><a href="/business.html?orgId=${encodeURIComponent(state.orgId)}">概要</a><a href="/business-activities.html?orgId=${encodeURIComponent(state.orgId)}">アクティビティ</a><a href="/business-marketplace.html?orgId=${encodeURIComponent(state.orgId)}">法人カード</a></header>${state.error ? `<div class="notice error" role="alert">${esc(state.error)}</div>` : ""}${content}</div>`;
   bind();
 }
 function tags(themeId) {
