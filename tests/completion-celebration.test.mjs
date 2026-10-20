@@ -55,13 +55,13 @@ test("celebration selection avoids repeating the previous pattern", () => {
   assert.notEqual(second, first);
 });
 
-test("canvas setup failure keeps the static return affordance and delay", () => {
+test("asset setup failure keeps the static return affordance and delay", () => {
   const fake = fakeDom({ transformThrows: true });
   let completed = 0;
   const celebration = startCompletionCelebration({ ...fake, onComplete: () => { completed += 1; } });
   assert.equal(fake.overlay.removed, false);
   assert.equal(fake.body.children.some((child) => child.inert), true);
-  assert.equal(fake.timers.size, 2);
+  assert.equal(fake.timers.size, 3);
   assert.equal(fake.rafs.size, 0);
   celebration.stop();
   assert.equal(completed, 0);
@@ -73,18 +73,18 @@ test("re-entry stops the previous instance before starting the next", () => {
   let firstCompleted = 0;
   const first = startCompletionCelebration({ ...fake, duration: 10000, onComplete: () => { firstCompleted += 1; } });
   assert.equal(fake.timers.size, 3);
-  assert.equal(fake.rafs.size, 1);
+  assert.equal(fake.rafs.size, 0);
   const second = startCompletionCelebration({ ...fake, duration: 10000 });
   assert.equal(firstCompleted, 0);
   assert.equal(fake.timers.size, 3);
-  assert.equal(fake.rafs.size, 1);
+  assert.equal(fake.rafs.size, 0);
   second.stop();
   assert.equal(fake.timers.size, 0);
   assert.equal(fake.rafs.size, 0);
   first.stop();
 });
 
-test("canvas context failure keeps the static return affordance and delay", () => {
+test("missing asset events keep the static return affordance and delay", () => {
   const fake = fakeDom({ contextThrows: true });
   let completed = 0;
   const celebration = startCompletionCelebration({ ...fake, onComplete: () => { completed += 1; } });
@@ -93,4 +93,16 @@ test("canvas context failure keeps the static return affordance and delay", () =
   celebration.stop();
   assert.equal(completed, 0);
   assert.equal(fake.timers.size, 0);
+});
+
+test("completion uses a generated layered art asset while preserving the return control", () => {
+  const fake = fakeDom();
+  const celebration = startCompletionCelebration({ ...fake, random: () => 0, duration: 3000 });
+  assert.match(fake.overlay.html, /completion-celebration-art/);
+  assert.match(fake.overlay.html, /\/assets\/completion\/(?:confetti|fireworks|ribbons|cards)-v1\.webp/);
+  assert.match(fake.overlay.html, /\/assets\/completion\/sprites\/foil-hero\.webp/);
+  assert.match(fake.overlay.html, /data-completion-celebration-close/);
+  assert.ok((fake.overlay.html.match(/data-sprite-index=/g) || []).length >= 6);
+  assert.match(fake.overlay.html, /--duration:3000ms/);
+  celebration.stop();
 });

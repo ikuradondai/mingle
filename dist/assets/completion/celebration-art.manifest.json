@@ -1,0 +1,47 @@
+{
+  "generator": "image_gen",
+  "sourceDirectory": "C:/Users/kuran/.codex/generated_images/01a15129-ae90-7a33-986e-98e1c84357c3",
+  "conversion": "Generated transparent PNG sprites resized to 640x640 WebP for runtime; no secrets or API data included.",
+  "sprites": [
+    {
+      "asset": "card-hero.webp",
+      "dimensions": {
+        "width": 640,
+        "height": 640
+      },
+      "bytes": 48604
+    },
+    {
+      "asset": "firework-hero.webp",
+      "dimensions": {
+        "width": 640,
+        "height": 640
+      },
+      "bytes": 237620
+    },
+    {
+      "asset": "foil-hero.webp",
+      "dimensions": {
+        "width": 640,
+        "height": 640
+      },
+      "bytes": 46928
+    },
+    {
+      "asset": "ribbon-hero.webp",
+      "dimensions": {
+        "width": 640,
+        "height": 640
+      },
+      "bytes": 29676
+    },
+    {
+      "asset": "star-hero.webp",
+      "dimensions": {
+        "width": 640,
+        "height": 640
+      },
+      "bytes": 66682
+    }
+  ]
+}

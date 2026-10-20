@@ -21,7 +21,7 @@ import { buildFacebookShareUrl, buildShareText, buildXShareUrl } from "./share-t
 import { isCardAudioEnabled, toggleCardAudio, stopCardAudio, stopReactionSound, playFlipSound, playUiClick, playThemeSelectSound, playHomeThemeFanfare, playCompletionSound, playReactionSound, playInteractionSound, warmCardAudio } from "./card-audio.js";
 import { answerStyleForCard } from "./answer-style.js";
 import { reactionIcon, reactionEffectMarkup } from "./conversation-reactions.js";
-import { playInteractionBurst } from "./interaction-effects.js";
+import { playInteractionBurst, preloadInteractionAssets } from "./interaction-effects.js";
 import { interactionFeedbackFor } from "./interaction-feedback.js";
 import { cardDesignForSession, soloMotifForDeck } from "./card-design.js";
 import { CREATOR_PRESET_IDS, normalizeCreatorDesign, effectiveCreatorAdult } from "./creator-metadata.js";
@@ -43,6 +43,7 @@ import { categoryVisibility, applyCategoryVisibility, applyThemeVisibility } fro
 import { gameParticipantGate } from "./game-participant-gate.js";
 import { consumeSocialGameIntent, saveSocialGameIntent } from "./social-game-intent.js";
 const root = document.querySelector("#app");
+let interactionAssetsPreloadScheduled = false;
 let completionFinishInFlight = false;
 let audioClickBound = false;
 let reactionState = null;
@@ -675,6 +676,12 @@ function render() {
   syncNavigationHistory();
   root.innerHTML = state.shared ? sharedView() : state.screen === "torisetsu" ? torisetsuScreenView() : state.screen === "participants" ? participantsView() : state.screen === "decks" ? decksView() : playView();
   bindThemeExplorerImages();
+  if (state.screen === "decks" && !interactionAssetsPreloadScheduled) {
+    interactionAssetsPreloadScheduled = true;
+    const preload = () => { try { preloadInteractionAssets(); } catch {} };
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(preload, { timeout: 1500 });
+    else window.setTimeout(preload, 0);
+  }
   if (state.screen === "play" && state.session) {
     warmCardAudio(isRoundComplete(state.session) || isFinished(state.session)
       ? ["celebration-confetti", "celebration-fireworks", "celebration-ribbons", "celebration-cards"]

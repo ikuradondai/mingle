@@ -15,6 +15,18 @@ let lastFrameTime = 0;
 let resizeBound = false;
 let burstId = 0;
 const bursts = new Map();
+let atlasImage = null;
+let atlasReady = false;
+let atlasScaleX = 1;
+let atlasScaleY = 1;
+const ATLAS_NATIVE = { width: 1774, height: 887 };
+// Alpha-bounded source rectangles measured from the generated PNG.
+const ATLAS_RECT = {
+  'card-fan': [8, 35, 457, 410], 'page-sweep': [484, 36, 929, 433],
+  'ribbon-relay': [934, 19, 1281, 441], 'confetti-cannon': [1306, 18, 1770, 434],
+  'star-comet': [18, 420, 475, 877], 'heart-bloom': [484, 429, 866, 877],
+  'heart-orbit': [914, 448, 1310, 877], 'soft-ripple': [1345, 467, 1759, 846],
+};
 
 const palette = {
   bright: ['#1769e8', '#13a7a0', '#f2b84b', '#ef6b73', '#fff8d5'],
@@ -31,9 +43,17 @@ function reducedMotion() {
   try { return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true; } catch { return false; }
 }
 function getViewport() {
-  const width = Number(globalThis.innerWidth) || 320;
-  const height = Number(globalThis.innerHeight) || 640;
+  const clientWidth = typeof document !== 'undefined' ? Number(document.documentElement?.clientWidth) : 0;
+  const clientHeight = typeof document !== 'undefined' ? Number(document.documentElement?.clientHeight) : 0;
+  const width = clientWidth > 0 ? clientWidth : Number(globalThis.innerWidth) || 320;
+  const height = clientHeight > 0 ? clientHeight : Number(globalThis.innerHeight) || 640;
   return { width, height };
+}
+function heroDrawBounds(particle) {
+  const rect = ATLAS_RECT[particle.variant];
+  const height = Math.max(124, particle.size * 4.4);
+  const ratio = rect ? (rect[2] - rect[0]) / (rect[3] - rect[1]) : 1;
+  return { width: height * ratio, height };
 }
 function ensureOverlay() {
   if (typeof document === 'undefined') return null;
@@ -51,6 +71,18 @@ function ensureOverlay() {
   resize();
   if (!resizeBound && globalThis.addEventListener) { globalThis.addEventListener('resize', resize); resizeBound = true; }
   return overlay;
+}
+function preloadInteractionAtlas() {
+  if (typeof Image === 'undefined' || atlasImage) return;
+  atlasImage = new Image();
+  atlasImage.decoding = 'async';
+  atlasImage.onload = () => {
+    atlasScaleX = (Number(atlasImage.naturalWidth) || ATLAS_NATIVE.width) / ATLAS_NATIVE.width;
+    atlasScaleY = (Number(atlasImage.naturalHeight) || ATLAS_NATIVE.height) / ATLAS_NATIVE.height;
+    atlasReady = true;
+  };
+  atlasImage.onerror = () => { atlasReady = false; atlasImage = null; };
+  atlasImage.src = '/assets/play/interaction-atlas-v1.webp';
 }
 function resize() {
   if (!overlay || !context) return;
@@ -76,6 +108,23 @@ function drawParticle(particle) {
   context.globalAlpha = alpha;
   context.translate(x, y);
   context.rotate(rotation);
+  if (particle.hero && atlasReady && atlasImage) {
+    const rect = ATLAS_RECT[particle.variant];
+    if (rect) {
+      const atlasHeight = Math.max(124, size * 4.4);
+      const sourceWidth = (rect[2] - rect[0]) * atlasScaleX;
+      const sourceHeight = (rect[3] - rect[1]) * atlasScaleY;
+      const atlasWidth = atlasHeight * sourceWidth / sourceHeight;
+      context.globalAlpha *= .92;
+      try {
+        context.drawImage(atlasImage, rect[0] * atlasScaleX, rect[1] * atlasScaleY, sourceWidth, sourceHeight, -atlasWidth / 2, -atlasHeight / 2, atlasWidth, atlasHeight);
+        context.restore();
+        return;
+      } catch {
+        // A decode or context failure falls through to the lightweight vector hero.
+      }
+    }
+  }
   context.fillStyle = particle.hero?.type === 'card' ? (particle.hero.index % 2 ? '#fffdf2' : '#fff8d5') : color;
   context.strokeStyle = color;
   context.lineWidth = Math.max(1, size * 0.12);
@@ -141,7 +190,7 @@ function particleKinds(tone, variant) {
 function createParticles({ x, y, tone, participantCount, width, variant, quiet }) {
   const heroLightCount = { 'card-fan': 16, 'page-sweep': 14, 'ribbon-relay': 14, 'star-comet': 10, 'heart-bloom': 16, 'heart-orbit': 16, 'soft-ripple': 7 }[variant];
   const baseCount = heroLightCount || (tone === 'calm' ? (participantCount >= 2 ? 24 : 16) : participantCount >= 2 ? 52 : 30);
-  const heroCount = quiet ? 0 : ({ 'card-fan': 6, 'page-sweep': 2, 'ribbon-relay': 3, 'star-comet': 3, 'heart-bloom': 5, 'heart-orbit': 6, 'soft-ripple': 3 }[variant] || 0);
+  const heroCount = quiet ? 0 : ({ 'card-fan': 1, 'page-sweep': 1, 'ribbon-relay': 1, 'confetti-cannon': 2, 'star-comet': 1, 'heart-bloom': 1, 'heart-orbit': 1, 'soft-ripple': 1 }[variant] || 0);
   const countFloor = heroLightCount ? heroCount + 6 : tone === 'calm' ? 10 : 18;
   const count = quiet ? 1 : variant === 'soft-ripple' ? 7 : clamp(Math.round(baseCount * clamp(width / 300, .75, 1.5)), countFloor, MAX_PARTICLES);
   const colors = palette[tone];
@@ -175,30 +224,33 @@ function createParticles({ x, y, tone, participantCount, width, variant, quiet }
     if (isHero && variant === 'star-comet') kind = 'spark';
     if (isHero && (variant === 'heart-bloom' || variant === 'heart-orbit')) kind = 'heart';
     if (isHero && variant === 'soft-ripple') kind = 'ripple';
+    if (isHero && variant === 'confetti-cannon') kind = 'paper';
     const gravity = quiet ? 0 : variant === 'fountain' || variant === 'confetti-cannon' ? .09 + random() * .07 : variant === 'heart-bloom' || variant === 'heart-orbit' || variant === 'bloom' || variant === 'soft-ripple' ? .018 + random() * .028 : .035 + random() * .045;
     const delay = variant === 'confetti-cannon' ? (index % 2) * 100 : variant === 'heart-bloom' ? (index % 5) * 22 + random() * 18 : 0;
     const secondarySize = 3 + random() * 4;
     const heroScale = participantCount >= 2 && tone !== 'calm' ? 1 : .76;
-    const size = quiet ? 8 : variant === 'confetti-cannon' ? 7 + random() * 5 : !isHero ? secondarySize
-      : variant === 'card-fan' ? heroScale * (32 + random() * 12)
-        : variant === 'page-sweep' ? heroScale * (30 + random() * 10)
+    const size = quiet ? 8 : !isHero ? secondarySize : variant === 'confetti-cannon' ? heroScale * (52 + random() * 10)
+      : variant === 'card-fan' ? heroScale * (60 + random() * 10)
+        : variant === 'page-sweep' ? heroScale * (58 + random() * 10)
           : variant === 'confetti-cannon' ? 9 + random() * 8
-            : variant === 'ribbon-relay' ? heroScale * (14 + random() * 10)
-              : variant === 'star-comet' ? heroScale * (index === 0 ? 24 : 14 + random() * 4)
-                : variant === 'heart-bloom' || variant === 'heart-orbit' ? heroScale * (16 + random() * 12)
-                  : variant === 'soft-ripple' ? heroScale * (18 + random() * 8)
+              : variant === 'ribbon-relay' ? heroScale * (36 + random() * 8)
+              : variant === 'star-comet' ? heroScale * 52
+                : variant === 'heart-bloom' || variant === 'heart-orbit' ? heroScale * (52 + random() * 8)
+                  : variant === 'soft-ripple' ? heroScale * 48
                     : secondarySize;
-    const hero = isHero ? { type: variant === 'card-fan' ? 'card' : variant === 'page-sweep' ? 'page' : variant === 'ribbon-relay' ? 'relay' : variant === 'star-comet' ? 'comet' : variant === 'heart-bloom' ? 'bloom' : variant === 'heart-orbit' ? 'orbit' : variant === 'soft-ripple' ? 'ripple' : null, index, count: heroCount } : null;
+    const hero = isHero ? { type: variant === 'card-fan' ? 'card' : variant === 'page-sweep' ? 'page' : variant === 'ribbon-relay' ? 'relay' : variant === 'confetti-cannon' ? 'cannon' : variant === 'star-comet' ? 'comet' : variant === 'heart-bloom' ? 'bloom' : variant === 'heart-orbit' ? 'orbit' : variant === 'soft-ripple' ? 'ripple' : null, index, count: heroCount } : null;
     if (hero) {
       hero.startX = x; hero.startY = y; hero.baseX = x; hero.baseY = y; hero.side = index % 2 ? 1 : -1; hero.scale = heroScale;
-      hero.angle = variant === 'card-fan' ? -.92 + index * .36 : 0;
-      hero.radius = variant === 'card-fan' ? (98 + (index % 3) * 18) * heroScale : 0;
-      hero.endX = variant === 'page-sweep' ? (170 + index * 34) * heroScale : 0;
-      hero.endY = variant === 'page-sweep' ? (-40 - index * 36) * heroScale : 0;
+      hero.angle = variant === 'card-fan' ? (heroCount === 1 ? .2 : -.92 + index * .36) : 0;
+      hero.radius = variant === 'card-fan' ? clamp(width * .35, 95, 180) * heroScale : 0;
+      hero.endX = variant === 'page-sweep' ? clamp(width * .38, 100, 220) * heroScale : 0;
+      hero.endY = variant === 'page-sweep' ? -100 * heroScale : 0;
       hero.delay = delay;
-      if (variant === 'heart-bloom') { hero.endX = (index - 2) * 34 * heroScale; hero.endY = (-118 - (index % 3) * 24) * heroScale; }
-      if (variant === 'heart-orbit') { hero.startX = x + hero.side * (130 + (index % 3) * 32) * heroScale; hero.startY = y - 50 * heroScale + (index % 2) * 18 * heroScale; hero.endX = (index - 2.5) * 16 * heroScale; hero.endY = (-260 - (index % 2) * 28) * heroScale; hero.controlX = hero.side * 150 * heroScale; hero.controlY = (-300 - (index % 3) * 15) * heroScale; }
-      if (variant === 'star-comet') { hero.startX = x + (index - 1) * 12 * heroScale; hero.startY = y + (index % 2) * 10 * heroScale; hero.endX = (index === 0 ? 120 : (index === 1 ? -82 : 78)) * heroScale; hero.endY = (-150 - index * 20) * heroScale; }
+      if (variant === 'heart-bloom') { hero.endX = 0; hero.endY = -185 * heroScale; }
+      if (variant === 'heart-orbit') { hero.side = 1; hero.startX = x - clamp(width * .28, 90, 150) * heroScale; hero.startY = y - 35 * heroScale; hero.endX = clamp(width * .08, 20, 42) * heroScale; hero.endY = -200 * heroScale; hero.controlX = clamp(width * .28, 90, 150) * heroScale; hero.controlY = -225 * heroScale; }
+      if (variant === 'star-comet') { hero.startX = x; hero.startY = y; hero.endX = clamp(width * .28, 80, 145) * heroScale; hero.endY = -220 * heroScale; }
+      if (variant === 'ribbon-relay') { hero.side = 1; hero.reach = clamp(width * .22, 70, 125) * heroScale; }
+      if (variant === 'confetti-cannon') { hero.startX = x + (index % 2 ? 1 : -1) * width * (.28 + random() * .06); hero.startY = y + 3; hero.endX = (index % 2 ? 1 : -1) * (70 + index * 16) * heroScale; hero.endY = (-150 - index * 24) * heroScale; hero.delay = (index % 2) * 100 + (index > 1 ? 35 : 0); }
       if (variant === 'soft-ripple') hero.radius = (25 + index * 22) * heroScale;
     }
     return { x: originX, y: originY, baseX: x, baseY: y, vx: Math.cos(angle) * speed * (random() > .56 ? 1.18 : .82), vy: Math.sin(angle) * speed, gravity, drag: .985 + random() * .01, sway: variant === 'heart-orbit' || variant === 'ribbon-relay' || variant === 'swoosh' || variant === 'ribbon' ? (random() > .5 ? 1 : -1) * (.12 + random() * .13) : (random() - .5) * .08, size, rotation: random() * Math.PI, spin: (random() - .5) * .18, alpha: .9, age: random() * 35, delay, life: quiet ? REDUCED_DURATION : DURATION, color: colors[Math.floor(random() * colors.length)], kind, spread, variant, hero };
@@ -231,7 +283,7 @@ function draw(now) {
           particle.rotation = (h.index ? -.18 : .14) + local * (h.index ? -.18 : .22);
         } else if (h.type === 'relay') {
           const direction = h.side;
-          particle.x = h.startX + direction * (160 + h.index * 38) * local;
+          particle.x = h.startX + direction * (h.reach || 100) * local;
           particle.y = h.startY - (62 + h.index * 24) * local;
           particle.tailX = -direction * 150;
           particle.tailY = 38;
@@ -240,6 +292,10 @@ function draw(now) {
           particle.x = h.startX + h.endX * local;
           particle.y = h.startY + h.endY * local;
           particle.rotation = Math.atan2(h.endY, h.endX);
+        } else if (h.type === 'cannon') {
+          particle.x = h.startX + h.endX * local;
+          particle.y = h.startY + h.endY * local + 90 * local * local;
+          particle.rotation = h.side * .18 + local * (h.index % 2 ? .5 : -.35);
         } else if (h.type === 'bloom') {
           particle.x = h.startX + h.endX * local;
           particle.y = h.startY + h.endY * local;
@@ -252,6 +308,14 @@ function draw(now) {
           particle.rotation = h.side * .2;
         } else if (h.type === 'ripple') {
           particle.x = h.startX; particle.y = h.startY; particle.radius = h.radius + local * (95 + h.index * 20);
+        }
+        if (atlasReady && atlasImage && (h.type === 'page' || h.type === 'orbit')) {
+          const bounds = heroDrawBounds(particle);
+          const angle = particle.rotation;
+          const boundW = Math.abs(Math.cos(angle)) * bounds.width + Math.abs(Math.sin(angle)) * bounds.height;
+          const boundH = Math.abs(Math.sin(angle)) * bounds.width + Math.abs(Math.cos(angle)) * bounds.height;
+          particle.x = clamp(particle.x, boundW / 2, width - boundW / 2);
+          particle.y = clamp(particle.y, boundH / 2, height - boundH / 2);
         }
         particle.alpha = Math.max(0, (progress < .68 ? 1 : 1 - (progress - .68) / .32) * .86);
         if (particle.x < -particle.spread || particle.x > width + particle.spread || particle.y > height + 40) continue;
@@ -285,6 +349,11 @@ function cleanupOverlay(width = getViewport().width, height = getViewport().heig
 export function playInteractionBurst({ x, y, tone = 'bright', participantCount = 1, width = 200, variant } = {}) {
   const canvas = ensureOverlay();
   if (!canvas || !context) return null;
+  if (!atlasImage) {
+    const load = () => preloadInteractionAtlas();
+    if (typeof globalThis.requestIdleCallback === 'function') globalThis.requestIdleCallback(load, { timeout: 120 });
+    else globalThis.setTimeout?.(load, 0);
+  }
   const { width: viewportWidth, height: viewportHeight } = getViewport();
   const quiet = reducedMotion();
   const safeTone = TONES.has(tone) ? tone : 'bright';
@@ -300,7 +369,15 @@ export function playInteractionBurst({ x, y, tone = 'bright', participantCount =
   return () => { bursts.delete(id); if (!bursts.size) cleanupOverlay(viewportWidth, viewportHeight); };
 }
 
+// The host can call this after its theme list has rendered to warm the first
+// hero without delaying interaction or module evaluation.
+export function preloadInteractionAssets() { preloadInteractionAtlas(); }
+
 export function __resetInteractionEffectsForTest() {
   bursts.clear();
   cleanupOverlay();
+  atlasImage = null;
+  atlasReady = false;
+  atlasScaleX = 1;
+  atlasScaleY = 1;
 }

@@ -1,0 +1,67 @@
+{
+  "asset": "interaction-atlas-v1.webp",
+  "pngSource": "artifacts/completion-qa/interaction-atlas-v1.png",
+  "sourcePath": "C:/Users/kuran/.codex/generated_images/01a152fc-09a1-7301-ad0a-a49f99749438/exec-9ba24bbe-7e9d-46f8-ad32-9f3a1abbf9d4.png",
+  "sourceDimensions": {
+    "width": 1774,
+    "height": 887
+  },
+  "pngBytes": 1973800,
+  "webpBytes": 571510,
+  "prompt": "Transparent 2x4 atlas of eight separate polished 3D celebratory interaction objects: ivory card fan with navy outlines and marks; layered cream paper sheets; glossy coral cobalt gold curling ribbons; colorful foil confetti; faceted crystal star with luminous trail; glossy coral and pink hearts; hearts following two upward arcs; luminous blue gold ripple rings with petals. Each cell isolated, no text, no borders, consistent studio lighting, transparent background, playful premium UI motion graphics.",
+  "rects": {
+    "card-fan": [
+      8,
+      35,
+      457,
+      410
+    ],
+    "page-sweep": [
+      484,
+      36,
+      929,
+      433
+    ],
+    "ribbon-relay": [
+      934,
+      19,
+      1281,
+      441
+    ],
+    "confetti-cannon": [
+      1306,
+      18,
+      1770,
+      434
+    ],
+    "star-comet": [
+      18,
+      420,
+      475,
+      877
+    ],
+    "heart-bloom": [
+      484,
+      429,
+      866,
+      877
+    ],
+    "heart-orbit": [
+      914,
+      448,
+      1310,
+      877
+    ],
+    "soft-ripple": [
+      1345,
+      467,
+      1759,
+      846
+    ]
+  },
+  "conversion": "PNG retained for source QA; WebP quality 90 is used at runtime. Runtime scales source rects from naturalWidth/naturalHeight and preserves each rect aspect ratio.",
+  "runtimeDimensions": {
+    "width": 1774,
+    "height": 887
+  }
+}
