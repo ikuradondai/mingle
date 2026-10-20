@@ -2821,8 +2821,8 @@ function reactionCountsFor(session) {
   return session.reactionCounts;
 }
 
-const HEART_REACTION_THEMES = new Set(['date', 'couples', 'acquaintance-date', 'new-couple', 'moving-in', 'engaged-couple']);
-const CALM_REACTION_THEMES = new Set(['intimacy-distance', 'mom-friends-concerns', 'parent-50plus']);
+const HEART_REACTION_THEMES = new Set(['date', 'couples', 'acquaintance-date', 'new-couple', 'moving-in', 'engaged-couple', 'self-crush']);
+const CALM_REACTION_THEMES = new Set(['intimacy-distance', 'mom-friends-concerns', 'parent-50plus', 'self-breakup-decided', 'self-breakup-lingering', 'self-work', 'self-school', 'self-friends', 'self-people-tired', 'self-confidence', 'self-decision', 'self-future', 'self-path', 'self-checkin', 'ex-lovers', 'love-rivals']);
 const CONFETTI_REACTION_THEMES = new Set(['party-first-meeting', 'group-mixer', 'bar-first-meeting', 'late-night-diner', 'same-oshi-fans', 'classmates']);
 function reactionVisualProfile(session) {
   const card = session?.questions?.length ? session.questions[session.cursor] : null;

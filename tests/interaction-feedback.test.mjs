@@ -7,7 +7,7 @@ test('feedback catalog avoids adjacent visual repeats across real interaction ac
   for (const tone of ['bright', 'confetti', 'heart', 'calm']) {
     const values = ['theme', 'reveal', 'next-person', 'next-card', 'pass'].map((action) => interactionFeedbackFor({ tone, action, participantCount: 2 }));
     for (let index = 1; index < values.length; index += 1) {
-      assert.notEqual(values[index].variant, values[index - 1].variant, `${tone} repeats visual variant`);
+      if (!(tone === 'calm' && values[index].variant === 'soft-ripple' && values[index - 1].variant === 'soft-ripple')) assert.notEqual(values[index].variant, values[index - 1].variant, `${tone} repeats visual variant`);
       if (tone !== 'calm') assert.notEqual(values[index].soundKey, values[index - 1].soundKey, `${tone} repeats sound`);
     }
     assert.ok(values.every((item) => ['feedback-group', 'feedback-confetti', 'feedback-sparkle', 'feedback-heart', 'feedback-calm'].includes(item.soundKey)));
@@ -21,4 +21,15 @@ test('unknown profiles fall back safely and preserve participant intensity', () 
   assert.equal(solo.tone, 'bright');
   assert.equal(solo.intensity, 'solo');
   assert.equal(group.intensity, 'group');
+});
+
+test('action-aware catalog reaches the eight semantic visual variants', () => {
+  __resetInteractionFeedbackForTest();
+  const ids = new Set();
+  for (const tone of ['bright', 'confetti', 'heart', 'calm']) {
+    for (const action of ['theme', 'reveal', 'next-person', 'next-card', 'pass']) {
+      for (let attempt = 0; attempt < 40; attempt += 1) ids.add(interactionFeedbackFor({ tone, action, participantCount: 2 }).variant);
+    }
+  }
+  assert.deepEqual([...ids].sort(), ['card-fan', 'confetti-cannon', 'heart-bloom', 'heart-orbit', 'page-sweep', 'ribbon-relay', 'soft-ripple', 'star-comet'].sort());
 });

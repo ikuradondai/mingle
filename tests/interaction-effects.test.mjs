@@ -7,7 +7,7 @@ function installDom({ reduced = false } = {}) {
   const context = {
     setTransform() {}, clearRect() { calls.clear += 1; }, save() {}, restore() {},
     translate(x, y) { calls.translate.push([x, y]); }, rotate() {}, beginPath() {}, closePath() {}, moveTo() {}, lineTo() {},
-    bezierCurveTo() {}, quadraticCurveTo() {}, fill() { calls.fill += 1; }, fillRect() { calls.fill += 1; }, stroke() { calls.stroke += 1; },
+    bezierCurveTo() {}, quadraticCurveTo() {}, arc() {}, roundRect() {}, fill() { calls.fill += 1; }, fillRect() { calls.fill += 1; }, stroke() { calls.stroke += 1; },
   };
   const canvas = { isConnected: true, dataset: {}, style: {}, setAttribute() {}, getContext() { return context; }, remove() { this.isConnected = false; calls.removed += 1; } };
   globalThis.innerWidth = 390; globalThis.innerHeight = 844; globalThis.devicePixelRatio = 4;
@@ -84,5 +84,18 @@ test('explicit variants produce distinct trajectories and unknown variants fall 
     assert.equal(typeof fallback, 'function', 'unknown variants should use the tone default');
     calls.raf.at(-1)?.(1000);
     assert.ok(calls.translate.length > 8, 'fallback burst should still render particles');
+  } finally { __resetInteractionEffectsForTest(); }
+});
+
+test('the eight functional variants are accepted through the public API', () => {
+  const { calls } = installDom();
+  const ids = ['card-fan', 'page-sweep', 'ribbon-relay', 'confetti-cannon', 'star-comet', 'heart-bloom', 'heart-orbit', 'soft-ripple'];
+  try {
+    for (const [index, variant] of ids.entries()) {
+      const cancel = playInteractionBurst({ x: 195, y: 300, tone: index % 2 ? 'heart' : 'bright', participantCount: 2, width: 360, variant });
+      assert.equal(typeof cancel, 'function', `${variant} should return cleanup`);
+      cancel();
+    }
+    assert.ok(calls.append >= 1);
   } finally { __resetInteractionEffectsForTest(); }
 });
