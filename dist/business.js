@@ -137,6 +137,9 @@ function orgIdOf(o) {
 function nav() {
   const admin = ["owner", "admin"].includes(state.workspace?.role);
   const member = state.workspace?.role === "member";
+  const contentFlags = state.workspace?.contentFlags || {};
+  const hasActivityHub = contentFlags.businessActivities !== false || contentFlags.customQuiz !== false || contentFlags.generalQuiz !== false;
+  const current = (tab) => (state.tab === tab ? ' aria-current="page"' : "");
   return `<div class="workspace-header"><div><p class="eyebrow">企業スペース</p><h1>${esc(state.workspace?.organization?.name || "組織を選択")}</h1><p class="workspace-meta">${member ? "メンバーとして利用中" : `${roleLabel(state.workspace?.role)}として管理中`}</p></div><div class="workspace-switcher"><label for="business-org">組織</label><select id="business-org" data-org><option value="">組織を選択</option>${state.orgs
     .map((o) => {
       const id = orgIdOf(o);
@@ -144,7 +147,7 @@ function nav() {
     })
     .join(
       "",
-    )}</select></div></div><nav class="workspace-nav" aria-label="企業スペース"><button type="button" data-tab="overview" class="${state.tab === "overview" ? "primary" : ""}">概要</button><a class="nav-link" href="/business-activities.html?orgId=${encodeURIComponent(state.orgId)}">アクティビティ</a><a class="nav-link" href="/business-marketplace.html?orgId=${encodeURIComponent(state.orgId)}">法人カード</a>${admin ? ["members", "themes"].map((t) => `<button type="button" data-tab="${t}" class="${state.tab === t ? "primary" : ""}">${{ members: "メンバー", themes: "テーマ・機能" }[t]}</button>`).join("") : ""}<span class="spacer"></span><button type="button" class="new-org" data-new-org>＋組織を作成</button></nav>`;
+    )}</select></div></div><nav class="workspace-nav" aria-label="企業スペース"><button type="button" data-tab="overview" class="${state.tab === "overview" ? "primary" : ""}"${current("overview")}>概要</button>${hasActivityHub ? '<a class="nav-link" href="/business-activities.html?orgId=' + encodeURIComponent(state.orgId) + '">アクティビティ</a>' : ''}<a class="nav-link" href="/business-marketplace.html?orgId=${encodeURIComponent(state.orgId)}">法人カード</a>${admin ? ["members", "themes"].map((t) => `<button type="button" data-tab="${t}" class="${state.tab === t ? "primary" : ""}"${current(t)}>${{ members: "メンバー", themes: "テーマ・機能" }[t]}</button>`).join("") : ""}<span class="spacer"></span><button type="button" class="new-org" data-new-org>＋組織を作成</button></nav>`;
 }
 function overview() {
   const w = state.workspace || {};
@@ -223,7 +226,7 @@ function render() {
     shell(
       state.busy
         ? `<section class="panel"><h1>企業スペース</h1><p class="muted">組織情報を読み込み中…</p></section>`
-        : `<section class="panel"><h1>企業スペースを読み込めません</h1><p class="muted">時間をおいて、もう一度お試しください。</p><button type="button" data-retry>再試行</button></section>`,
+        : `<section class="panel"><h1>企業スペースを読み込めません</h1><p class="notice error">${esc(state.error || "組織情報を確認できませんでした。")}</p><button type="button" data-retry>再試行</button></section>`,
     );
     app.querySelector("[data-retry]")?.addEventListener("click", loadWorkspace);
     return;

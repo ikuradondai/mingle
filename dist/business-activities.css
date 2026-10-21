@@ -23,3 +23,24 @@
 .brand img,.bm-brand img{display:block;width:112px;height:auto;max-width:100%}.bm-brand{display:block;flex:0 0 auto}.topbar .brand{display:block;flex:0 0 auto}
 
 #business-activities-app [data-focus]:focus{outline:0}#business-activities-app .shell>.panel{background:transparent;border:0;box-shadow:none;padding:0}#business-activities-app .shell>.panel>h1{font-size:clamp(2rem,4vw,2.8rem);margin:34px 0 8px}#business-activities-app .activity-card{min-height:180px}
+
+/* Activities share the standard app's rounded cards while keeping the
+   management page's restrained editorial spacing. */
+#business-activities-app .shell { max-width: 1280px; padding-top: 20px; }
+#business-activities-app .activity-grid { gap: 12px; border: 0; }
+#business-activities-app .activity-card { min-height: 220px; border: 1px solid var(--line); border-radius: 18px; padding: 20px; background: #fff; box-shadow: 0 14px 34px rgba(23,35,59,.08); }
+#business-activities-app .activity-card:hover { border-color: #c8d8ea; background: #fff; box-shadow: 0 18px 38px rgba(23,35,59,.11); transform: translateY(-1px); }
+#business-activities-app .activity-card h2 { font-size: 1.16rem; letter-spacing: -.035em; }
+#business-activities-app .activity-card button, #business-activities-app .activity-editor button { min-height: 44px; border-radius: 12px; }
+#business-activities-app .activity-question { border-left: 0; border-radius: 22px; background: #fff; box-shadow: 0 14px 34px rgba(23,35,59,.08); }
+#business-activities-app .activity-options { gap: 10px; border: 0; }
+#business-activities-app .activity-options button { border: 1px solid var(--line); border-radius: 14px; box-shadow: none; }
+#business-activities-app .activity-options button:hover { border-color: #b7cce5; background: var(--blue-soft); }
+#business-activities-app .activity-setup, #business-activities-app .activity-editor { padding: 24px; border: 1px solid var(--line); border-radius: 22px; background: #fff; box-shadow: 0 14px 34px rgba(23,35,59,.08); }
+#business-activities-app .activity-setup input, #business-activities-app .activity-setup select, #business-activities-app .activity-editor input, #business-activities-app .activity-editor textarea, #business-activities-app .activity-editor select { min-height: 44px; border-radius: 12px; }
+#business-activities-app .quiz-row { border-radius: 14px; background: #fffdf9; }
+@media (max-width: 600px) {
+  #business-activities-app .activity-card { min-height: 0; }
+  #business-activities-app .activity-question { border-radius: 18px; }
+  #business-activities-app .activity-setup, #business-activities-app .activity-editor { padding: 18px 16px; border-radius: 18px; }
+}
