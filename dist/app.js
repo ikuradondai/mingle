@@ -1056,6 +1056,7 @@ const SOLO_TOPIC_ICONS = {
   "self-confidence": '<path d="M12 21v-9"/><path d="M12 12c0-3.5-2.4-5.5-6-5.5 0 3.5 2.4 5.5 6 5.5Z"/><path d="M12 14c0-3 2.2-5 5.5-5 0 3-2.2 5-5.5 5Z"/><path d="M8 21h8"/>',
   "self-decision": '<path d="M12 21v-7"/><path d="M12 14c0-3.5-2.5-4.5-5.5-5"/><path d="M12 14c0-3.5 2.5-4.5 5.5-5"/><path d="m6.5 6.5 0 2.5 2.5 0"/><path d="m17.5 6.5 0 2.5-2.5 0"/>',
   "self-future": '<path d="M3 18h18"/><path d="M6.5 18a5.5 5.5 0 0 1 11 0"/><path d="M12 6.5V9M5.2 9.7l1.6 1.4M18.8 9.7l-1.6 1.4"/>',
+  "self-discover": '<circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4.5 4.5M8 10.5h5M10.5 8v5"/>',
 };
 // 相談先の案内。自動検知や入力文の解析はせず、固定の文を静かに出すだけ。
 const SUPPORT_LINKS = {
@@ -1075,7 +1076,7 @@ function soloSupportView({ general = false, youth = false, dv = false } = {}) {
 function soloStartNoteView(deck) {
   if (!deck) return "";
   const support = soloSupportView({ general: deck.care === "distress", youth: deck.category === "school", dv: deck.care === "love" });
-  return support ? `<section class="solo-start-note" aria-label="はじめる前に">${support}</section>` : "";
+  return `<section class="solo-start-note" aria-label="はじめる前に"><p class="solo-skip-note">答えたくない問いは、飛ばしてかまいません。</p>${support}</section>`;
 }
 function soloTopicIcon(deck) { const path = SOLO_TOPIC_ICONS[String(deck?.id || "")] || '<circle cx="12" cy="12" r="7"/><path d="m12 8 1.2 2.6L16 12l-2.8 1.4L12 16l-1.2-2.6L8 12l2.8-1.4z"/>'; return `<svg viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`; }
 function participantRuleVisibleForParticipants(rule) {

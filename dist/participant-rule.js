@@ -34,7 +34,7 @@ export const PARTICIPANT_RULES = Object.freeze({
   'self-school': 'solo', 'self-club': 'solo', 'self-friends': 'solo',
   'self-values': 'solo', 'self-checkin': 'solo',
   'self-path': 'solo', 'self-people-tired': 'solo', 'self-confidence': 'solo',
-  'self-decision': 'solo', 'self-future': 'solo',
+  'self-decision': 'solo', 'self-future': 'solo', 'self-discover': 'solo',
 });
 const CARD_RULES = new Map([...decks, ...soloDecks].flatMap((deck) => [...(deck.questions || []), ...(deck.r18Questions || [])].map((card) => [card.id, PARTICIPANT_RULES[deck.id] || (deck.audience === 'solo' ? 'solo' : 'group')])));
 

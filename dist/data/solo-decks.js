@@ -1,6 +1,7 @@
 // Official one-person reflection themes. Keep this registry separate from the
-// regular 40-card group catalog: solo cards are fixed-order and solo-only.
-// Deck ids and card ids (<deckId>-01..-12) are kept stable: the 11 earlier themes had their
+// regular 40-card group catalog: solo cards are solo-only. Most reflection
+// themes are fixed-order; broad question banks can opt into shuffle order.
+// Deck ids and card ids (<deckId>-01..-12 for fixed themes, or the full bank for shuffled themes) are kept stable: the 11 earlier themes had their
 // title/subtitle/description/questions replaced in place, so saved notes, my-sets, shared sets
 // and in-progress sessions still resolve. NEVER delete a deck/card id; to retire a theme in the
 // future, set hidden: true on it instead (and keep it in catalog lookups).
@@ -366,6 +367,56 @@ export const soloDecks = [
       '今の安心度は、電池でいうと何%？ 10%上がると何がちがう？',
       'その毎日に近づくために、今週5分でできることは？',
       '今夜、自分をほっとさせるためにできることは？',
+    ],
+  }),
+  solo({
+    id: 'self-discover',
+    category: 'self',
+    questionOrder: 'shuffle',
+    title: '自分を知る40問',
+    subtitle: 'いまの自分を、軽やかに観察する',
+    description: '順番を決めず、どこからでも答えられる40問です。場面の問いは飛ばせます。小さな変化を一つ持ち帰れます。',
+    questions: [
+      '今の自分に、天気の名前をつけると？',
+      '今日、目に入って二度見したものは？',
+      '最近、予定外にちょっと笑ったのは？',
+      'この数日で、気づけば続けていたことは？',
+      '今の自分を友だちが一言で紹介すると？',
+      '思い出せそうなら、最近の小さな場面を一つ選ぶと？',
+      '答えにくければ飛ばしてOK。最近の小さな場面はどこで何をしていた？',
+      '答えにくければ飛ばしてOK。最近の小さな場面で顔や声は？',
+      '答えにくければ飛ばしてOK。最近の小さな場面で体はどう動いた？',
+      '答えにくければ飛ばしてOK。最近の小さな場面で浮かんだ言葉は？',
+      '答えにくければ飛ばしてOK。最近の場面の気持ちを色や温度でいうと？',
+      '答えにくければ飛ばしてOK。最近の小さな場面を外から見ると？',
+      '答えにくければ飛ばしてOK。安心できる最近の場面で起きたことは？',
+      '答えにくければ飛ばしてOK。安心できる場面に足した解釈は？',
+      '答えにくければ飛ばしてOK。思い出した場面を写真で切り取るなら？',
+      '答えにくければ飛ばしてOK。思い出した場面で守っていたものは？',
+      '答えにくければ飛ばしてOK。思い出した場面を1ミリ変えるなら？',
+      '答えにくければ飛ばしてOK。思い出した場面を遠くから見ると？',
+      '答えにくければ飛ばしてOK。思い出した場面の自分へ一言なら？',
+      '答えにくければ飛ばしてOK。思い出した場面で役立った工夫は？',
+      '最近「意外とできた」と思ったことは？',
+      '答えにくければ飛ばしてOK。最近「意外とできた」場面で使った力は？',
+      '苦手そうに見えて、実は助けになる自分の癖は？',
+      '思いどおりでないとき、調整のために何を試す？',
+      '気分を1ミリ動かすスイッチは？',
+      '元気が増える人との話題は？',
+      'ひとりに戻りたいとき、体に出る合図は？',
+      '頼みごとをするとき、自分を守る一言は？',
+      '断るとき、残したい関係や時間は？',
+      '迷ったとき、まず事実として確かめたいことは？',
+      'まだ起きていない予測を、一つ脇に置ける？',
+      'まだ起きていない予測を確かめる、2分の行動は？',
+      '「もし〜なら、〜する」と決めるなら？',
+      'いつものやり方に、遊びで足す一手は？',
+      '今週、先に予定へ入れたい小さな楽しみは？',
+      '明日の自分が助かる、今夜の2分は？',
+      'できたことを見つける印を一つ決めると？',
+      'うまくいかない日も、観察しておきたい変化は？',
+      '今日の問いから、手元に置く一言は？',
+      '次に自分へ聞くなら、どんな問い？',
     ],
   }),
 ];

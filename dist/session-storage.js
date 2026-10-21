@@ -77,7 +77,7 @@ function hydrate(record, now, options = {}) {
   if (customSet && (record.deckId !== 'my-set' || record.mixed !== false || deckIds.length !== 1 || deckIds[0] !== 'my-set')) throw new Error('decks');
   if (new Set(deckIds).size !== deckIds.length) throw new Error('decks');
   const sourceDecks = deckIds.map((id) => (solo && !customSet ? soloDecks : decks).find((deck) => deck.id === id));
-  if (solo && !customSet && (record.questionOrder !== 'fixed' || !sourceDecks[0] || sourceDecks[0].questions.length !== 12)) throw new Error('source');
+  if (solo && !customSet && (!sourceDecks[0] || sourceDecks[0].audience !== 'solo' || record.questionOrder !== (sourceDecks[0].questionOrder === 'shuffle' ? 'shuffle' : 'fixed'))) throw new Error('source');
   if (solo && !customSet && (record.mixed !== false || record.includeR18 !== false || record.includeChallenges !== false || record.adultConfirmed !== false)) throw new Error('solo-flags');
   if (!customSet && !solo && sourceDecks.some((deck) => !deck || !Array.isArray(deck.questions) || deck.questions.length !== 40)) throw new Error('source');
   if (!customSet && record.mixed && sourceDecks.some((deck) => deck.adultOnly)) throw new Error('mixed-adult');
@@ -87,9 +87,13 @@ function hydrate(record, now, options = {}) {
   if (!record.mixed && !customSet && ((record.includeR18 && record.adultConfirmed !== true) || (sourceDecks[0].adultOnly && record.adultConfirmed !== true))) throw new Error('consent');
   if (record.mixed && (record.includeR18 || record.adultConfirmed)) throw new Error('mixed-options');
   const soloMin = 6;
-  const soloMax = customSet ? 40 : 12;
+  const soloMax = 40;
   if (!Array.isArray(record.questionIds) || record.questionIds.length < (solo ? soloMin : customSet ? 6 : 40) || record.questionIds.length > (solo ? soloMax : 40) || record.questionIds.some((id) => typeof id !== 'string') || new Set(record.questionIds).size !== record.questionIds.length) throw new Error('questions');
-  if (solo && !customSet && (record.questionIds.length !== 12 || record.questionIds.some((id, index) => id !== sourceDecks[0].questions[index].id))) throw new Error('solo-order');
+  if (solo && !customSet) {
+    const source = sourceDecks[0];
+    if (record.questionOrder === 'fixed' && (record.questionIds.length !== 12 || record.questionIds.some((id, index) => id !== source.questions[index].id))) throw new Error('solo-order');
+    if (record.questionOrder === 'shuffle' && (record.questionIds.length !== source.questions.length || source.questions.some((card) => !record.questionIds.includes(card.id)))) throw new Error('solo-question-bank');
+  }
   const customQuestionIds = record.questionIds.filter((id) => id.startsWith('custom:'));
   hasCustom = hasCustom || customQuestionIds.length > 0;
   if (hasCustom && (!customSet || typeof record.ownerUserId !== 'string' || !/^[0-9a-f-]{8,100}$/i.test(record.ownerUserId))) throw new Error('owner');
