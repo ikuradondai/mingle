@@ -95,3 +95,14 @@ test('care flag marks distress and love-relationship themes only', () => {
     assert.equal(deck.care ?? undefined, expected, deck.id);
   }
 });
+
+test('self-discover cards stand alone: no dangling references and no skip-preamble', () => {
+  const bank = soloDecks.find((deck) => deck.id === 'self-discover');
+  assert.equal(bank.questions.length, 40);
+  for (const card of bank.questions) {
+    assert.doesNotMatch(card.text, /^(その|あの|この|それ)/u, `${card.id}: starts with a dangling demonstrative`);
+    for (const phrase of ['思い出した場面', '答えにくければ', '飛ばして']) {
+      assert.ok(!card.text.includes(phrase), `${card.id}: contains ${phrase}`);
+    }
+  }
+});
