@@ -96,7 +96,10 @@ export function sessionNeedsThemeAccess(session, account) {
   if (session.sponsorSet === true) return sessionHasR18(session) && !(isAgeConfirmed(account) && r18Visible(account));
   if (session.mode === 'solo' && !session.customSet) {
     const deck = soloDecks.find((item) => item.id === session.deckId);
-    const canonical = Boolean(deck && session.questionOrder === 'fixed' && session.questions?.length === 12 && session.questions.every((card, index) => card?.id === deck.questions[index]?.id && card.r18 !== true));
+    const expectedOrder = deck?.questionOrder === 'shuffle' ? 'shuffle' : 'fixed';
+    const expectedIds = new Set(deck?.questions?.map((card) => card.id) || []);
+    const sessionIds = new Set(session.questions?.map((card) => card?.id) || []);
+    const canonical = Boolean(deck && session.questionOrder === expectedOrder && session.questions?.length === deck.questions.length && sessionIds.size === expectedIds.size && session.questions.every((card) => expectedIds.has(card?.id) && card.r18 !== true));
     if (!canonical) return true;
     if (isRegisteredAccount(account)) return false;
     const progressCursor = Number.isInteger(session.progressCursor) ? session.progressCursor : session.cursor;

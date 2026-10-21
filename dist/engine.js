@@ -45,13 +45,16 @@ export function createSession({ participants, deck, participantRule = 'group', a
   return { sessionId: createSessionId(), participants: names, participantRule: normalizedRule, deckId: deck.id, deckIds: [deck.id], mixed: false, questions, cursor: 0, unlockedUntil: GROUP_ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, roundSize: GROUP_ROUND_SIZE, adultConfirmed, includeR18, includeChallenges, revealed: false, answerIndex: 0, likes: {}, reactionCounts: { same: 0, surprise: 0 }, revealedQuestionIds: [] };
 }
 
-// One-person fixed-order session for ひとりで. Group participant rules
-// remain unchanged in createSession/createMixedSession.
-export function createSoloSession({ deck, participant = '自分' } = {}) {
-  if (!deck || deck.audience !== 'solo' || !Array.isArray(deck.questions) || deck.questions.length !== 12 || deck.questions.some((card) => card.r18 === true)) throw new Error('ソロテーマが不正です');
+// One-person reflection session for ひとりで. Fixed themes keep their
+// twelve-card flow; broad question banks may opt into a shuffled forty-card flow.
+export function createSoloSession({ deck, participant = '自分', random = Math.random } = {}) {
+  const fixed = deck?.questionOrder !== 'shuffle';
+  const validCount = fixed ? deck?.questions?.length === 12 : deck?.questions?.length >= 6 && deck?.questions?.length <= 40;
+  if (!deck || deck.audience !== 'solo' || !Array.isArray(deck.questions) || !validCount || deck.questions.some((card) => card.r18 === true)) throw new Error('ソロテーマが不正です');
   const name = typeof participant === 'string' && participant.trim() ? participant.trim() : '自分';
-  const questions = deck.questions.map((card) => ({ ...card, sourceDeckId: deck.id, r18: false }));
-  return { sessionId: createSessionId(), mode: 'solo', participants: [name], deckId: deck.id, deckIds: [deck.id], questionOrder: 'fixed', mixed: false, customSet: false, ownerUserId: null, customQuestions: [], questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, roundSize: ROUND_SIZE, adultConfirmed: false, includeR18: false, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, revealedQuestionIds: [] };
+  const sourceQuestions = deck.questions.map((card) => ({ ...card, sourceDeckId: deck.id, r18: false }));
+  const questions = fixed ? sourceQuestions : shuffle(sourceQuestions, random);
+  return { sessionId: createSessionId(), mode: 'solo', participants: [name], deckId: deck.id, deckIds: [deck.id], questionOrder: fixed ? 'fixed' : 'shuffle', mixed: false, customSet: false, ownerUserId: null, customQuestions: [], questions, cursor: 0, unlockedUntil: ROUND_SIZE, roundStart: 0, roundCount: 0, roundNumber: 1, roundSize: ROUND_SIZE, adultConfirmed: false, includeR18: false, includeChallenges: false, revealed: false, answerIndex: 0, likes: {}, reactionCounts: { same: 0, surprise: 0 }, revealedQuestionIds: [] };
 }
 
 // Build a session from a saved account set. Static IDs use the shipped catalog; custom IDs use validated owner snapshots.

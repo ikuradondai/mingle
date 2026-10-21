@@ -7,7 +7,7 @@ const LEGACY_IDS = [
   'self-love-now', 'self-crush', 'self-breakup-decided', 'self-breakup-lingering', 'self-strengths', 'self-work',
   'self-school', 'self-club', 'self-friends', 'self-values', 'self-checkin',
 ];
-const NEW_IDS = ['self-path', 'self-people-tired', 'self-confidence', 'self-decision', 'self-future'];
+const NEW_IDS = ['self-path', 'self-people-tired', 'self-confidence', 'self-decision', 'self-future', 'self-discover'];
 const DISTRESS_IDS = [
   'self-breakup-decided', 'self-breakup-lingering', 'self-work', 'self-school',
   'self-confidence', 'self-people-tired', 'self-future',
@@ -16,14 +16,14 @@ const LOVE_CARE_IDS = ['self-love-now'];
 
 import { BANNED } from './helpers/banned-words.mjs';
 
-test('solo catalog has 16 fixed-order non-adult solo themes with 12 questions each', () => {
-  assert.equal(soloDecks.length, 16);
+test('solo catalog keeps fixed themes at 12 and supports the 40-question shuffled bank', () => {
+  assert.equal(soloDecks.length, 17);
   assert.equal(soloDecks[0].id, 'self-love-now');
   for (const deck of soloDecks) {
     assert.equal(deck.audience, 'solo', deck.id);
-    assert.equal(deck.questionOrder, 'fixed', deck.id);
+    assert.equal(deck.questionOrder, deck.id === 'self-discover' ? 'shuffle' : 'fixed', deck.id);
     assert.equal(deck.adultOnly, false, deck.id);
-    assert.equal(deck.questions.length, 12, deck.id);
+    assert.equal(deck.questions.length, deck.id === 'self-discover' ? 40 : 12, deck.id);
     for (const card of deck.questions) assert.equal(card.r18, false, card.id);
   }
 });
@@ -35,6 +35,8 @@ test('legacy deck and card ids are preserved and new ids exist', () => {
     const deck = soloDecks.find((item) => item.id === id);
     assert.deepEqual(deck.questions.map((card) => card.id), Array.from({ length: 12 }, (_, i) => `${id}-${String(i + 1).padStart(2, '0')}`));
   }
+  const bank = soloDecks.find((item) => item.id === 'self-discover');
+  assert.deepEqual(bank.questions.map((card) => card.id), Array.from({ length: 40 }, (_, i) => `self-discover-${String(i + 1).padStart(2, '0')}`));
 });
 
 test('card ids are unique across the whole catalog and question texts are unique within a deck', () => {
@@ -82,7 +84,7 @@ test('titles, subtitles and descriptions avoid banned and diagnostic expressions
     }
     // builder を持つデッキ（自分のトリセツ）は専用ビルダーを開くので、12問とは書かない。
     if (deck.builder) assert.ok(!deck.description.includes('12問'), `${deck.id}: builder description must not mention 12問`);
-    else assert.ok(deck.description.includes('12問'), `${deck.id}: description must mention 12問`);
+    else assert.ok(deck.description.includes(deck.questionOrder === 'shuffle' ? '40問' : '12問'), `${deck.id}: description must mention its question count`);
     assert.ok(Array.from(deck.description).length <= 100, `${deck.id}: description too long`);
   }
 });
