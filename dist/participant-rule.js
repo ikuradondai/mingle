@@ -100,7 +100,7 @@ export function soloNicknameLabel(value) {
 
 // Only cards listed here are intentionally rewritten. Matching the original
 // text as well as the stable id keeps custom cards and edited snapshots safe.
-const SOLO_PERSONALIZED_CARDS = Object.freeze({
+export const SOLO_PERSONALIZED_CARDS = Object.freeze({
   'self-values-02': { source: '機嫌がよくなるスイッチは？', render: (name) => `${name}の機嫌がよくなるスイッチは？` },
   'self-values-07': { source: '自分の説明書に「こういうときは、そっとしておいて」と書くなら？', render: (name) => `${name}の説明書に「こういうときは、そっとしておいて」と書くなら？` },
   'self-checkin-07': { source: '今日がんばったことを一つ挙げるなら？', render: (name) => `${name}が今日がんばったことを一つ挙げるなら？` },
@@ -116,7 +116,7 @@ const SOLO_PERSONALIZED_CARDS = Object.freeze({
   'self-love-now-08': { source: '相手といるとき、好きだなと思える自分はどんな自分？', render: (name) => `相手といるとき、${name}が好きだなと思える自分はどんな自分？` },
   'self-crush-05': { source: 'その人の前で自然体でいられたとき、自分は何をしていた？', render: (name) => `その人の前で自然体でいられたとき、${name}は何をしていた？` },
   'self-breakup-decided-08': { source: '別れを決めて伝えた自分の、えらかったところは？', render: (name) => `別れを決めて伝えた${name}の、えらかったところは？` },
-  'self-breakup-lingering-08': { source: 'この経験で、自分について新しくわかったことは？', render: (name) => `この経験で、${name}について新しくわかったことは？` },
+  'self-breakup-lingering-08': { source: '人を大事にできる自分の、いいところは？', render: (name) => `人を大事にできる${name}の、いいところは？` },
   'self-friends-08': { source: '友だち付き合いで、自分のいいところは？', render: (name) => `友だち付き合いで、${name}のいいところは？` },
 });
 

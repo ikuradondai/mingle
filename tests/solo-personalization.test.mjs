@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { soloDecks } from '../dist/data/solo-decks.js';
-import { hasSoloQuestionPersonalization, normalizeSoloNickname, personalizeSoloQuestion, soloNicknameLabel } from '../dist/participant-rule.js';
+import { SOLO_PERSONALIZED_CARDS, hasSoloQuestionPersonalization, normalizeSoloNickname, personalizeSoloQuestion, soloNicknameLabel } from '../dist/participant-rule.js';
 
 const card = (id) => soloDecks.flatMap((deck) => deck.questions).find((question) => question.id === id);
 
@@ -31,4 +31,14 @@ test('template keeps quote and future-self perspectives intact', () => {
   const future = card('self-decision-07');
   assert.equal(personalizeSoloQuestion(future, 'あかりさん'), '1年後のあかりさんなら、今のあかりさんに何て言いそう？');
   assert.match(personalizeSoloQuestion(card('self-values-07'), 'あかり'), /「こういうときは、そっとしておいて」/u);
+});
+
+test('every personalized card source matches the current solo card text exactly', () => {
+  for (const [id, item] of Object.entries(SOLO_PERSONALIZED_CARDS)) {
+    const found = card(id);
+    assert.ok(found, `missing card: ${id}`);
+    assert.equal(found.text, item.source, `${id}: source is out of sync with solo-decks.js`);
+    assert.ok(hasSoloQuestionPersonalization(found), id);
+    assert.notEqual(personalizeSoloQuestion(found, 'テスト'), found.text, `${id}: nickname not applied`);
+  }
 });
