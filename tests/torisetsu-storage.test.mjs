@@ -58,9 +58,9 @@ test('opting in writes only mingle.torisetsu.v3, with the documented shape, and 
   assert.deepEqual(Object.keys(saved), ['version', 'savedAt', 'data']);
   assert.equal(saved.version, 3); assert.equal(saved.savedAt, '2026-10-13');
   assert.deepEqual(Object.keys(saved.data), ['name', 'needs', 'voice', 'values']);
-  assert.deepEqual(Object.keys(saved.data.needs), ['prediction', 'happy', 'hard', 'surprise', 'surpriseText', 'experiment', 'experimentText', 'done']);
-  assert.deepEqual(Object.keys(saved.data.voice), ['episodes', 'focus', 'intents', 'reply', 'replyText', 'surprise', 'surpriseText', 'experiment', 'experimentText', 'done']);
-  assert.deepEqual(Object.keys(saved.data.values), ['prediction', 'neg', 'pos', 'admire', 'surprise', 'surpriseText', 'experiment', 'experimentText', 'done']);
+  assert.deepEqual(Object.keys(saved.data.needs), ['prediction', 'predictionText', 'happy', 'hard', 'surprise', 'surpriseText', 'experiment', 'experimentText', 'done']);
+  assert.deepEqual(Object.keys(saved.data.voice), ['episodes', 'focus', 'intents', 'intentsText', 'reply', 'replyText', 'surprise', 'surpriseText', 'experiment', 'experimentText', 'done']);
+  assert.deepEqual(Object.keys(saved.data.values), ['prediction', 'predictionText', 'neg', 'pos', 'admire', 'surprise', 'surpriseText', 'experiment', 'experimentText', 'done']);
   assert.deepEqual(saved.data.needs.happy[0], { scene: 'sc_friend', memo: '久しぶりに友だちと長電話', feelings: ['hf_relief'], needs: ['nd_understood', 'nd_belong'] });
   assert.deepEqual(saved.data.needs.hard[0], { scene: 'sc_work', memo: '会議で意見を流された', surface: 'sf_irritated', deep: ['dp_uncared', 'dp_anxious'], needs: ['nd_understood'] });
   assert.equal(saved.data.needs.surprise, 'x:nd_understood'); assert.equal(saved.data.needs.done, true);

@@ -28,7 +28,7 @@ import { CREATOR_PRESET_IDS, normalizeCreatorDesign, effectiveCreatorAdult } fro
 import { themeExplorerImage, themeExplorerHistory, recordThemeExplorerStart, rankThemeRecommendations, themeExplorerBookmarks, toggleThemeExplorerBookmark, themeExplorerExperienced, toggleThemeExplorerExperienced } from "./theme-explorer.js";
 import { loadRecommendationLabels, recommendationLabel } from "./recommendation-labels.js";
 import { themeExampleForDeck } from "./theme-examples.js";
-import { createTorisetsuState, torisetsuView, applyAction as applyTorisetsuAction, loadTorisetsu, expireUndo as expireTorisetsuUndo, torisetsuViewKey, restoreNavigationView as restoreTorisetsuNavigationView, setDraftText as setTorisetsuText, draftComplete as torisetsuDraftComplete, isPicked as torisetsuIsPicked, finishLabel as torisetsuFinishLabel, composeManual as composeTorisetsuManual, canSendImage } from "./torisetsu.js";
+import { createTorisetsuState, torisetsuView, applyAction as applyTorisetsuAction, loadTorisetsu, expireUndo as expireTorisetsuUndo, torisetsuViewKey, restoreNavigationView as restoreTorisetsuNavigationView, setDraftText as setTorisetsuText, draftComplete as torisetsuDraftComplete, isPicked as torisetsuIsPicked, finishLabel as torisetsuFinishLabel, composeManual as composeTorisetsuManual, canSendImage, chipState as torisetsuChipState } from "./torisetsu.js";
 import { GUEST_THEME_IDS, countGuestThemes, countRegistrationThemes, canUseTheme as canUseThemeForAccount, sessionNeedsThemeAccess, isAgeConfirmed, canSeeTheme, canOfferR18Option, visibleFilterIds, sessionHasR18, canAccessSessionContent, isActiveVenueSession as isActiveVenueSessionFor, nextAgeConfirmedAt, groupRoomHref, r18Visible, setR18Visible, clearR18Visible, readR18Visible } from "./theme-access.js";
 import { participantRuleForDeck, participantRuleForSavedSet, participantRuleForSession, displayQuestionText, normalizeSoloNickname, soloNicknameLabel, personalizeSoloQuestion, hasSoloQuestionPersonalization } from "./participant-rule.js";
 import { consumeMinorityAuthIntent, clearMinorityAuthIntent } from "./minority-auth-intent.js";
@@ -2725,6 +2725,11 @@ function refreshTorisetsuDraft() {
   const record = root.querySelector("[data-ts-record]");
   if (record) { if (ts.draft && torisetsuDraftComplete(ts)) record.removeAttribute("aria-disabled"); else record.setAttribute("aria-disabled", "true"); }
   root.querySelectorAll("[data-pick-kind]").forEach((chip) => { const on = torisetsuIsPicked(ts, chip.dataset.pickKind, chip.dataset.pickKey); chip.setAttribute("aria-checked", String(on)); chip.classList.toggle("is-on", on); });
+  root.querySelectorAll(".ts-chip[data-group]:not([data-pick-kind])").forEach((chip) => {
+    const view = torisetsuChipState(ts, chip.dataset.group, chip.dataset.chip); if (!view) return;
+    chip.classList.toggle("is-on", view.on); chip.classList.toggle("is-dim", view.dim);
+    chip.setAttribute(chip.getAttribute("role") === "radio" ? "aria-checked" : "aria-pressed", String(view.on));
+  });
   const finish = root.querySelector("[data-ts-finish]"); if (finish) finish.textContent = torisetsuFinishLabel(ts);
   root.querySelectorAll("[data-ts-count]").forEach((count) => { const input = root.querySelector(`[data-ts-text="${count.dataset.tsCount}"]`); if (input) count.textContent = `${Array.from(input.value).length}/${input.maxLength}字`; });
 }

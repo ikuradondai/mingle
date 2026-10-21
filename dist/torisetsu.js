@@ -10,7 +10,7 @@ import {
 } from './data/torisetsu-content.js';
 import {
   needsInsights, voiceInsights, valuesInsights, needsLineup, voiceLineup, chapterReady, gapFor, heavyNote, crossLink,
-  teaser, surpriseOptions, tryOptions, pruneChoices, shortOfSurprise, textOfTry, effectiveFocus, focusVoices, focusChoices, replyOptions,
+  teaser, surpriseOptions, tryOptions, pruneChoices, shortOfSurprise, textOfTry, effectiveFocus, focusVoices, focusChoices, replyOptions, ownWords,
   needById, valueById, qualityById, patternById, sceneById, surfaceById, deepById, thoughtById, intentById, admireWhoById, dotsOf,
 } from './torisetsu-insight.js';
 import { soloNicknameLabel } from './participant-rule.js';
@@ -38,9 +38,9 @@ export function sanitizeText(value, max = TEXT_MAX, { trim = true } = {}) {
 const emptyChoice = () => ({ surprise: '', surpriseText: '', experiment: '', experimentText: '', done: false });
 export const emptyData = () => ({
   name: '',
-  needs: { prediction: [], happy: [], hard: [], ...emptyChoice() },
-  voice: { episodes: [], focus: '', intents: [], reply: '', replyText: '', ...emptyChoice() },
-  values: { prediction: [], neg: [], pos: [], admire: null, ...emptyChoice() },
+  needs: { prediction: [], predictionText: '', happy: [], hard: [], ...emptyChoice() },
+  voice: { episodes: [], focus: '', intents: [], intentsText: '', reply: '', replyText: '', ...emptyChoice() },
+  values: { prediction: [], predictionText: '', neg: [], pos: [], admire: null, ...emptyChoice() },
 });
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -58,38 +58,51 @@ const idList = (raw, allowed, max) => {
 const one = (raw, allowed) => (typeof raw === 'string' && allowed.has(raw) ? raw : '');
 const isObject = (raw) => Boolean(raw) && typeof raw === 'object' && !Array.isArray(raw);
 
+// 「自分で書く」の自由文。チップと合わせて、その層の上限（max）に数える（max 1 の層はどちらか一方）。
+// 自由文は記録の中に keyText として持つ。値が空のときは、キー自体を持たない。
+const OWN_FIELDS = ['surfaceText', 'feelingsText', 'deepText', 'needsText', 'thoughtsText', 'situationText', 'qualitiesText'];
+const withText = (obj, texts) => { for (const [key, value] of Object.entries(texts)) if (value) obj[key] = value; return obj; };
+const chipCap = (max, text) => (text ? Math.max(0, max - 1) : max);
+const ownTextsOf = (record) => OWN_FIELDS.map((key) => record?.[key]).filter(Boolean);
+
 function normalizeHappy(raw) {
   if (!isObject(raw)) return null;
-  const ep = { scene: one(raw.scene, SCENE_IDS), memo: sanitizeText(raw.memo), feelings: idList(raw.feelings, FEELING_IDS, 2), needs: idList(raw.needs, NEED_IDS, 2) };
-  return ep.scene || ep.memo || ep.feelings.length || ep.needs.length ? ep : null;
+  const feelingsText = sanitizeText(raw.feelingsText); const needsText = sanitizeText(raw.needsText);
+  const ep = withText({ scene: one(raw.scene, SCENE_IDS), memo: sanitizeText(raw.memo), feelings: idList(raw.feelings, FEELING_IDS, chipCap(2, feelingsText)), needs: idList(raw.needs, NEED_IDS, chipCap(2, needsText)) }, { feelingsText, needsText });
+  return ep.scene || ep.memo || ep.feelings.length || ep.needs.length || feelingsText || needsText ? ep : null;
 }
 function normalizeHard(raw) {
   if (!isObject(raw)) return null;
-  const ep = { scene: one(raw.scene, SCENE_IDS), memo: sanitizeText(raw.memo), surface: one(raw.surface, SURFACE_IDS), deep: idList(raw.deep, DEEP_IDS, 2), needs: idList(raw.needs, NEED_IDS, 2) };
-  return ep.scene || ep.memo || ep.surface || ep.deep.length || ep.needs.length ? ep : null;
+  const surfaceText = sanitizeText(raw.surfaceText); const deepText = sanitizeText(raw.deepText); const needsText = sanitizeText(raw.needsText);
+  const ep = withText({ scene: one(raw.scene, SCENE_IDS), memo: sanitizeText(raw.memo), surface: surfaceText ? '' : one(raw.surface, SURFACE_IDS), deep: idList(raw.deep, DEEP_IDS, chipCap(2, deepText)), needs: idList(raw.needs, NEED_IDS, chipCap(2, needsText)) }, { surfaceText, deepText, needsText });
+  return ep.scene || ep.memo || ep.surface || ep.deep.length || ep.needs.length || surfaceText || deepText || needsText ? ep : null;
 }
 function normalizeVoiceEp(raw) {
   if (!isObject(raw)) return null;
-  const thoughts = idList(raw.thoughts, THOUGHT_IDS, 2);
-  return thoughts.length ? { scene: one(raw.scene, SCENE_IDS), memo: sanitizeText(raw.memo), thoughts } : null;
+  const thoughtsText = sanitizeText(raw.thoughtsText);
+  const thoughts = idList(raw.thoughts, THOUGHT_IDS, chipCap(2, thoughtsText));
+  return thoughts.length || thoughtsText ? withText({ scene: one(raw.scene, SCENE_IDS), memo: sanitizeText(raw.memo), thoughts }, { thoughtsText }) : null;
 }
 const normalizeSideEpisode = (side) => (raw) => {
   if (!isObject(raw)) return null;
-  const situation = one(raw.situation, idSet(SITUATIONS[side]));
-  if (!situation) return null;
-  const value = one(raw.value, VALUE_IDS) || SITUATION_BY_ID[situation].value;
-  return { situation, value, memo: sanitizeText(raw.memo) };
+  const situationText = sanitizeText(raw.situationText);
+  const chip = one(raw.situation, idSet(SITUATIONS[side]));
+  if (!chip && !situationText) return null;
+  const value = one(raw.value, VALUE_IDS) || SITUATION_BY_ID[chip]?.value || '';
+  return withText({ situation: situationText ? '' : chip, value, memo: sanitizeText(raw.memo) }, { situationText });
 };
 function normalizeAdmire(raw) {
   if (!isObject(raw)) return null;
+  const qualitiesText = sanitizeText(raw.qualitiesText);
+  const cap = chipCap(2, qualitiesText);
   const seen = new Set(); const qualities = [];
   for (const q of Array.isArray(raw.qualities) ? raw.qualities : []) {
     const id = typeof q === 'string' ? q : q?.id;
-    if (typeof id !== 'string' || !QUALITY_BY_ID.has(id) || seen.has(id) || qualities.length >= 2) continue;
+    if (typeof id !== 'string' || !QUALITY_BY_ID.has(id) || seen.has(id) || qualities.length >= cap) continue;
     seen.add(id);
     qualities.push({ id, value: one(q?.value, VALUE_IDS) || QUALITY_BY_ID.get(id).value });
   }
-  return qualities.length ? { who: one(raw.who, WHO_IDS), qualities, memo: sanitizeText(raw.memo) } : null;
+  return qualities.length || qualitiesText ? withText({ who: one(raw.who, WHO_IDS), qualities, memo: sanitizeText(raw.memo) }, { qualitiesText }) : null;
 }
 function normalizeChoice(raw) {
   const out = emptyChoice();
@@ -109,25 +122,31 @@ export function normalizeData(raw) {
   if (!isObject(raw)) return data;
   data.name = sanitizeText(raw.name, NAME_MAX);
   const needs = isObject(raw.needs) ? raw.needs : {};
+  const needsPredictionText = sanitizeText(needs.predictionText);
   data.needs = {
-    prediction: idList(needs.prediction, NEED_IDS, 1),
+    prediction: needsPredictionText ? [] : idList(needs.prediction, NEED_IDS, 1),
+    predictionText: needsPredictionText,
     happy: list(needs.happy, normalizeHappy, CHAPTER_BY_ID.needs.maxes.happy),
     hard: list(needs.hard, normalizeHard, CHAPTER_BY_ID.needs.maxes.hard),
     ...normalizeChoice(needs),
   };
   const voice = isObject(raw.voice) ? raw.voice : {};
   const replyText = sanitizeText(voice.replyText);
+  const intentsText = sanitizeText(voice.intentsText);
   data.voice = {
     episodes: list(voice.episodes, normalizeVoiceEp, CHAPTER_BY_ID.voice.maxes.voice),
     focus: one(voice.focus, PATTERN_IDS),
-    intents: idList(voice.intents, INTENT_IDS, 2),
+    intents: idList(voice.intents, INTENT_IDS, chipCap(2, intentsText)),
+    intentsText,
     reply: replyText ? '' : one(voice.reply, REPLY_IDS),
     replyText,
     ...normalizeChoice(voice),
   };
   const values = isObject(raw.values) ? raw.values : {};
+  const valuesPredictionText = sanitizeText(values.predictionText);
   data.values = {
-    prediction: idList(values.prediction, VALUE_IDS, 1),
+    prediction: valuesPredictionText ? [] : idList(values.prediction, VALUE_IDS, 1),
+    predictionText: valuesPredictionText,
     neg: list(values.neg, normalizeSideEpisode('neg'), CHAPTER_BY_ID.values.maxes.neg),
     pos: list(values.pos, normalizeSideEpisode('pos'), CHAPTER_BY_ID.values.maxes.pos),
     admire: normalizeAdmire(values.admire),
@@ -144,9 +163,9 @@ export function hasAnyAnswer(data) {
 }
 function chapterHasData(data, id) {
   const d = data[id];
-  if (id === 'needs') return d.prediction.length + d.happy.length + d.hard.length > 0;
+  if (id === 'needs') return d.prediction.length + d.happy.length + d.hard.length > 0 || Boolean(d.predictionText);
   if (id === 'voice') return d.episodes.length > 0;
-  return d.prediction.length + d.neg.length + d.pos.length + (d.admire ? 1 : 0) > 0;
+  return d.prediction.length + d.neg.length + d.pos.length + (d.admire ? 1 : 0) > 0 || Boolean(d.predictionText);
 }
 export const doneCount = (data) => CHAPTER_IDS.filter((id) => data[id].done).length;
 const hasDoneChapter = (data) => doneCount(data) > 0;
@@ -219,11 +238,17 @@ export function clearTorisetsu(source) {
 }
 
 // ---------- 状態 ----------
+// 層ごとの「自分で書く」: 画面の入力グループ id（draft では `${id}Text` に入る）
+const OWN_SIDE_GROUPS = { hard: ['surface', 'deep', 'needs'], happy: ['feelings', 'needs'], voice: ['thoughts'], neg: ['situation'], pos: ['situation'], admire: ['qualities'] };
+const ownGroupsOf = (side) => OWN_SIDE_GROUPS[side] || [];
+const ownKind = (side, groupId) => `own:${side}:${groupId}`;
+const hasOwn = (text) => Boolean(String(text || '').trim());
+
 function emptyDraft(chapterId, side) {
-  if (chapterId === 'needs') return { scene: [], surface: [], deep: [], feelings: [], needs: [], memo: '' };
-  if (chapterId === 'voice') return { scene: [], thoughts: [], memo: '' };
-  if (side === 'admire') return { who: [], qualities: [], memo: '' };
-  return { situation: [], memo: '' };
+  if (chapterId === 'needs') return { scene: [], surface: [], deep: [], feelings: [], needs: [], surfaceText: '', deepText: '', feelingsText: '', needsText: '', memo: '' };
+  if (chapterId === 'voice') return { scene: [], thoughts: [], thoughtsText: '', memo: '' };
+  if (side === 'admire') return { who: [], qualities: [], qualitiesText: '', memo: '' };
+  return { situation: [], situationText: '', memo: '' };
 }
 
 export function createTorisetsuState({ stored = null } = {}) {
@@ -275,11 +300,12 @@ function draftFromRecord(chapterId, side, record) {
     return {
       scene: record.scene ? [record.scene] : [], surface: record.surface ? [record.surface] : [], deep: [...(record.deep || [])],
       feelings: [...(record.feelings || [])], needs: [...record.needs], memo: record.memo,
+      surfaceText: record.surfaceText || '', deepText: record.deepText || '', feelingsText: record.feelingsText || '', needsText: record.needsText || '',
     };
   }
-  if (chapterId === 'voice') return { scene: record.scene ? [record.scene] : [], thoughts: [...record.thoughts], memo: record.memo };
-  if (side === 'admire') return { who: record.who ? [record.who] : [], qualities: record.qualities.map((q) => q.id), memo: record.memo };
-  return { situation: [record.situation], memo: record.memo };
+  if (chapterId === 'voice') return { scene: record.scene ? [record.scene] : [], thoughts: [...record.thoughts], thoughtsText: record.thoughtsText || '', memo: record.memo };
+  if (side === 'admire') return { who: record.who ? [record.who] : [], qualities: record.qualities.map((q) => q.id), qualitiesText: record.qualitiesText || '', memo: record.memo };
+  return { situation: record.situation ? [record.situation] : [], situationText: record.situationText || '', memo: record.memo };
 }
 
 function recordFromDraft(ts) {
@@ -287,24 +313,24 @@ function recordFromDraft(ts) {
   const scene = draft.scene?.[0] || '';
   if (ts.chapterId === 'needs') {
     return ts.side === 'happy'
-      ? normalizeHappy({ scene, memo, feelings: draft.feelings, needs: draft.needs })
-      : normalizeHard({ scene, memo, surface: draft.surface[0] || '', deep: draft.deep, needs: draft.needs });
+      ? normalizeHappy({ scene, memo, feelings: draft.feelings, needs: draft.needs, feelingsText: draft.feelingsText, needsText: draft.needsText })
+      : normalizeHard({ scene, memo, surface: draft.surface[0] || '', deep: draft.deep, needs: draft.needs, surfaceText: draft.surfaceText, deepText: draft.deepText, needsText: draft.needsText });
   }
-  if (ts.chapterId === 'voice') return normalizeVoiceEp({ scene, memo, thoughts: draft.thoughts });
+  if (ts.chapterId === 'voice') return normalizeVoiceEp({ scene, memo, thoughts: draft.thoughts, thoughtsText: draft.thoughtsText });
   if (ts.side === 'admire') {
     const existing = ts.data.values.admire;
     const qualities = draft.qualities.map((id) => ({ id, value: existing?.qualities.find((q) => q.id === id)?.value || QUALITY_BY_ID.get(id)?.value }));
-    return normalizeAdmire({ who: draft.who[0] || '', qualities, memo });
+    return normalizeAdmire({ who: draft.who[0] || '', qualities, qualitiesText: draft.qualitiesText, memo });
   }
   const existing = ts.target >= 0 ? sideList(ts.data, 'values', ts.side)[ts.target] : null;
-  const situation = draft.situation[0];
+  const situation = draft.situation[0] || '';
   const value = existing && existing.situation === situation ? existing.value : SITUATION_BY_ID[situation]?.value;
-  return normalizeSideEpisode(ts.side)({ situation, value, memo });
+  return normalizeSideEpisode(ts.side)({ situation, value, memo, situationText: draft.situationText });
 }
 
 function missingGroupNames(ts) {
   if (ts.chapterId === 'needs' || !ts.draft) return [];
-  return currentGroups(ts).filter((group) => group.required && !(ts.draft[group.id] || []).length).map((group) => group.name || group.label.replace(/[？?]$/, ''));
+  return currentGroups(ts).filter((group) => group.required && !(ts.draft[group.id] || []).length && !hasOwn(ts.draft[`${group.id}Text`])).map((group) => group.name || group.label.replace(/[？?]$/, ''));
 }
 
 function autosave(ts, ctx) {
@@ -320,6 +346,7 @@ function setStep(ts, step, patch = {}) {
   ts.view = 'step'; ts.step = step;
   ts.limitMessage = ''; ts.limitGroup = ''; ts.missingMessage = ''; ts.valuePicker = ''; ts.focusPicker = false;
   ts.feedback = null;
+  for (const key of Object.keys(ts.textOpen)) if (key.startsWith('own:')) delete ts.textOpen[key];
   if (step === 'insight') ts.insightPage = 0;
   if (ts.chapterId) ts.lastStep[ts.chapterId] = { step, side: ts.side, index: ts.index, phase: ts.phase, target: ts.target, returnTo: ts.returnTo, layer: ts.layer };
 }
@@ -394,10 +421,16 @@ function shortSide(ts) {
   return cfg.sides.find((side) => len(side) < cfg.inits[side]) || cfg.sides.find((side) => len(side) < cfg.maxes[side]) || cfg.sides[0];
 }
 
+// 予想の比べ画面を出すか。チップの予想があれば比べる。自由文だけの予想は、数えずに見せるだけ。
+function hasGapScreen(chapterId, data) {
+  if (chapterId === 'voice') return false;
+  const d = data[chapterId];
+  return (d.prediction.length > 0 && gapFor(chapterId, data).rows.length > 0) || hasOwn(d.predictionText);
+}
+
 function stepAfterInsight(ts) {
   if (ts.chapterId === 'voice') { setStep(ts, 'protect'); return; }
-  const d = ts.data[ts.chapterId];
-  if (d.prediction.length && gapFor(ts.chapterId, ts.data).rows.length) { setStep(ts, 'gap'); return; }
+  if (hasGapScreen(ts.chapterId, ts.data)) { setStep(ts, 'gap'); return; }
   setStep(ts, 'surprise');
 }
 
@@ -496,8 +529,7 @@ function backFromStep(ts) {
     case 'reply': setStep(ts, 'protect'); return;
     case 'surprise': {
       if (ts.chapterId === 'voice') { setStep(ts, 'reply'); return; }
-      const gap = ts.data[ts.chapterId].prediction.length && gapFor(ts.chapterId, ts.data).rows.length;
-      setStep(ts, gap ? 'gap' : 'insight'); return;
+      setStep(ts, hasGapScreen(ts.chapterId, ts.data) ? 'gap' : 'insight'); return;
     }
     case 'try': setStep(ts, 'surprise'); return;
     case 'days': setStep(ts, chapterReady(ts.chapterId, ts.data) ? 'insight' : 'short'); return;
@@ -537,6 +569,28 @@ function dropDraft(ts) {
   return { render: true, scrollTop: true };
 }
 
+// 「＋ 自分で書く」を開く。チップで上限いっぱいなら、開かずに上限を伝える。
+function openOwnText(ts, kind) {
+  const focus = `[data-ts-text="${kind}"]`;
+  const full = (group, max) => { ts.limitMessage = COPY.limitMessage(max); ts.limitGroup = group; return { render: true, focus: `[data-ts-own="${kind}"] .ts-write` }; };
+  if (kind === 'own:predict') {
+    if (ts.step !== 'predict') return { render: true };
+    ts.textOpen[kind] = true; return { render: true, focus };
+  }
+  if (kind === 'own:intents') {
+    if (ts.step !== 'protect') return { render: true };
+    const voice = ts.data.voice;
+    if (!hasOwn(voice.intentsText) && voice.intents.length >= 2) return full('intents', 2);
+    ts.limitMessage = ''; ts.limitGroup = ''; ts.textOpen[kind] = true; return { render: true, focus };
+  }
+  if (!isEntryStep(ts) || !ts.draft) return { render: true };
+  const group = currentGroups(ts).find((item) => ownGroupsOf(ts.side).includes(item.id) && ownKind(ts.side, item.id) === kind);
+  if (!group || !(`${group.id}Text` in ts.draft)) return { render: true };
+  if (group.max > 1 && !hasOwn(ts.draft[`${group.id}Text`]) && ts.draft[group.id].length >= group.max) return full(group.id, group.max);
+  ts.limitMessage = ''; ts.limitGroup = ''; ts.textOpen[kind] = true;
+  return { render: true, focus };
+}
+
 const isEntryStep = (ts) => ts.view === 'step' && (ts.step === 'layer' || ts.step === 'episode' || ts.step === 'admire');
 
 // 画面からの操作。状態を書きかえ、app.js に「何をするか」を返す。
@@ -572,12 +626,14 @@ export function applyAction(ts, action, data = {}, ctx = {}) {
         // Predictions are rendered as a radio group: clicking the current choice is a no-op.
         const result = toggleIn(ts.data[ts.chapterId].prediction, data.chip, max, false);
         ts.limitMessage = result.full ? COPY.limitMessage(max) : ''; ts.limitGroup = result.full ? 'prediction' : '';
-        if (result.changed) { touch(ts, ctx); markFeedback(ts, data.group, data.chip); }
+        if (result.changed) { ts.data[ts.chapterId].predictionText = ''; ts.textOpen['own:predict'] = false; touch(ts, ctx); markFeedback(ts, data.group, data.chip); } // 選ぶと自由文は消える（1つだけ）
         return { render: true, focus };
       }
       if (ts.step === 'protect' && data.group === 'intents') {
         if (!INTENT_IDS.has(data.chip)) return { render: true };
-        const result = toggleIn(ts.data.voice.intents, data.chip, 2, true);
+        const voiceData = ts.data.voice;
+        const reservedIntent = hasOwn(voiceData.intentsText) && !voiceData.intents.includes(data.chip) && voiceData.intents.length >= 1;
+        const result = reservedIntent ? { changed: false, full: true } : toggleIn(voiceData.intents, data.chip, 2, true);
         ts.limitMessage = result.full ? COPY.limitMessage(2) : ''; ts.limitGroup = result.full ? 'intents' : '';
         if (result.changed) { touch(ts, ctx); markFeedback(ts, data.group, data.chip); }
         return { render: true, focus };
@@ -593,7 +649,12 @@ export function applyAction(ts, action, data = {}, ctx = {}) {
       if (isEntryStep(ts) && ts.draft) {
         const group = currentGroups(ts).find((item) => item.id === data.group);
         if (!group || !group.chips.some((chip) => chip.id === data.chip) || !ts.draft[group.id]) return { render: true };
-        const result = toggleIn(ts.draft[group.id], data.chip, group.max, group.max === 1 ? false : !group.required);
+        const items = ts.draft[group.id]; const ownable = ownGroupsOf(ts.side).includes(group.id);
+        const kind = ownKind(ts.side, group.id); const textKey = `${group.id}Text`;
+        // 自由文を書いてあるときは、その1つ分をチップの上限から引く（枠を開いただけでは引かない）
+        const reserved = ownable && group.max > 1 && hasOwn(ts.draft[textKey]) && !items.includes(data.chip) && items.length >= group.max - 1;
+        const result = reserved ? { changed: false, full: true } : toggleIn(items, data.chip, group.max, group.max === 1 ? false : !group.required);
+        if (ownable && group.max === 1 && result.changed) { ts.draft[textKey] = ''; ts.textOpen[kind] = false; } // 1つだけの層は、選ぶと自由文は消える
         ts.limitMessage = result.full ? COPY.limitMessage(group.max) : ''; ts.limitGroup = result.full ? group.id : '';
         ts.missingMessage = '';
         if (result.changed) markFeedback(ts, data.group, data.chip);
@@ -626,7 +687,7 @@ export function applyAction(ts, action, data = {}, ctx = {}) {
     case 'torisetsu-layer-skip': {
       if (ts.step !== 'layer' || !ts.draft) return { render: true };
       // 「直す」で開いた出来事は、記録済みの答えを消さない（そのまま進む）
-      if (ts.phase !== 'edit') for (const group of currentGroups(ts)) if (ts.draft[group.id]) ts.draft[group.id] = [];
+      if (ts.phase !== 'edit') for (const group of currentGroups(ts)) { if (ts.draft[group.id]) ts.draft[group.id] = []; if (`${group.id}Text` in ts.draft) ts.draft[`${group.id}Text`] = ''; }
       if (ts.layer < lastLayer(ts.side)) { setStep(ts, 'layer', { layer: ts.layer + 1 }); return { render: true, scrollTop: true }; }
       return commitDraft(ts, ctx);
     }
@@ -729,6 +790,7 @@ export function applyAction(ts, action, data = {}, ctx = {}) {
       return { render: true, focus: `[data-pick-key="${data.key}"]` };
     }
     case 'torisetsu-text-open': {
+      if (typeof data.kind === 'string' && data.kind.startsWith('own:')) return openOwnText(ts, data.kind);
       if (data.kind !== 'surprise' && data.kind !== 'experiment' && data.kind !== 'reply') return { render: true };
       ts.textOpen[data.kind] = true; return { render: true, focus: `[data-ts-text="${data.kind}"]` };
     }
@@ -775,6 +837,30 @@ export function applyAction(ts, action, data = {}, ctx = {}) {
 
 // 自由文の入力（ひとこと・意外・ためす・返す言葉・製品名）
 export function setDraftText(ts, value, field = 'memo', ctx = null) {
+  if (typeof field === 'string' && field.startsWith('own:')) {
+    const text = sanitizeText(value, TEXT_MAX, { trim: false });
+    if (field === 'own:predict') {
+      if (ts.step !== 'predict' || !ts.chapterId) return;
+      const d = ts.data[ts.chapterId]; d.predictionText = text;
+      if (hasOwn(text)) d.prediction = [];
+      if (ctx) autosave(ts, ctx);
+      return;
+    }
+    if (field === 'own:intents') {
+      ts.data.voice.intentsText = text;
+      if (hasOwn(text) && ts.data.voice.intents.length > 1) ts.data.voice.intents = ts.data.voice.intents.slice(0, 1); // 言葉もチップも合わせて 2 つまで
+      if (ctx) autosave(ts, ctx);
+      return;
+    }
+    const [, side, groupId] = field.split(':');
+    if (!ts.draft || side !== ts.side || !ownGroupsOf(side).includes(groupId) || !(`${groupId}Text` in ts.draft)) return;
+    ts.draft[`${groupId}Text`] = text;
+    const group = currentGroups(ts).find((item) => item.id === groupId);
+    if (hasOwn(text) && group && group.max === 1) ts.draft[groupId] = []; // 1つだけの層は、書くとチップの選びは外れる
+    else if (hasOwn(text) && group && ts.draft[groupId].length >= group.max) ts.draft[groupId] = ts.draft[groupId].slice(0, group.max - 1); // 言葉もチップも合わせて上限まで
+    ts.missingMessage = '';
+    return;
+  }
   if (field === 'name') { ts.data.name = sanitizeText(value, NAME_MAX, { trim: false }); if (ctx) autosave(ts, ctx); return; }
   if (field === 'memo') { if (ts.draft) ts.draft.memo = sanitizeText(value, TEXT_MAX, { trim: false }); return; }
   if (field === 'reply') {
@@ -809,6 +895,9 @@ function versionLabel(today) {
 }
 
 const bullet = (text) => ({ kind: 'bullet', text });
+const ownBullet = (text) => ({ kind: 'bullet', text, own: true });
+const ownPara = (text) => ({ kind: 'p', text, own: true });
+const quoted = (text) => `「${text}」`;
 const para = (text) => ({ kind: 'p', text });
 const sub = (text) => ({ kind: 'sub', text });
 
@@ -823,20 +912,32 @@ export function composeManual(rawData, { today = '' } = {}) {
   const build = {
     fuel: () => {
       if (!needs) return { state: 'todo' };
-      if (fuelPicks.length) return { state: 'filled', lines: fuelPicks.map((item) => bullet(`${needById(item.id).fuel}${SUFFIX[item.kind]}`)) };
-      if (needs.nearNeed) return { state: 'filled', lines: [para(MANUAL_COPY.fuelCandidates), bullet(needById(needs.nearNeed.id).fuel)] };
-      return { state: 'none' };
+      // 自分の言葉で書いた「満たされていたもの」は、数えずにそのまま添える
+      const ownFuel = data.needs.happy.map((ep) => ep.needsText).filter(Boolean).map((text) => ownBullet(`${quoted(text)}${MANUAL_COPY.ownFuelSuffix}`));
+      let base;
+      if (fuelPicks.length) base = { state: 'filled', lines: fuelPicks.map((item) => bullet(`${needById(item.id).fuel}${SUFFIX[item.kind]}`)) };
+      else if (needs.nearNeed) base = { state: 'filled', lines: [para(MANUAL_COPY.fuelCandidates), bullet(needById(needs.nearNeed.id).fuel)] };
+      else base = { state: 'none' };
+      return ownFuel.length ? { state: 'filled', lines: [...(base.lines || []), ...ownFuel] } : base;
     },
     shaky: () => {
       if (!needs) return { state: 'todo' };
       const picks = needs.ordered.filter((item) => item.kind === 'LD' || item.kind === 'LN' || item.kind === 'D').slice(0, 3);
-      if (!picks.length) return { state: 'none' };
+      // 自分の言葉で書いた表・奥・本当は。出来事ごとに1行にして、数えずにそのまま添える
+      const ownLines = data.needs.hard.filter((ep) => ep.surfaceText || ep.deepText || ep.needsText).map((ep) => {
+        const surface = ep.surfaceText ? quoted(ep.surfaceText) : ep.surface ? `『${surfaceById(ep.surface).tag}』` : '';
+        const deep = [...ep.deep.map((id) => `『${deepById(id).tag}』`), ep.deepText ? quoted(ep.deepText) : ''].join('');
+        const need = [...ep.needs.map((id) => `『${needById(id).wish}』`), ep.needsText ? quoted(ep.needsText) : ''].join('');
+        return ownBullet(`しんどいとき、${[surface && `表は${surface}`, deep && `奥に${deep}`, need && `本当は${need}`].filter(Boolean).join('、')}`);
+      });
+      if (!picks.length && !ownLines.length) return { state: 'none' };
+      if (!picks.length) return { state: 'filled', lines: [ownPara(`${MANUAL_COPY.ownHead}：`), ...ownLines] };
       const text = (item) => {
         if (item.kind === 'LD') return `『${surfaceById(item.surface).tag}』の奥に『${deepById(item.deep).tag}』`;
         if (item.kind === 'LN') return `『${surfaceById(item.surface).tag}』のとき、本当は『${needById(item.id).wish}』`;
         return `しんどいときの奥に『${deepById(item.id).tag}』`;
       };
-      return { state: 'filled', lines: [para(MANUAL_COPY.shakyIntro), ...picks.map((item) => bullet(text(item))), para(MANUAL_COPY.shakyOutro)] };
+      return { state: 'filled', lines: [para(MANUAL_COPY.shakyIntro), ...picks.map((item) => bullet(text(item))), ...(ownLines.length ? [ownPara(`${MANUAL_COPY.ownHead}：`), ...ownLines] : []), para(MANUAL_COPY.shakyOutro)] };
     },
     request: () => {
       if (!needs) return { state: 'todo' };
@@ -848,16 +949,20 @@ export function composeManual(rawData, { today = '' } = {}) {
       const lines = [];
       const top = voice.items[0];
       const focus = effectiveFocus(data.voice);
-      if (top) {
+      const hasOwnVoice = data.voice.episodes.some((ep) => ep.thoughtsText) || data.voice.intentsText;
+      if (!top && voice.n < 2 && hasOwnVoice) lines.push(ownPara(`${MANUAL_COPY.ownHead}：`)); // 数えるチップが足りない: 自分の言葉だけを載せる
+      else if (top) {
         const head = top.kind === 'RP' ? `『${patternById(top.id).name}』声` : `『${thoughtById(top.id).label}』という声`;
         lines.push(para(`しんどいとき、${head}がしやすいようです（${voice.n}つのうち${top.c}つ）。`));
       } else lines.push(para(MANUAL_COPY.voiceNone));
       focusVoices(data.voice, focus).slice(0, 3).forEach((t) => lines.push(bullet(`『${t.label}』`)));
+      data.voice.episodes.map((ep) => ep.thoughtsText).filter(Boolean).forEach((text) => lines.push(ownBullet(`${quoted(text)}${MANUAL_COPY.ownVoiceSuffix}`)));
       const intents = data.voice.intents.map((id) => intentById(id)).filter(Boolean);
-      if (intents.length) lines.push(para(`その声は、${intents.map((item) => `『${item.label}』`).join('')}と、守ろうとしているのかもしれません。`));
+      if (data.voice.intentsText) lines.push(ownPara(MANUAL_COPY.ownIntents(data.voice.intentsText)));
+      if (intents.length) lines.push({ kind: 'p', text: `その声は、${intents.map((item) => `『${item.label}』`).join('')}と、守ろうとしているのかもしれません。`, own: true }); // 自分の言葉の行と同じく、たたまずに見せる
       const reply = data.voice.replyText || REPLIES.find((item) => item.id === data.voice.reply)?.label || '';
       if (reply) { lines.push(sub(MANUAL_COPY.voiceReplyHead)); lines.push(bullet(`「${reply}」`)); }
-      else if (!intents.length && focusVoices(data.voice, focus).length) {
+      else if (!intents.length && !data.voice.intentsText && focusVoices(data.voice, focus).length) {
         lines.push(para(MANUAL_COPY.voiceSoft)); lines.push(sub(MANUAL_COPY.voiceReplyHead)); lines.push(bullet(`「${REPLIES.find((item) => item.id === 'rp_any1').label}」`));
       }
       return { state: 'filled', lines };
@@ -875,8 +980,14 @@ export function composeManual(rawData, { today = '' } = {}) {
         const closing = hasNeg && hasPos ? MANUAL_COPY.valuesBoth : hasNeg ? MANUAL_COPY.valuesNeg : hasPos ? MANUAL_COPY.valuesPos : '';
         if (closing) lines.push(para(closing));
       }
+      // 自分の言葉で書いた「心が動いたこと」。数えずにそのまま添える
+      for (const side of ['neg', 'pos']) data.values[side].filter((ep) => ep.situationText).forEach((ep) => lines.push(ownBullet(`${side === 'neg' ? MANUAL_COPY.ownNeg : MANUAL_COPY.ownPos}：${quoted(ep.situationText)}`)));
       const admire = data.values.admire;
-      if (admire) { lines.push(sub(MANUAL_COPY.admireHead)); admire.qualities.slice(0, 2).forEach((q) => lines.push(bullet(qualityById(q.id).wish))); }
+      if (admire) {
+        lines.push(sub(MANUAL_COPY.admireHead));
+        admire.qualities.slice(0, 2).forEach((q) => lines.push(bullet(qualityById(q.id).wish)));
+        if (admire.qualitiesText) lines.push(ownBullet(quoted(admire.qualitiesText)));
+      }
       const link = crossLink(data);
       if (link) lines.push(bullet(link));
       return lines.length ? { state: 'filled', lines } : { state: 'none' };
@@ -994,13 +1105,16 @@ function sectionMarkup(section, { esc, editable }) {
   const lines = section.lines || [];
   // Only the voice chapter has a useful primary/reply split. Other chapters
   // stay in source order so bullets and sub-heads retain their meaning.
-  const voiceIndex = section.chapterId === 'voice' ? lines.findIndex((line) => line.kind === 'sub') : -1;
+  const voiceRest = section.chapterId === 'voice' ? lines.filter((line) => !line.own) : lines;
+  const voiceOwn = section.chapterId === 'voice' ? lines.filter((line) => line.own) : [];
+  const voiceIndex = section.chapterId === 'voice' ? voiceRest.findIndex((line) => line.kind === 'sub') : -1;
   const body = section.chapterId === 'voice'
     ? (() => {
-      const intro = lines.slice(0, 1);
-      const supplemental = lines.slice(1, voiceIndex >= 0 ? voiceIndex : lines.length);
-      const reply = voiceIndex >= 0 ? lines.slice(voiceIndex) : [];
-      return `${linesMarkup(intro, esc)}${reply.length ? `<div class="ts-sec-key">${linesMarkup(reply, esc)}</div>` : ''}${supplemental.length ? `<details class="ts-sec-details"><summary>補足・根拠</summary><div class="ts-sec-body">${linesMarkup(supplemental, esc)}</div></details>` : ''}`;
+      const intro = voiceRest.slice(0, 1);
+      const supplemental = voiceRest.slice(1, voiceIndex >= 0 ? voiceIndex : voiceRest.length);
+      const reply = voiceIndex >= 0 ? voiceRest.slice(voiceIndex) : [];
+      // 自分の言葉は、たたまずに見えるところに置く
+      return `${linesMarkup(intro, esc)}${voiceOwn.length ? `<div class="ts-sec-own">${linesMarkup(voiceOwn, esc)}</div>` : ''}${reply.length ? `<div class="ts-sec-key">${linesMarkup(reply, esc)}</div>` : ''}${supplemental.length ? `<details class="ts-sec-details"><summary>補足・根拠</summary><div class="ts-sec-body">${linesMarkup(supplemental, esc)}</div></details>` : ''}`;
     })()
     : `<div class="ts-sec-body">${linesMarkup(lines, esc)}</div>`;
   return `<section class="ts-sec" data-ts-sec="${esc(section.id)}">${head}${edit}${body}</section>`;
@@ -1032,8 +1146,19 @@ function saveCardMarkup(ts, esc) {
 }
 
 // --- チップ ---
-function chipGroupMarkup(ts, esc, { label, hint, max, chips, selected, groupId, radio, limitGroup }) {
-  const full = selected.length >= max && max > 1;
+// 「＋ 自分で書く」。チップの下に置き、書いた言葉はチップと合わせて上限に数える。
+function ownControlMarkup(ts, esc, { kind, text, label }) {
+  const value = text || '';
+  const open = Boolean(ts.textOpen[kind]) || hasOwn(value);
+  const field = open
+    ? `<label class="ts-field ts-free"><span class="visually-hidden">${esc(COPY.freeWrite)}：${esc(label)}</span><input type="text" inputmode="text" autocomplete="off" maxlength="${TEXT_MAX}" data-ts-text="${esc(kind)}" value="${esc(value)}" placeholder="${esc(COPY.ownPlaceholder)}" /><small data-ts-count="${esc(kind)}">${esc(COPY.freeCount(Array.from(value).length))}</small></label>`
+    : `<button type="button" class="ts-write" data-action="torisetsu-text-open" data-kind="${esc(kind)}">＋ ${esc(COPY.freeWrite)}</button>`;
+  return `<div class="ts-own" data-ts-own="${esc(kind)}"><p class="ts-hint ts-own-hint">${esc(COPY.ownHint)}</p>${field}</div>`;
+}
+const ownReserved = (ts, kind, text) => hasOwn(text);
+
+function chipGroupMarkup(ts, esc, { label, hint, max, chips, selected, groupId, radio, limitGroup, own }) {
+  const full = selected.length + (own && ownReserved(ts, own.kind, own.text) ? 1 : 0) >= max && max > 1;
   const message = ts.limitGroup === limitGroup ? ts.limitMessage : '';
   const buttons = chips.map((chip) => {
     const on = selected.includes(chip.id);
@@ -1041,12 +1166,28 @@ function chipGroupMarkup(ts, esc, { label, hint, max, chips, selected, groupId, 
     const feedback = ts.feedback?.group === groupId && ts.feedback?.chip === chip.id ? ' is-feedback' : '';
     return `<button type="button" class="ts-chip${on ? ' is-on' : ''}${!on && full ? ' is-dim' : ''}${feedback}" ${attrs} data-action="torisetsu-chip" data-group="${esc(groupId)}" data-chip="${esc(chip.id)}"><span>${esc(chip.label)}</span></button>`;
   }).join('');
-  return `<div class="ts-group" data-ts-group="${esc(groupId)}"><h2 class="ts-group-head" id="ts-g-${esc(groupId)}">${esc(label)}${hint ? `<small>${esc(hint)}</small>` : ''}</h2><div class="ts-chips" role="${radio ? 'radiogroup' : 'group'}" aria-labelledby="ts-g-${esc(groupId)}">${buttons}</div><p class="ts-limit" role="status" aria-live="polite">${esc(message)}</p></div>`;
+  return `<div class="ts-group" data-ts-group="${esc(groupId)}"><h2 class="ts-group-head" id="ts-g-${esc(groupId)}">${esc(label)}${hint ? `<small>${esc(hint)}</small>` : ''}</h2><div class="ts-chips" role="${radio ? 'radiogroup' : 'group'}" aria-labelledby="ts-g-${esc(groupId)}">${buttons}</div>${own ? ownControlMarkup(ts, esc, { ...own, label }) : ''}<p class="ts-limit" role="status" aria-live="polite">${esc(message)}</p></div>`;
 }
 
+const groupOwn = (ts, group) => (ownGroupsOf(ts.side).includes(group.id) ? { kind: ownKind(ts.side, group.id), text: ts.draft[`${group.id}Text`] || '' } : null);
 const groupMarkup = (ts, esc, group) => chipGroupMarkup(ts, esc, {
-  label: group.label, hint: group.hint, max: group.max, chips: group.chips, selected: ts.draft[group.id] || [], groupId: group.id, radio: group.max === 1, limitGroup: group.id,
+  label: group.label, hint: group.hint, max: group.max, chips: group.chips, selected: ts.draft[group.id] || [], groupId: group.id, radio: group.max === 1, limitGroup: group.id, own: groupOwn(ts, group),
 });
+
+// 画面のチップの今の見た目（選ばれているか・上限でうすくするか）。app.js が入力のたびに更新に使う。
+export function chipState(ts, groupId, chipId) {
+  let items; let max = 1; let kind = ''; let text = '';
+  if (ts.step === 'predict' && groupId === 'prediction') items = ts.data[ts.chapterId].prediction;
+  else if (ts.step === 'protect' && groupId === 'intents') { items = ts.data.voice.intents; max = 2; kind = 'own:intents'; text = ts.data.voice.intentsText; }
+  else if (isEntryStep(ts) && ts.draft) {
+    const group = currentGroups(ts).find((item) => item.id === groupId);
+    if (!group || !ts.draft[groupId]) return null;
+    items = ts.draft[groupId]; max = group.max;
+    if (ownGroupsOf(ts.side).includes(groupId)) { kind = ownKind(ts.side, groupId); text = ts.draft[`${groupId}Text`]; }
+  } else return null;
+  const on = items.includes(chipId);
+  return { on, dim: !on && max > 1 && items.length + (kind && ownReserved(ts, kind, text) ? 1 : 0) >= max };
+}
 
 function memoField(ts, esc, label, placeholder) {
   const memoLen = Array.from(ts.draft.memo || '').length;
@@ -1078,7 +1219,7 @@ function predictView(ts, h) {
       <p class="ts-chapter-name">${esc(cfg.label)}</p>
       <h1 class="ts-q" tabindex="-1" data-focus>${esc(cfg.predict.title)}</h1>
       <p class="ts-lead">${esc(predictQuestionWithNickname(h, cfg.predict.question))}</p>
-      ${chipGroupMarkup(ts, esc, { label: cfg.predict.hint, max: cfg.predict.max, chips: choices, selected: d.prediction, groupId: 'prediction', radio: true, limitGroup: 'prediction' })}
+      ${chipGroupMarkup(ts, esc, { label: cfg.predict.hint, max: cfg.predict.max, chips: choices, selected: d.prediction, groupId: 'prediction', radio: true, limitGroup: 'prediction', own: { kind: 'own:predict', text: d.predictionText } })}
       ${cfg.predict.footer ? `<details class="ts-context"><summary>ヒントを見る</summary><p class="ts-note">${esc(cfg.predict.footer)}</p></details>` : ''}
       <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-next">${esc(COPY.predictNext)}</button></div>
     </div>
@@ -1123,12 +1264,15 @@ function layerView(ts, h) {
     const scene = labelOfChip(layerGroups(ts.side, 'scene')[0].chips, ts.draft.scene[0]);
     const parts = [ts.draft.memo || scene];
     for (const earlier of layers.slice(1, ts.layer)) {
-      for (const group of layerGroups(ts.side, earlier.id)) parts.push((ts.draft[group.id] || []).map((id) => labelOfChip(group.chips, id)).filter(Boolean).join('、'));
+      for (const group of layerGroups(ts.side, earlier.id)) {
+        const own = ts.draft[`${group.id}Text`];
+        parts.push([...(ts.draft[group.id] || []).map((id) => labelOfChip(group.chips, id)), hasOwn(own) ? quoted(own.trim()) : ''].filter(Boolean).join('、'));
+      }
     }
     const shown = parts.filter(Boolean);
     if (shown.length) crumb = `<p class="ts-crumb">${shown.map((part) => esc(part)).join(' ／ ')}</p>`;
   }
-  const title = typeof layer.title === 'function' ? layer.title(labelOfChip(layerGroups(ts.side, 'surface')[0]?.chips || [], ts.draft.surface[0])) : layer.title;
+  const title = typeof layer.title === 'function' ? layer.title(labelOfChip(layerGroups(ts.side, 'surface')[0]?.chips || [], ts.draft.surface[0]) || (hasOwn(ts.draft.surfaceText) ? ts.draft.surfaceText.trim() : '')) : layer.title;
   const memo = ts.layer === 0 ? memoField(ts, esc, COPY.memoLabelEpisode, MEMO_PLACEHOLDER[ts.side]) : '';
   const lead = layer.lead ? `<p class="ts-lead">${esc(layer.lead)}</p>` : '';
   const context = [crumb, lead].filter(Boolean).length ? `<details class="ts-context"><summary>前の答え・ヒント</summary>${[crumb, lead].filter(Boolean).join('')}</details>` : '';
@@ -1232,8 +1376,10 @@ function needsLineupBody(ts, esc) {
   const cols = lineup.nJ + lineup.nH;
   const main = []; const single = [];
   for (const group of lineup.groups) {
-    const m = group.rows.filter((row) => found.has(`${group.id}:${row.id}`) || row.total >= 2);
-    const s = group.rows.filter((row) => !(found.has(`${group.id}:${row.id}`) || row.total >= 2));
+    // 自分の言葉の行は数えない。かならず主の表に出す
+    const isMain = (row) => row.own || found.has(`${group.id}:${row.id}`) || row.total >= 2;
+    const m = group.rows.filter(isMain);
+    const s = group.rows.filter((row) => !isMain(row));
     if (m.length) main.push({ ...group, rows: m });
     if (s.length) single.push({ ...group, rows: s });
   }
@@ -1245,7 +1391,7 @@ function needsLineupBody(ts, esc) {
     const trs = groups.map((group) => `<tr class="ts-lineup-group"><th scope="rowgroup" colspan="${cols + 1}">${esc(group.label)}</th></tr>${group.rows.map((row) => {
       const cells = row.cells.map((on, i) => dotCell(on, esc, i < lineup.nJ ? 'is-good' : `is-bad${i === lineup.nJ && lineup.nJ ? ' is-bad-first' : ''}`)).join('');
       const index = counter++;
-      return `<tr class="${found.has(`${group.id}:${row.id}`) ? 'is-found' : ''}" style="--i:${index}"><th scope="row">${esc(row.label)}</th>${cells}</tr>`;
+      return `<tr class="${row.own ? 'is-own' : found.has(`${group.id}:${row.id}`) ? 'is-found' : ''}" style="--i:${index}"><th scope="row">${esc(row.label)}</th>${cells}</tr>`;
     }).join('')}`).join('');
     return `<div class="ts-lineup-wrap" role="region" aria-label="並べた表" tabindex="0"><table class="ts-lineup"><caption class="visually-hidden">${esc(COPY.lineupTitle)}</caption><thead>${head1}${head2}</thead><tbody>${trs}</tbody></table></div>`;
   };
@@ -1257,6 +1403,11 @@ function needsLineupBody(ts, esc) {
 
 function voiceLineupBody(ts, esc) {
   const episodes = ts.data.voice.episodes;
+  if (voiceLineup(episodes).n === 0) {
+    // 声のチップがない（言葉だけ）: 表は作れないので、書いた言葉を並べるだけ
+    const words = voiceLineup(episodes).loose;
+    return `<p class="ts-lead">${esc(COPY.ownThinBody)}</p><p class="ts-memos">${esc(COPY.lineupOwnOnly)}：</p><ul class="ts-list">${words.map((text) => `<li>${esc(quoted(text))}</li>`).join('')}</ul>`;
+  }
   const ins = voiceInsights(episodes);
   const foundP = new Set(ins.ordered.filter((item) => item.kind === 'RP').map((item) => item.id));
   const foundT = new Set(ins.ordered.filter((item) => item.kind === 'RT').map((item) => item.id));
@@ -1269,7 +1420,11 @@ function voiceLineupBody(ts, esc) {
     const rows = group.rows.map((row) => `<tr class="${foundT.has(row.id) ? 'is-found' : ''}" style="--i:${counter++}"><th scope="row">${esc(row.label)}</th>${row.cells.map((on) => dotCell(on, esc, 'is-bad')).join('')}</tr>`).join('');
     return header + rows;
   }).join('');
-  return `<p class="ts-lead">${esc(COPY.lineupLeadVoice)}</p><div class="ts-lineup-wrap" role="region" aria-label="並べた表" tabindex="0"><table class="ts-lineup ts-lineup-voice"><caption class="visually-hidden">${esc(COPY.lineupTitle)}</caption><thead>${head}</thead><tbody>${trs}</tbody></table></div>${memosLine(lineup.memos, esc, COPY.lineupScenes)}`;
+  const ownTrs = lineup.ownRows.length
+    ? `<tr class="ts-lineup-group" style="--i:${counter++}"><th scope="row">${esc(`── ${COPY.lineupOwn} ──`)}</th>${Array.from({ length: lineup.n }, () => '<td class="is-bad"></td>').join('')}</tr>${lineup.ownRows.map((row) => `<tr class="is-own" style="--i:${counter++}"><th scope="row">${esc(row.label)}</th>${row.cells.map((on) => dotCell(on, esc, 'is-bad')).join('')}</tr>`).join('')}`
+    : '';
+  const loose = lineup.loose.length ? `<p class="ts-memos">${esc(COPY.lineupOwnOnly)}：${lineup.loose.map((text) => esc(quoted(text))).join('　')}</p>` : '';
+  return `<p class="ts-lead">${esc(COPY.lineupLeadVoice)}</p><div class="ts-lineup-wrap" role="region" aria-label="並べた表" tabindex="0"><table class="ts-lineup ts-lineup-voice"><caption class="visually-hidden">${esc(COPY.lineupTitle)}</caption><thead>${head}</thead><tbody>${trs}${ownTrs}</tbody></table></div>${memosLine(lineup.memos, esc, COPY.lineupScenes)}${loose}`;
 }
 
 function valuesLineupBody(ts, esc) {
@@ -1279,18 +1434,20 @@ function valuesLineupBody(ts, esc) {
   const picker = (key, side, index, current) => {
     const open = ts.valuePicker === key;
     const box = open ? `<div class="ts-chips" role="radiogroup" aria-label="${esc(COPY.changeValue)}">${VALUES.map((value) => `<button type="button" class="ts-chip${value.id === current ? ' is-on' : ''}" role="radio" aria-checked="${value.id === current}" data-action="torisetsu-value-set" data-side="${esc(side)}" data-index="${index}" data-chip="${esc(value.id)}"><span>${esc(value.label)}</span></button>`).join('')}</div>` : '';
-    return `<button type="button" class="ts-valbtn" data-action="torisetsu-value-open" data-side="${esc(side)}" data-index="${index}" data-value-key="${esc(key)}" aria-expanded="${open}" aria-label="${esc(valueById(current).label)}。${esc(COPY.changeValue)}">→ ${esc(valueById(current).label)}</button>${box}`;
+    const currentLabel = valueById(current)?.label || COPY.pickValue; // 自分の言葉だけの出来事は、大事なことが未選択
+    return `<button type="button" class="ts-valbtn" data-action="torisetsu-value-open" data-side="${esc(side)}" data-index="${index}" data-value-key="${esc(key)}" aria-expanded="${open}" aria-label="${esc(currentLabel)}。${esc(COPY.changeValue)}">→ ${esc(currentLabel)}</button>${box}`;
   };
   const section = (side) => {
     const items = ts.data.values[side];
     if (!items.length) return '';
-    const lis = items.map((ep, index) => `<li class="ts-ep${found.has(ep.value) ? ' is-found' : ''}" style="--i:${index}"><span class="ts-ep-text">${esc(SITUATION_BY_ID[ep.situation].label)}${ep.memo ? `「${esc(ep.memo)}」` : ''}</span>${picker(`${side}:${index}`, side, index, ep.value)}</li>`).join('');
+    const lis = items.map((ep, index) => `<li class="ts-ep${found.has(ep.value) ? ' is-found' : ''}" style="--i:${index}"><span class="ts-ep-text">${esc(SITUATION_BY_ID[ep.situation]?.label || '')}${ep.memo ? `「${esc(ep.memo)}」` : ''}${ep.situationText ? `${SITUATION_BY_ID[ep.situation] ? '　' : ''}${esc(COPY.lineupOwn)}${esc(quoted(ep.situationText))}` : ''}</span>${picker(`${side}:${index}`, side, index, ep.value)}</li>`).join('');
     return `<section class="ts-ep-group ts-side-${SIDE_COPY[side].color}"><h2>${esc(SIDE_COPY[side].label)}</h2><ol>${lis}</ol></section>`;
   };
   let admireHtml = '';
   if (admire) {
     const who = admireWhoById(admire.who)?.label;
-    const lis = admire.qualities.map((q, index) => `<li class="ts-ep${found.has(q.value) ? ' is-found' : ''}" style="--i:${index}"><span class="ts-ep-text">${esc(qualityById(q.id).label)}</span>${picker(`admire:${index}`, 'admire', index, q.value)}</li>`).join('');
+    const lis = admire.qualities.map((q, index) => `<li class="ts-ep${found.has(q.value) ? ' is-found' : ''}" style="--i:${index}"><span class="ts-ep-text">${esc(qualityById(q.id).label)}</span>${picker(`admire:${index}`, 'admire', index, q.value)}</li>`).join('')
+      + (admire.qualitiesText ? `<li class="ts-ep is-own" style="--i:${admire.qualities.length}"><span class="ts-ep-text">${esc(COPY.lineupOwn)}${esc(quoted(admire.qualitiesText))}</span></li>` : '');
     admireHtml = `<section class="ts-ep-group ts-side-good"><h2>${esc(COPY.lineupAdmire)}${who ? `（${esc(who)}${admire.memo ? `「${esc(admire.memo)}」` : ''}）` : admire.memo ? `（「${esc(admire.memo)}」）` : ''}</h2><ol>${lis}</ol></section>`;
   }
   return `<p class="ts-lead">${esc(COPY.lineupLeadValues)}</p>${section('neg')}${section('pos')}${admireHtml}<p class="ts-note">${esc(COPY.lineupNoteValues)}</p>`;
@@ -1333,12 +1490,19 @@ function insightEvidence(sentence, details) {
   return `<details class="ts-evidence"><summary>根拠を見る</summary><div class="ts-evidence-detail"><p class="ts-find-sentence">${sentence}</p>${details}</div></details>`;
 }
 
+// 自分の言葉で書いたもの（深い層に2つ以上あるとき）。数えずに並べて、近いものがないか見てもらう。
+function ownBlockMarkup(ts, esc) {
+  const own = ownWords(ts.chapterId, ts.data); // 数えるものが足りない章は、言葉が 1 つだけでも出す
+  if (!own.show) return '';
+  return `<section class="ts-ownwords" data-ts-ownwords aria-label="${esc(COPY.ownBlockTitle)}"><h2>${esc(COPY.ownBlockTitle)}</h2><ul class="ts-list">${own.items.map((item) => `<li><span><span class="ts-own-where">${esc(item.where)}</span>${esc(quoted(item.text))}</span></li>`).join('')}</ul><p class="ts-note">${esc(COPY.ownBlockNote)}</p></section>`;
+}
+
 function insightView(ts, h) {
   const { esc, support } = h; const d = ts.data[ts.chapterId];
   let body = ''; let actions = '';
   const insightTotal = insightResultCount(ts);
   const insightPage = Math.max(0, Math.min(ts.insightPage, Math.max(0, insightTotal - 1)));
-  const hasGap = ts.chapterId !== 'voice' && d.prediction.length > 0 && gapFor(ts.chapterId, ts.data).rows.length > 0;
+  const hasGap = hasGapScreen(ts.chapterId, ts.data);
   const primary = insightTotal > 1 && insightPage < insightTotal - 1
     ? `<button type="button" class="primary-button" data-action="torisetsu-insight-page" data-direction="next">次の発見</button>`
     : `<button type="button" class="primary-button" data-action="torisetsu-compare">${esc(hasGap ? COPY.compareGap : COPY.nextButton)}</button>`;
@@ -1364,7 +1528,11 @@ function insightView(ts, h) {
   } else if (ts.chapterId === 'voice') {
     const ins = voiceInsights(d.episodes);
     if (ins.empty) {
-      body = `<p class="ts-insight-headline">${esc(COPY.voiceNoneTitle)}</p><ul class="ts-list ts-cands">${ins.candidates.map((item) => `<li>『${esc(item.label)}』</li>`).join('')}</ul><p class="ts-lead">${esc(COPY.voiceNoneBody)}</p>${heavy}`;
+      const thin = !ins.ready;
+      const cands = ins.candidates.length ? `<ul class="ts-list ts-cands">${ins.candidates.map((item) => `<li>『${esc(item.label)}』</li>`).join('')}</ul>` : '';
+      body = thin
+        ? `<p class="ts-insight-headline">${esc(COPY.ownThinTitle)}</p>${cands}<p class="ts-lead">${esc(COPY.ownThinBody)}</p>${heavy}`
+        : `<p class="ts-insight-headline">${esc(COPY.voiceNoneTitle)}</p>${cands}<p class="ts-lead">${esc(COPY.voiceNoneBody)}</p>${heavy}`;
       actions = `${d.episodes.length < cfgOf(ts).maxes.voice ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="voice" data-return-to="insight">${esc(COPY.addScene)}</button>` : ''}${primary}<button type="button" class="text-button" data-action="torisetsu-days">${esc(COPY.fixScenes)}</button>`;
     } else {
       const bands = ins.items.slice(insightPage, insightPage + 1).map((item, i) => `<section class="ts-band ts-side-bad"><h2>${esc(COPY.bandVoice)}</h2><ul class="ts-finds"><li class="ts-find" style="--i:${i}"><span class="ts-find-tag">${esc(item.heading)}</span>${insightEvidence(esc(item.sentence), `<span class="ts-count-row" aria-hidden="true"><span class="ts-count-own"><span class="ts-dots">${dotsOf(item.cells)}</span> ${esc(item.count)}${esc(item.paren)}</span></span>`)}</li></ul></section>`).join('');
@@ -1375,7 +1543,10 @@ function insightView(ts, h) {
   } else {
     const ins = valuesInsights(d.neg, d.pos, d.admire);
     if (ins.empty) {
-      body = `<p class="ts-insight-headline">${esc(COPY.valuesNoneTitle)}</p><ul class="ts-list ts-cands">${ins.candidates.map((item) => `<li>${esc(item.label)}</li>`).join('')}</ul><p class="ts-lead">${esc(COPY.valuesNoneBody)}</p>`;
+      const cands = ins.candidates.length ? `<ul class="ts-list ts-cands">${ins.candidates.map((item) => `<li>${esc(item.label)}</li>`).join('')}</ul>` : '';
+      body = ins.ready
+        ? `<p class="ts-insight-headline">${esc(COPY.valuesNoneTitle)}</p>${cands}<p class="ts-lead">${esc(COPY.valuesNoneBody)}</p>`
+        : `<p class="ts-insight-headline">${esc(COPY.ownThinTitle)}</p>${cands}<p class="ts-lead">${esc(COPY.ownThinBody)}</p>`;
       actions = `${d.neg.length < cfgOf(ts).maxes.neg ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="neg" data-return-to="insight">${esc(COPY.addNeg)}</button>` : ''}${d.pos.length < cfgOf(ts).maxes.pos ? `<button type="button" class="secondary-button" data-action="torisetsu-add-item" data-side="pos" data-return-to="insight">${esc(COPY.addPos)}</button>` : ''}<button type="button" class="primary-button" data-action="torisetsu-compare">${esc(COPY.goOn)}</button><button type="button" class="text-button" data-action="torisetsu-days">${esc(COPY.fixEpisodes)}</button>`;
     } else {
       const lis = ins.items.slice(insightPage, insightPage + 1).map((item, i) => {
@@ -1393,6 +1564,7 @@ function insightView(ts, h) {
       <div class="ts-step-heading"><h1 class="ts-q" tabindex="-1" data-focus>${esc(COPY.insightTitle)}</h1></div>
       ${insightPagerMarkup(ts, esc, insightTotal)}
       ${body}
+      ${ownBlockMarkup(ts, esc)}
       <div class="ts-actions">${actions}</div>
     </div>
   </section>`;
@@ -1406,15 +1578,22 @@ function gapView(ts, h) {
     ${stepperMarkup(ts, esc)}
     <h1 class="ts-q" tabindex="-1" data-focus>${esc(COPY.gapTitle)}</h1>
     ${rows}
+    ${hasOwn(ts.data[ts.chapterId].predictionText) ? `<div class="ts-gap-row ts-gap-own"><p class="ts-gap-thought">${esc(COPY.gapThought(quoted(ts.data[ts.chapterId].predictionText.trim())))}</p><p class="ts-gap-result">${esc(COPY.gapOwnResult)}</p></div>` : ''}
     ${gap.actual ? `<p class="ts-gap-actual">${esc(gap.actual)}</p>` : ''}
     <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-gap-next">${esc(COPY.nextButton)}</button></div>
   </div>`;
 }
 
+// 声の名前。チップの声がなければ（言葉だけで書いたとき）、書いた声をそのまま使う
+const voiceNames = (voice, focus) => {
+  const labels = focusVoices(voice, focus).map((t) => t.label);
+  return labels.length ? labels : voice.episodes.map((ep) => ep.thoughtsText).filter(Boolean).slice(0, 2);
+};
+
 // 第 2 章：その声は、何を守ろうとしている？
 function protectView(ts, h) {
   const { esc } = h; const voice = ts.data.voice;
-  const focus = effectiveFocus(voice); const voices = focusVoices(voice, focus).map((t) => t.label);
+  const focus = effectiveFocus(voice); const voices = voiceNames(voice, focus);
   const choices = focusChoices(voice);
   const other = choices.length >= 2 ? `<button type="button" class="ts-mini-button ts-other-voice" data-action="torisetsu-focus-open" aria-expanded="${ts.focusPicker}">${esc(COPY.otherVoice)}</button>` : '';
   const picker = ts.focusPicker ? `<div class="ts-chips" role="radiogroup" aria-label="${esc(COPY.otherVoiceTitle)}">${choices.map((p) => `<button type="button" class="ts-chip${p.id === focus ? ' is-on' : ''}" role="radio" aria-checked="${p.id === focus}" data-action="torisetsu-focus-set" data-chip="${esc(p.id)}"><span>${esc(p.name)}声</span></button>`).join('')}</div>` : '';
@@ -1425,7 +1604,7 @@ function protectView(ts, h) {
     ${other}${picker}
     <h1 class="ts-q" tabindex="-1" data-focus>${esc(COPY.protectTitle)}</h1>
     <p class="ts-lead">${esc(COPY.protectLead)}</p>
-    ${chipGroupMarkup(ts, esc, { label: '2つまで', hint: '', max: 2, chips: INTENTS.map(({ id, label }) => ({ id, label })), selected: voice.intents, groupId: 'intents', radio: false, limitGroup: 'intents' })}
+    ${chipGroupMarkup(ts, esc, { label: '2つまで', hint: '', max: 2, chips: INTENTS.map(({ id, label }) => ({ id, label })), selected: voice.intents, groupId: 'intents', radio: false, limitGroup: 'intents', own: { kind: 'own:intents', text: voice.intentsText } })}
     <div class="ts-actions"><button type="button" class="primary-button" data-action="torisetsu-protect-next">${esc(COPY.protectNext)}</button><button type="button" class="text-button ts-skip" data-action="torisetsu-protect-next" data-key="skip">${esc(COPY.layerSkip)}</button></div>
     </div>
   </section>`;
@@ -1434,7 +1613,7 @@ function protectView(ts, h) {
 // 第 2 章：大事な友だちなら、何て返す？
 function replyView(ts, h) {
   const { esc } = h; const voice = ts.data.voice;
-  const focus = effectiveFocus(voice); const voices = focusVoices(voice, focus).map((t) => t.label);
+  const focus = effectiveFocus(voice); const voices = voiceNames(voice, focus);
   const buttons = replyOptions(focus).map((item) => { const on = isPicked(ts, 'reply', item.id); const feedback = ts.feedback?.group === 'reply' && ts.feedback?.chip === item.id ? ' is-feedback' : ''; return `<button type="button" class="ts-chip ts-chip-wide${on ? ' is-on' : ''}${feedback}" role="radio" aria-checked="${on}" data-action="torisetsu-chip" data-group="reply" data-chip="${esc(item.id)}" data-pick-kind="reply" data-pick-key="${esc(item.id)}"><span>${esc(item.label)}</span></button>`; }).join('');
   const open = ts.textOpen.reply || Boolean(voice.replyText);
   const free = open
@@ -1498,14 +1677,15 @@ function daysView(ts, h) {
     const scene = sceneById(record.scene)?.short || '';
     return `${scene}${record.memo ? `「${record.memo}」` : ''}`;
   };
+  const ownOf = (record) => ownTextsOf(record).map(quoted).join('');
   const summaryOf = (side, record) => {
     if (ts.chapterId === 'needs') {
       const tail = side === 'hard' ? surfaceById(record.surface)?.label : SURFACE_HAPPY.find((item) => item.id === record.feelings[0])?.label;
       const fallback = side === 'hard' ? deepById(record.deep[0])?.label : '';
-      return [headOf(record), tail || fallback || ''].filter(Boolean).join('／');
+      return [headOf(record), tail || fallback || '', ownOf(record)].filter(Boolean).join('／');
     }
-    if (ts.chapterId === 'voice') return [headOf(record), record.thoughts.map((id) => thoughtById(id)?.label).filter(Boolean).join('、')].filter(Boolean).join('／');
-    return `${SITUATION_BY_ID[record.situation]?.label || ''}${record.memo ? `「${record.memo}」` : ''}`;
+    if (ts.chapterId === 'voice') return [headOf(record), record.thoughts.map((id) => thoughtById(id)?.label).filter(Boolean).join('、'), ownOf(record)].filter(Boolean).join('／');
+    return `${SITUATION_BY_ID[record.situation]?.label || ''}${record.memo ? `「${record.memo}」` : ''}${ownOf(record)}`;
   };
   const section = (side) => {
     const items = sideList(ts.data, ts.chapterId, side);
@@ -1517,7 +1697,7 @@ function daysView(ts, h) {
   let admire = '';
   if (ts.chapterId === 'values') {
     const a = ts.data.values.admire;
-    if (a) admire = `<section class="ts-days-group ts-side-good"><h2>${esc(SIDE_COPY.admire.label)}</h2><ol class="ts-days-list"><li><span class="ts-days-n">1つ目</span><span class="ts-days-text">${esc([admireWhoById(a.who)?.label || '', a.qualities.map((q) => qualityById(q.id).label).join('、')].filter(Boolean).join('／'))}</span><button type="button" class="ts-mini-button" data-action="torisetsu-edit-item" data-side="admire" data-index="0" aria-label="いいなと思った人を${esc(COPY.fixOne)}">${esc(COPY.fixOne)}</button></li></ol></section>`;
+    if (a) admire = `<section class="ts-days-group ts-side-good"><h2>${esc(SIDE_COPY.admire.label)}</h2><ol class="ts-days-list"><li><span class="ts-days-n">1つ目</span><span class="ts-days-text">${esc([admireWhoById(a.who)?.label || '', a.qualities.map((q) => qualityById(q.id).label).join('、'), a.qualitiesText ? quoted(a.qualitiesText) : ''].filter(Boolean).join('／'))}</span><button type="button" class="ts-mini-button" data-action="torisetsu-edit-item" data-side="admire" data-index="0" aria-label="いいなと思った人を${esc(COPY.fixOne)}">${esc(COPY.fixOne)}</button></li></ol></section>`;
     else admire = `<section class="ts-days-group ts-side-good"><button type="button" class="secondary-button ts-add" data-action="torisetsu-add-item" data-side="admire" data-return-to="days">${esc(COPY.addOneAdmire)}</button></section>`;
   }
   return `<section class="ts-step ts-gallery" data-ts-key="days" data-ts-scene="gallery" data-gallery-stage="arrival">

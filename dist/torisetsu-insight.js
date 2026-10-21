@@ -1,5 +1,6 @@
 // 「自分のトリセツ」v3 の気づきの集計（純粋関数）。
-// - 入力はチップ id の配列だけ。自由文（ひとこと・意外・ためす・返す言葉の自由文）は一切数えない。
+// - 数えるのはチップ id の配列だけ。自由文（ひとこと・各層の「自分で書く」・意外・ためす・返す言葉の自由文）は一切数えない。
+//   自由文は「並べる表の行」と「自分の言葉で書いたもの」の一覧に、そのまま渡すだけ（件数・しきい値・予想には使わない）。
 // - 数えるのは奥の層だけ（奥の気持ち・本当の願い・心のくせ・大事なこと）。場面は「バラバラだった」ことを示すためだけに使う。
 // - DOM・storage・通信に触らない。比較はすべて整数（分数のまま）で行う。
 // - 返すのは文の部品と数。文字列の組み立てはこのファイルの render* に集める。
@@ -32,6 +33,7 @@ export const replyById = (id) => REPLY_BY_ID.get(id) || null;
 export const admireWhoById = (id) => ADMIRE_WHO_BY_ID.get(id) || null;
 
 const arr = (value) => (Array.isArray(value) ? value : []);
+const trimText = (value) => (typeof value === 'string' ? value.trim() : '');
 const asSet = (value) => new Set(arr(value));
 // 「2つ以上、かつ半分以上」
 export const repeat = (c, n) => c >= 2 && 2 * c >= n;
@@ -214,17 +216,32 @@ export function needsGap(prediction, insights) {
 // 「並べる」表。列は うれしかった → しんどかった の順。null はその層が無い側。
 export function needsLineup(happyInput, hardInput) {
   const c = needsCounts(happyInput, hardInput);
-  const group = (id, label, list, indexMap, cellOf) => {
+  const H = arr(happyInput); const D = arr(hardInput);
+  // 自分の言葉の行。数えない（total は 0 のまま）。持ち主の出来事の列にだけ ● を付ける。
+  const ownRows = (specs) => {
+    const askedHappy = specs.some((spec) => spec.side === 'happy'); const askedHard = specs.some((spec) => spec.side === 'hard');
+    const rows = [];
+    for (const { side, field } of specs) {
+      (side === 'happy' ? H : D).forEach((ep, i) => {
+        const text = trimText(ep?.[field]);
+        if (!text) return;
+        const cells = [...H.map((_, j) => (side === 'happy' ? j === i : askedHappy ? false : null)), ...D.map((_, j) => (side === 'hard' ? j === i : askedHard ? false : null))];
+        rows.push({ id: `own:${side}:${field}:${i}`, label: `「${text}」`, cells, total: 0, own: true });
+      });
+    }
+    return rows;
+  };
+  const group = (id, label, list, indexMap, cellOf, specs) => {
     const rows = list.map((item) => {
       const cells = [...c.happy.map((ep) => cellOf(ep, item, 'happy')), ...c.hard.map((ep) => cellOf(ep, item, 'hard'))];
       return { id: item.id, label: item.tag || item.label, cells, total: cells.filter((v) => v === true).length };
     }).filter((row) => row.total >= 1);
-    return { id, label, rows };
+    return { id, label, rows: [...rows, ...ownRows(specs)] };
   };
   const groups = [
-    group('surface', COPY.lineupLayerSurface, SURFACE_HARD, SURFACE_INDEX, (ep, item, side) => (side === 'happy' ? null : ep.surface === item.id)),
-    group('deep', COPY.lineupLayerDeep, DEEP, DEEP_INDEX, (ep, item, side) => (side === 'happy' ? null : ep.deep.has(item.id))),
-    group('needs', COPY.lineupLayerNeeds, NEEDS, NEED_INDEX, (ep, item) => ep.needs.has(item.id)),
+    group('surface', COPY.lineupLayerSurface, SURFACE_HARD, SURFACE_INDEX, (ep, item, side) => (side === 'happy' ? null : ep.surface === item.id), [{ side: 'happy', field: 'feelingsText' }, { side: 'hard', field: 'surfaceText' }]),
+    group('deep', COPY.lineupLayerDeep, DEEP, DEEP_INDEX, (ep, item, side) => (side === 'happy' ? null : ep.deep.has(item.id)), [{ side: 'hard', field: 'deepText' }]),
+    group('needs', COPY.lineupLayerNeeds, NEEDS, NEED_INDEX, (ep, item) => ep.needs.has(item.id), [{ side: 'happy', field: 'needsText' }, { side: 'hard', field: 'needsText' }]),
   ].filter((g) => g.rows.length);
   const memo = (list, label) => arr(list).map((ep, i) => {
     const scene = SCENE_BY_ID.get(ep?.scene)?.short || ''; const text = ep?.memo ? `「${ep.memo}」` : '';
@@ -335,11 +352,16 @@ export function voiceLineup(episodesInput) {
     id: p.id, name: `${p.name}声`, cells: v.episodes.map((_, i) => v.sets.p.get(p.id).includes(i)),
     rows: voicesOf(p.id).filter((t) => cnt(v.cT, t.id) >= 1).map((t) => ({ id: t.id, label: t.label, cells: v.episodes.map((_, i) => v.sets.t.get(t.id).includes(i)) })),
   }));
-  const memos = arr(episodesInput).map((ep, i) => {
+  // 表の列は「声のチップがある場面」だけ。声のチップがなく自分の言葉だけの場面は、表の外（loose）に出す。
+  const kept = arr(episodesInput).filter((ep) => arr(ep?.thoughts).some((id) => THOUGHT_BY_ID.has(id)));
+  const memos = kept.map((ep, i) => {
     const scene = SCENE_BY_ID.get(ep?.scene)?.short || '';
     return scene || ep?.memo ? { label: `${i + 1}`, scene, memo: ep?.memo || '' } : null;
   }).filter(Boolean);
-  return { n: v.n, groups, memos };
+  const ownRows = kept.map((ep, i) => ({ text: trimText(ep?.thoughtsText), i })).filter((item) => item.text)
+    .map((item) => ({ id: `own:voice:${item.i}`, label: `「${item.text}」`, cells: kept.map((_, j) => j === item.i), own: true }));
+  const loose = arr(episodesInput).filter((ep) => !arr(ep?.thoughts).some((id) => THOUGHT_BY_ID.has(id))).map((ep) => trimText(ep?.thoughtsText)).filter(Boolean);
+  return { n: v.n, groups, memos, ownRows, loose };
 }
 
 // ---------- 第3章 心が動くとき ----------
@@ -362,7 +384,8 @@ export function renderValuesSentence(item) {
 }
 
 export function valuesInsights(negInput, posInput, admireInput) {
-  const neg = arr(negInput); const pos = arr(posInput);
+  // 数えるのは、大事なことが決まっている出来事だけ（言葉だけの出来事は数えない）
+  const neg = arr(negInput).filter((ep) => VALUE_BY_ID.has(ep?.value)); const pos = arr(posInput).filter((ep) => VALUE_BY_ID.has(ep?.value));
   const hasAdmire = admireItems(admireInput);
   const T = neg.length + pos.length + hasAdmire; const E = neg.length + pos.length;
   const counts = valuesCounts(neg, pos, admireInput);
@@ -406,8 +429,9 @@ export function chapterReady(chapterId, data) {
   const d = data?.[chapterId];
   if (!d) return false;
   if (chapterId === 'needs') return d.happy.length + d.hard.length >= 3;
-  if (chapterId === 'voice') return d.episodes.length >= 2;
-  return d.neg.length + d.pos.length + admireItems(d.admire) >= 3;
+  // 進めるかどうかは「記録があるか」で決める。集計に使うのはチップだけなので、言葉だけの章は「数えるものが足りない」画面になる。
+  if (chapterId === 'voice') return arr(d.episodes).length >= 2;
+  return arr(d.neg).length + arr(d.pos).length + (admireItems(d.admire) || trimText(d.admire?.qualitiesText) ? 1 : 0) >= 3;
 }
 
 export function insightsFor(chapterId, data) {
@@ -469,11 +493,12 @@ export function teaser(chapterId, data) {
   }
   if (chapterId === 'voice') {
     const top = insights.ordered[0];
+    if (!insights.ready) return ''; // 声のチップが足りないときは、言い切らない
     if (!top) return `${prefix}${CHAPTERS[1].teaserNone}`;
     return top.kind === 'RP' ? `${prefix}『${PATTERN_BY_ID.get(top.id).name}』声がくり返していました` : `${prefix}『${PATTERN_BY_ID.get(top.pattern).name}』声に気づいた`;
   }
   if (insights.ordered[0]) return `${prefix}『${insights.ordered[0].label}』を大事にしているのかも`;
-  return `${prefix}大事なことの候補が${insights.candidates.length}つ見つかりました`;
+  return insights.candidates.length ? `${prefix}大事なことの候補が${insights.candidates.length}つ見つかりました` : '';
 }
 
 // ---------- 「意外だったこと」「来週ためすこと」の候補 ----------
@@ -488,11 +513,11 @@ export function surpriseOptions(chapterId, data) {
   } else if (chapterId === 'voice') {
     for (const item of insights.ordered) options.push({ key: item.key, label: item.surprise, short: item.surpriseShort });
     for (const id of arr(data.voice.intents)) { const intent = INTENT_BY_ID.get(id); if (intent) options.push({ key: `i:${id}`, label: `その声が『${intent.label}』と守ろうとしていたこと`, short: `声が『${intent.label}』と守っていた` }); }
-    if (insights.empty) options.push({ key: 'spread', label: COPY.surpriseSpreadVoice, short: COPY.surpriseSpreadVoice });
+    if (insights.empty && insights.ready) options.push({ key: 'spread', label: COPY.surpriseSpreadVoice, short: COPY.surpriseSpreadVoice });
   } else {
     for (const item of insights.ordered) options.push({ key: `v:${item.id}`, label: `『${item.label}』が関わっていたこと`, short: `『${item.label}』が関わっていたこと` });
     for (const q of arr(data.values.admire?.qualities)) { const quality = QUALITY_BY_ID.get(q.id); if (quality) options.push({ key: `q:${q.id}`, label: `いいなと思った人の『${quality.label}』ところ`, short: `あこがれは『${quality.wish}』` }); }
-    if (insights.empty) options.push({ key: 'spread', label: COPY.surpriseSpreadValues, short: COPY.surpriseSpreadValues });
+    if (insights.empty && insights.ready) options.push({ key: 'spread', label: COPY.surpriseSpreadValues, short: COPY.surpriseSpreadValues });
     if (arr(data.values.prediction).length && gapFor('values', data, insights).hasMiss) options.push({ key: 'gap', label: COPY.surpriseGap, short: COPY.surpriseGap });
   }
   options.push({ key: 'none', label: COPY.surpriseNone, short: MANUAL_COPY.surpriseNone });
@@ -555,4 +580,31 @@ export function textOfTry(chapterId, data) {
   if (d.experimentText) return `「${d.experimentText}」`;
   if (!d.experiment) return '';
   return tryOptions(chapterId, data).find((item) => item.key === d.experiment)?.text || '';
+}
+
+// ---------- 自分の言葉で書いたもの（深い層だけ。数えない・並べて見せるだけ） ----------
+// 表の気持ち（surfaceText）は深い層ではないので入れない。2つ以上あるときだけ show。
+// 数えるもの（チップ）が足りず、くり返しを数えられない章か（言葉だけで書いた章など）
+export function isThin(chapterId, data) {
+  if (chapterId === 'voice') return voiceInsights(data.voice.episodes).n < 2;
+  if (chapterId === 'values') return !valuesInsights(data.values.neg, data.values.pos, data.values.admire).ready;
+  return false;
+}
+
+export function ownWords(chapterId, data) {
+  const d = data?.[chapterId];
+  const items = [];
+  const add = (where, text) => { const t = trimText(text); if (t) items.push({ where, text: t }); };
+  if (chapterId === 'needs') {
+    arr(d?.happy).forEach((ep, i) => { add(`${COPY.lineupHappy}${i + 1}つ目・気持ち`, ep?.feelingsText); add(`${COPY.lineupHappy}${i + 1}つ目・満たされていたもの`, ep?.needsText); });
+    arr(d?.hard).forEach((ep, i) => { add(`${COPY.lineupHard}${i + 1}つ目・奥の気持ち`, ep?.deepText); add(`${COPY.lineupHard}${i + 1}つ目・本当は`, ep?.needsText); });
+  } else if (chapterId === 'voice') {
+    arr(d?.episodes).forEach((ep, i) => add(`場面${i + 1}・頭の中の声`, ep?.thoughtsText));
+    add('その声が守ろうとしているもの', d?.intentsText);
+  } else if (chapterId === 'values') {
+    arr(d?.neg).forEach((ep, i) => add(`${MANUAL_COPY.ownNeg}${i + 1}つ目・心が動いたこと`, ep?.situationText));
+    arr(d?.pos).forEach((ep, i) => add(`${MANUAL_COPY.ownPos}${i + 1}つ目・心が動いたこと`, ep?.situationText));
+    add('いいなと思った人・どこがいいか', d?.admire?.qualitiesText);
+  }
+  return { items, show: items.length >= 2 || (items.length >= 1 && isThin(chapterId, data)) };
 }
