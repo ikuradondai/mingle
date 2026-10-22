@@ -12,8 +12,11 @@ test('solo round completion offers a fourth prompt-only choice; group keeps its 
   assert.match(solo[1], /surprise: \{ label: "意外だった答え", icon: "heart", prompt: "書いてみて、自分でも意外だった答えは？" \}/);
   assert.equal((solo[1].match(/label:/g) || []).length, 4);
   assert.match(app, /\["self", "favorite", "share", "surprise"\]\.includes\(choice\)/);
-  const group = app.match(/const completionActions = \{([\s\S]*?)\n\};/);
-  if (group) assert.doesNotMatch(group[1], /surprise|意外だった答え/);
+  const group = app.match(/const completionActions = Object\.freeze\(\{([\s\S]*?)\n\}\);/);
+  assert.ok(group, 'group completionActions block');
+  assert.doesNotMatch(group[1], /surprise|意外だった答え/);
+  assert.match(app, /\["favorite", "share", "surprise"\]\.includes\(id\) && !recallAvailable/);
+  assert.match(app, /choice === "surprise"\) && soloReflectionEntries\(state\.session\)\.length < 1/);
 });
 
 test('clarified work and decision cards keep length and question-mark limits', () => {
