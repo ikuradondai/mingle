@@ -103,21 +103,15 @@ export function soloNicknameLabel(value) {
 export const SOLO_PERSONALIZED_CARDS = Object.freeze({
   'self-values-02': { source: '機嫌がよくなるスイッチは？', render: (name) => `${name}の機嫌がよくなるスイッチは？` },
   'self-values-07': { source: '自分の説明書に「こういうときは、そっとしておいて」と書くなら？', render: (name) => `${name}の説明書に「こういうときは、そっとしておいて」と書くなら？` },
-  'self-checkin-07': { source: '今日がんばったことを一つ挙げるなら？', render: (name) => `${name}が今日がんばったことを一つ挙げるなら？` },
   'self-strengths-08': { source: 'ここまでの答えに共通する自分の強み（例：ていねい）は？', render: (name) => `ここまでの答えに共通する${name}の強み（例：ていねい）は？` },
-  'self-work-08': { source: 'しんどい中でも、ちゃんとできていることは？', render: (name) => `${name}がしんどい中でも、ちゃんとできていることは？` },
+  'self-work-08': { source: '職場で、自分がいると少し早く片づくことは？', render: (name) => `職場で、${name}がいると少し早く片づくことは？` },
   'self-school-08': { source: 'しんどい中でも、学校でちゃんとできていることは？', render: (name) => `${name}がしんどい中でも、学校でちゃんとできていることは？` },
-  'self-club-08': { source: '始めた頃と比べて、できるようになったことは？', render: (name) => `${name}が始めた頃と比べて、できるようになったことは？` },
-  'self-path-08': { source: '人から「向いてるね」と言われたことは？', render: (name) => `${name}が人から「向いてるね」と言われたことは？` },
+  'self-club-08': { source: '始めた頃の自分が今の練習を見たら、何におどろく？', render: (name) => `始めた頃の${name}が今の練習を見たら、何におどろく？` },
   'self-people-tired-08': { source: '人に合わせられるのは、自分のどんなよさ？', render: (name) => `人に合わせられるのは、${name}のどんなよさ？` },
   'self-confidence-08': { source: '失敗しても変わらない、自分のいいところは？', render: (name) => `失敗しても変わらない、${name}のいいところは？` },
-  'self-decision-07': { source: '1年後の自分なら、今の自分に何て言いそう？', render: (name) => `1年後の${name}なら、今の${name}に何て言いそう？` },
-  'self-future-08': { source: 'これまでの自分が、ちゃんと積み上げてきたことは？', render: (name) => `これまでの${name}が、ちゃんと積み上げてきたことは？` },
-  'self-love-now-08': { source: '相手といるとき、好きだなと思える自分はどんな自分？', render: (name) => `相手といるとき、${name}が好きだなと思える自分はどんな自分？` },
-  'self-crush-05': { source: 'その人の前で自然体でいられたとき、自分は何をしていた？', render: (name) => `その人の前で自然体でいられたとき、${name}は何をしていた？` },
   'self-breakup-decided-08': { source: '別れを決めて伝えた自分の、えらかったところは？', render: (name) => `別れを決めて伝えた${name}の、えらかったところは？` },
   'self-breakup-lingering-08': { source: '人を大事にできる自分の、いいところは？', render: (name) => `人を大事にできる${name}の、いいところは？` },
-  'self-friends-08': { source: '友だち付き合いで、自分のいいところは？', render: (name) => `友だち付き合いで、${name}のいいところは？` },
+  'self-friends-08': { source: 'よく一緒にいる友だちが自分のまねをするなら、どこをまねる？', render: (name) => `よく一緒にいる友だちが${name}のまねをするなら、どこをまねる？` },
 });
 
 const SOLO_PERSONALIZED_SOURCE = new Map(Object.entries(SOLO_PERSONALIZED_CARDS).map(([id, item]) => [id, item.source]));

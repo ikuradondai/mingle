@@ -27,9 +27,9 @@ test('only exact built-in solo cards receive explicit display personalization', 
   assert.equal(personalizeSoloQuestion(source, '自分'), source.text);
 });
 
-test('template keeps quote and future-self perspectives intact', () => {
-  const future = card('self-decision-07');
-  assert.equal(personalizeSoloQuestion(future, 'あかりさん'), '1年後のあかりさんなら、今のあかりさんに何て言いそう？');
+test('template keeps quote and possessive perspectives intact', () => {
+  assert.equal(personalizeSoloQuestion(card('self-club-08'), 'あかりさん'), '始めた頃のあかりさんが今の練習を見たら、何におどろく？');
+  assert.equal(personalizeSoloQuestion(card('self-friends-08'), 'あかり'), 'よく一緒にいる友だちがあかりさんのまねをするなら、どこをまねる？');
   assert.match(personalizeSoloQuestion(card('self-values-07'), 'あかり'), /「こういうときは、そっとしておいて」/u);
 });
 

@@ -15,11 +15,11 @@ export const THEME_EXAMPLE_QUESTION_IDS = Object.freeze({
   'group-mixer': 'group-mixer-04', 'engaged-couple': 'engaged-couple-01', classmates: 'classmates-01',
   'mom-friends-first': 'mom-friends-first-01', 'mom-friends-children': 'mom-friends-children-01', 'mom-friends-self': 'mom-friends-self-01', 'mom-friends-concerns': 'mom-friends-concerns-01', 'mom-friends-daily': 'mom-friends-daily-01',
   'self-love-now': 'self-love-now-09', 'self-crush': 'self-crush-02', 'self-breakup-decided': 'self-breakup-decided-07',
-  'self-breakup-lingering': 'self-breakup-lingering-09', 'self-strengths': 'self-strengths-02', 'self-work': 'self-work-03',
-  'self-school': 'self-school-04', 'self-club': 'self-club-02', 'self-path': 'self-path-09',
+  'self-breakup-lingering': 'self-breakup-lingering-09', 'self-strengths': 'self-strengths-03', 'self-work': 'self-work-03',
+  'self-school': 'self-school-04', 'self-club': 'self-club-02', 'self-path': 'self-path-04',
   'self-friends': 'self-friends-11', 'self-people-tired': 'self-people-tired-11', 'self-values': 'self-values-03',
-  'self-checkin': 'self-checkin-01', 'self-confidence': 'self-confidence-07', 'self-decision': 'self-decision-07',
-  'self-future': 'self-future-07', 'self-discover': 'self-discover-02',
+  'self-checkin': 'self-checkin-07', 'self-confidence': 'self-confidence-07', 'self-decision': 'self-decision-07',
+  'self-future': 'self-future-08', 'self-discover': 'self-discover-02',
 });
 
 const CONDITION_LABELS = Object.freeze({
