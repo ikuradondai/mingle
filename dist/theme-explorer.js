@@ -54,6 +54,7 @@ export const THEME_EXPLORER_IMAGES = {
   'self-confidence': '/assets/theme-explorer/self-confidence-v3.webp',
   'self-decision': '/assets/theme-explorer/self-decision-v3.webp',
   'self-future': '/assets/theme-explorer/self-future-v3.webp',
+  'self-discover': '/assets/theme-explorer/self-discover-v3.webp',
   'parent-under12': '/assets/theme-explorer/parent-under12-v3.webp',
   'mom-friends-first': '/assets/theme-explorer/party-first-meeting-v3.webp',
   'mom-friends-children': '/assets/theme-explorer/parent-under12-v3.webp',

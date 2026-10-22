@@ -1,7 +1,7 @@
 {
   "version": 1,
   "generatedAt": "2026-10-06",
-  "count": 61,
+  "count": 62,
   "items": [
     {
       "id": "date",
@@ -732,6 +732,18 @@
       "rawPath": "sources/self-checkin-v3.webp",
       "webpPath": "/assets/theme-explorer/self-checkin-v3.webp",
       "status": "reused",
+      "adultOnly": false,
+      "optionalR18": false
+    },
+    {
+      "id": "self-discover",
+      "title": "自分を知る40問",
+      "subtitle": "ちょっと離れて、自分をながめてみる",
+      "mode": "solo",
+      "category": "自分のこと",
+      "rawPath": "sources/self-discover-v3.png",
+      "webpPath": "/assets/theme-explorer/self-discover-v3.webp",
+      "status": "generated",
       "adultOnly": false,
       "optionalR18": false
     }
