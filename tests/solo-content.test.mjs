@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { decks } from '../dist/data/decks.js';
 import { soloCategories, soloDecks } from '../dist/data/solo-decks.js';
 
@@ -105,4 +106,11 @@ test('self-discover cards stand alone: no dangling references and no skip-preamb
       assert.ok(!card.text.includes(phrase), `${card.id}: contains ${phrase}`);
     }
   }
+});
+
+test('self-discover is titled 自己発見 and pinned first, then self-values, on the solo recommended shelf', () => {
+  assert.equal(soloDecks.find((deck) => deck.id === 'self-discover').title, '自己発見');
+  const src = readFileSync(new URL('../dist/app.js', import.meta.url), 'utf8');
+  assert.match(src, /const pinnedIds = \['self-discover', 'self-values'\];/);
+  assert.match(src, /const recommendedWithSponsors = \[\.\.\.pinnedDecks, /);
 });

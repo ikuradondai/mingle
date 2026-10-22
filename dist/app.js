@@ -1592,10 +1592,11 @@ function soloDecksView() {
     isAvailable: () => true,
     categoryOf: (deck) => deck?.category ? [deck.category] : [],
   });
-  // 自分のトリセツ（self-values）は、おすすめ棚の先頭に固定する。残りは従来の順序のまま。
-  const torisetsuDeck = all.find((deck) => deck.id === 'self-values') || null;
-  const recommendedRest = recommended.filter((deck) => deck.id !== 'self-values');
-  const recommendedWithSponsors = [...(torisetsuDeck ? [torisetsuDeck] : []), ...sponsorEntries('solo', 'all', query), ...(torisetsuDeck ? recommendedRest.slice(0, 7) : recommended)];
+  // おすすめ棚の先頭は 自己発見（self-discover）→ 自分のトリセツ（self-values）の順に固定する。残りは従来の順序のまま。
+  const pinnedIds = ['self-discover', 'self-values'];
+  const pinnedDecks = pinnedIds.map((id) => all.find((deck) => deck.id === id)).filter(Boolean);
+  const recommendedRest = recommended.filter((deck) => !pinnedIds.includes(deck.id));
+  const recommendedWithSponsors = [...pinnedDecks, ...sponsorEntries('solo', 'all', query), ...(pinnedDecks.length ? recommendedRest.slice(0, 8 - pinnedDecks.length) : recommended)];
   const visibleMySetEntries = query.length || state.themeExplorerView === 'list'
     ? mySetEntries.filter((entry) => state.themeExplorerShelf === 'all' || entry.__mySet?.category === state.themeExplorerShelf)
     : [];

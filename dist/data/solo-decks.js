@@ -376,7 +376,7 @@ export const soloDecks = [
     id: 'self-discover',
     category: 'self',
     questionOrder: 'shuffle',
-    title: '自分を知る40問',
+    title: '自己発見',
     subtitle: 'ちょっと離れて、自分をながめてみる',
     description: '40問がランダムに出ます。少し離れて自分をながめると、気づいていなかった得意や大事なものが見えてきます。',
     questions: [
