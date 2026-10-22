@@ -158,10 +158,10 @@ test('R18 sets cannot be played or shared before age confirmation but can still 
 test('explicit R18 display preference redacts and restores private adult metadata', () => {
   const set = { id: 'set-r18', name: '秘密の大人セット', card_ids: [adultCard.id, ...intimacy.questions.slice(1, 6).map((card) => card.id)] };
   const hidden = renderLibrary({ ...confirmedAccount, r18DisplayEnabled: false, sets: [set] });
-  assert.doesNotMatch(hidden, /秘密の大人セット|セックスをしたいと感じるのは/);
+  assert.doesNotMatch(hidden, new RegExp(`秘密の大人セット|${adultCard.text}`));
   assert.match(hidden, /R18を含むマイセット/);
   const shown = renderLibrary({ ...confirmedAccount, r18DisplayEnabled: true, sets: [set], studioMode: 'favorites', favorites: new Set([adultCard.id]) });
-  assert.match(shown, /セックスをしたいと感じるのは/);
+  assert.match(shown, new RegExp(adultCard.text));
 });
 
 test('global R18 display is required for adult editor names and legacy revealAdult cannot bypass it', () => {
