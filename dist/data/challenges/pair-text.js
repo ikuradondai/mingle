@@ -11,7 +11,7 @@ export const CHALLENGE_PAIR_TEMPLATES = Object.freeze({
   'ch-friends-09': '{name}と握手（エアでもOK）して、「これからもよろしく」を言い合ってみて',
   'ch-friends-10': '次に会ったらやりたいことを、ふたりで一つ決めて約束しよう',
   'ch-reunion-02': '{name}とハイタッチ（エアでもOK）して、「久しぶり！」を全力で言ってみて',
-  'ch-reunion-04': '{name}が気に入っていた昔のあだ名で、本人を呼んでみて',
+  'ch-reunion-04': '{name}を、本人が気に入っていた昔のあだ名で呼んでみて',
   'ch-reunion-06': '{name}とグータッチ（エアでもOK）して、「変わらないね」と思う性格を一言で伝えて',
   'ch-reunion-07': 'ふたりで声をそろえて、せーので昔流行った遊びを言ってみて',
   'ch-reunion-09': '今の気分を絵文字3つだけで表して、{name}に送ってみて',
