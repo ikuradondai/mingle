@@ -2,9 +2,18 @@
 // Unknown or legacy themes intentionally fall back to the regular group rule.
 import { decks } from './data/decks.js';
 import { soloDecks } from './data/solo-decks.js';
-import { PAIR_PERSONALIZED_CARDS } from './data/pair-personalized.js';
+import { PAIR_PERSONALIZED_CARDS as PAIR_QUESTION_CARDS } from './data/pair-personalized.js';
+import { challenges } from './data/challenges.js';
+import { CHALLENGE_PAIR_TEMPLATES } from './data/challenges/pair-text.js';
 
-export { PAIR_PERSONALIZED_CARDS };
+// 質問（pair-personalized.js）とお題（challenges/pair-text.js）の2人用文面をまとめた表。
+// お題の source は challenges の text から取る。split/join で置き換えるので、名前に $& などがあっても崩れない。
+export const PAIR_PERSONALIZED_CARDS = Object.freeze({
+  ...PAIR_QUESTION_CARDS,
+  ...Object.fromEntries(challenges
+    .filter((card) => Object.hasOwn(CHALLENGE_PAIR_TEMPLATES, card.id))
+    .map((card) => [card.id, { source: card.text, render: (name) => CHALLENGE_PAIR_TEMPLATES[card.id].split('{name}').join(name) }])),
+});
 
 export const PARTICIPANT_RULES = Object.freeze({
   date: 'pair',

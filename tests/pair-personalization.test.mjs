@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { decks } from '../dist/data/decks.js';
-import { PAIR_PERSONALIZED_CARDS, PARTICIPANT_RULES, displayQuestionText } from '../dist/participant-rule.js';
+import { PARTICIPANT_RULES, displayQuestionText } from '../dist/participant-rule.js';
+import { PAIR_PERSONALIZED_CARDS } from '../dist/data/pair-personalized.js';
 
 const cardText = new Map(decks.flatMap((deck) => deck.questions.map((q) => [q.id, q.text])));
 const ids = Object.keys(PAIR_PERSONALIZED_CARDS);
