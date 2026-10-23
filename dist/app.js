@@ -1760,7 +1760,7 @@ function sharedPlayView(session) {
   const cardArtStyle = `--card-art-front:url('${cardFront}');--card-art-back:url('${cardBack}');--card-art-accent:${cardDesign.accent}`;
   const cardDeck = [...decks, ...soloDecks].find((item) => item.id === sourceDeckId);
   const cardThemeMark = card?.kind === "challenge" ? "" : solo ? soloMotifForDeck(sourceDeckId) : cardDeck ? topicIcon(cardDeck) : "";
-  const baseDisplayText = activeCard ? displayQuestionText(activeCard.text, { participants: session.participants, participantIndex: currentIndex, rule: participantRuleForSession(session) }) : "";
+  const baseDisplayText = activeCard ? displayQuestionText(activeCard.text, { participants: session.participants, participantIndex: currentIndex, rule: participantRuleForSession(session), cardId: activeCard.id }) : "";
   const displayText = solo ? personalizeSoloQuestion({ ...activeCard, text: baseDisplayText }, soloParticipantName(session)) : baseDisplayText;
   const answerStyle = revealed && !solo ? activeAnswerStyle(session) : null;
   const togetherAnswer = answerStyle === "together";

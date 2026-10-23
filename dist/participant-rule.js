@@ -2,6 +2,9 @@
 // Unknown or legacy themes intentionally fall back to the regular group rule.
 import { decks } from './data/decks.js';
 import { soloDecks } from './data/solo-decks.js';
+import { PAIR_PERSONALIZED_CARDS } from './data/pair-personalized.js';
+
+export { PAIR_PERSONALIZED_CARDS };
 
 export const PARTICIPANT_RULES = Object.freeze({
   date: 'pair',
@@ -74,11 +77,13 @@ export function participantRuleForSavedSet(set, mode = 'group') {
 
 // Replace only the conversational standalone use of 「相手」. Terms such as
 // 対戦相手・相談相手・理想の相手・相手役・相手方・相手チーム stay literal.
-export function displayQuestionText(text, { participants, participantIndex, rule = 'group' } = {}) {
+export function displayQuestionText(text, { participants, participantIndex, rule = 'group', cardId } = {}) {
   if (typeof text !== 'string' || rule === 'solo' || !Array.isArray(participants) || participants.length !== 2) return text;
   if (!Number.isInteger(participantIndex) || participantIndex < 0 || participantIndex > 1) return text;
   const other = participants[participantIndex === 0 ? 1 : 0];
   if (typeof other !== 'string' || !other.trim() || participants.some((name) => typeof name !== 'string' || !name.trim())) return text;
+  const pair = typeof cardId === 'string' && Object.hasOwn(PAIR_PERSONALIZED_CARDS, cardId) ? PAIR_PERSONALIZED_CARDS[cardId] : undefined;
+  if (pair && pair.source === text) return pair.render(other);
   return text.replace(/(?<!対戦)(?<!取引)(?<!相談)(?<!理想の)相手(?!役|方|チーム|先)/gu, () => other);
 }
 

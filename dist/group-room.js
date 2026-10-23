@@ -63,7 +63,7 @@ function renderPlayView(room, member, card, host) {
   const art = cardDesignForSession({ mode: 'group', deckId: room.deckId, design: room.design, sharedGuest: true });
   const artStyle = `--card-art-front:url('${art.front}');--card-art-back:url('${art.back}');--card-art-accent:${art.accent}`;
   const roomParticipants = (room.members || []).map((member) => member.name);
-  const displayText = card ? displayQuestionText(card.text, { participants: roomParticipants, participantIndex: room.speakerIndex, rule: room.participantRule || 'group' }) : '';
+  const displayText = card ? displayQuestionText(card.text, { participants: roomParticipants, participantIndex: room.speakerIndex, rule: room.participantRule || 'group', cardId: card.id }) : '';
   const cardLabel = loading ? 'カードを読み込んでいます…' : (revealed ? esc(displayText) : (host ? 'タップしてめくる' : '代表者がカードをめくるまでお待ちください'));
   const cardClass = `shared-question-card ${revealed ? 'is-revealed' : 'is-face-down'}${loading ? ' is-loading' : ''}`;
   const primaryState = loading ? 'loading' : (revealed ? 'next-person' : 'reveal');

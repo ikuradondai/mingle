@@ -166,6 +166,7 @@ function play() {
       participants: state.names,
       participantIndex: state.index % state.names.length,
       rule,
+      cardId: card?.id,
     });
   base(
     `<section class="panel"><p class="muted">${esc(state.session.themes.map((t) => t.name).join(" / "))} · ${state.index + 1} / ${cards.length}</p><article class="play-card speaker-fade"><p class="muted">${esc(speaker)}の番${other ? ` · ${esc(other)}に聞いてみよう` : ""}</p><p class="question">${esc(text)}</p></article><div class="play-controls"><button type="button" data-prev ${state.index ? "" : "disabled"}>前へ</button><button class="primary business-play-next-card" type="button" data-next>${businessCardsNextIcon()}<span>次のカード</span></button></div><p class="muted">回答の入力や録音は行いません。</p></section>`,
